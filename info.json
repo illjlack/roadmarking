@@ -1,0 +1,11 @@
+{
+  "type": "Standard",
+  "core": true,
+  "name": "qRoadMarking",
+  "menuName": "RoadMarkings",
+  "description": "Extract road markings from point clouds",
+  "authors": "Liu ShiSheng",
+  "maintainers": "Liu ShiSheng",
+  "license": "GPLv2",
+  "version": "1.0"
+}
