@@ -1,4 +1,5 @@
 #pragma once
+#pragma execution_character_set("utf-8")
 
 #include "ccStdPluginInterface.h"
 
@@ -24,9 +25,13 @@ public:
 
 	QList<QAction*> getActions() override;
 
+	void doAction();
+
 
 protected:
 
+private:
+	QAction* m_startDlg = nullptr;
 
 private slots:
 };
