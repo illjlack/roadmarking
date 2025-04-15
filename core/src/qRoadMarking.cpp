@@ -7,6 +7,9 @@
 
 #include "ccGLWindow.h"
 #include "qSignExtractDlg.h"
+#include "PointCloudIO.h"
+
+using namespace roadmarking;
 
 qRoadMarking::qRoadMarking(QObject* parent)
 	: QObject(parent),
@@ -58,16 +61,12 @@ void qRoadMarking::doAction()
 		return;
 	}
 
-
-	const ccHObject::Container& selectedEntities = m_app->getSelectedEntities();
-
-	if (!m_app->haveOneSelection() || !selectedEntities.front()->isA(CC_TYPES::POINT_CLOUD))
+	ccCloudPtr cloud = PointCloudIO::getSelectedCloud(m_app);
+	if (!cloud)
 	{
-		m_app->dispToConsole("Select one cloud!", ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+		m_app->dispToConsole("未选择点云");
 		return;
 	}
-
-	ccHObject* cloud = selectedEntities.front();
 	
 	qSignExtractDlg dlg(m_app);
 
@@ -76,9 +75,9 @@ void qRoadMarking::doAction()
 	QCoreApplication::processEvents();
 
 	//automatically deselect the input cloud
-	m_app->setSelectedInDB(cloud, false);
+	m_app->setSelectedInDB(cloud.get(), false);
 
-	if (dlg.setCloud((ccPointCloud*)cloud))
+	if (dlg.setCloud(cloud))
 	{
 		dlg.exec();
 	}

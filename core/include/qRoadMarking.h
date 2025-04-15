@@ -11,7 +11,7 @@ class qRoadMarking : public QObject, public ccStdPluginInterface
 	Q_OBJECT
 	Q_INTERFACES(ccPluginInterface ccStdPluginInterface)
 
-	Q_PLUGIN_METADATA(IID "cccorp.cloudcompare.plugin.qRoadMarking" FILE "../info.json")
+	Q_PLUGIN_METADATA(IID "cccorp.cloudcompare.plugin.qRoadMarking" FILE "../../info.json")
 
 public:
 	explicit qRoadMarking(QObject* parent = nullptr);
