@@ -151,4 +151,5 @@ private:
 	ccGLWindowInterface* m_glWindow = nullptr;
 	ccMainAppInterface* m_app = nullptr;
 	ccHObject** pp_select_cloud = nullptr;
+	ccHObject* root = nullptr;
 };

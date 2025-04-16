@@ -400,13 +400,14 @@ void CloudObjectTreeWidget::refresh()
 
 	for (int i = 0; i < dbRoot->getChildrenNumber(); i++)
 	{
+		if (!i)root = dbRoot->getChild(i);
 		loadTreeItem(dbRoot->getChild(i), nullptr);
 	}
 	expandAll();  // 展开所有项
 }
 
 void CloudObjectTreeWidget::loadTreeItem(ccHObject* object, QTreeWidgetItem* parentItem)
-{
+{	
 	// 创建树项
 	QTreeWidgetItem* item = new QTreeWidgetItem(parentItem);
 	item->setText(0, object->getName());  // 设置项的文本为对象的名称
@@ -432,6 +433,7 @@ void CloudObjectTreeWidget::loadTreeItem(ccHObject* object, QTreeWidgetItem* par
 		ccHObject* child = object->getChild(i);
 		if (child)
 		{
+			child->setDisplay(object->getDisplay()); // 在同窗口显示
 			loadTreeItem(child, item);  // 将子节点递归挂载到当前项下
 		}
 	}
@@ -452,7 +454,7 @@ void CloudObjectTreeWidget::contextMenuEvent(QContextMenuEvent* event)
 		for (auto* item : selItems)
 		{
 			auto obj = static_cast<ccHObject*>(item->data(0, Qt::UserRole).value<void*>());
-			if (!obj)
+			if (!obj || obj == root) // 根节点不能被删除  
 				continue;
 			if (*pp_select_cloud == obj)
 			{
@@ -534,7 +536,24 @@ void CloudBackup::restore()
 	ref->showColors(colorsWereDisplayed);
 	ref->showSF(sfWasDisplayed);
 	ref->setCurrentDisplayedScalarField(displayedSFIndex);
-	
+
+	std::function<void(ccHObject*)> dfsChild = [&](ccHObject* parent)
+	{
+		if (!parent)
+			return;
+		for (int i = 0; i < parent->getChildrenNumber(); i++)
+		{
+			ccHObject* child = parent->getChild(i);
+			if (child)
+			{
+				child->setDisplay(parent->getDisplay());
+				dfsChild(child);
+			}
+		}
+	};
+
+	dfsChild(ref.get());
+
 	if (hadColors)
 	{
 		if (backupColors && ref->hasColors())
