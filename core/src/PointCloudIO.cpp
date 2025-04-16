@@ -23,11 +23,22 @@ ccCloudPtr PointCloudIO::getSelectedCloud(ccMainAppInterface* app)
 	return nullptr;
 }
 
+ccCloudPtr PointCloudIO::convertToCCCloud(ccHObject* ob, ccMainAppInterface* app)
+{
+	if (ob == nullptr)return nullptr;
+	if (ob->isA(CC_TYPES::POINT_CLOUD))
+	{
+		return ccCloudPtr(static_cast<ccPointCloud*>(ob), [](ccPointCloud*) {});
+	}
+	if(app)app->dispToConsole("选择的实体不是点云", ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+	return nullptr;
+}
+
 void PointCloudIO::saveCloudToDB(ccMainAppInterface* app, ccCloudPtr cloud)
 {
 	// 完全获得点云的所有权,生命周期交给前端控制
 	ccPointCloud* cccloud = cloud.release();
-	
+
 	app->addToDB(cccloud);
 	app->refreshAll();
 }
@@ -40,7 +51,7 @@ PCLCloudPtr PointCloudIO::convertToPCLCloud(ccCloudPtr cloud)
 	size_t numPoints = cloud->size();
 	pclCloud->resize(numPoints);
 
-	#pragma omp parallel for
+#pragma omp parallel for
 	for (int i = 0; i < static_cast<int>(numPoints); ++i)
 	{
 		const CCVector3& point = *cloud->getPoint(i);
@@ -51,25 +62,42 @@ PCLCloudPtr PointCloudIO::convertToPCLCloud(ccCloudPtr cloud)
 }
 
 
+PCLCloudPtr PointCloudIO::convertToPCLCloud(PCLCloudXYZIPtr cloud)
+{
+	PCLCloudPtr pclCloud(new PCLCloud);
+	size_t numPoints = cloud->size();
+	pclCloud->resize(numPoints);
+
+#pragma omp parallel for
+	for (int i = 0; i < static_cast<int>(numPoints); ++i)
+	{
+		const PCLPointXYZI& point = (*cloud)[i];
+		pclCloud->points[i] = pcl::PointXYZ(point.x, point.y, point.z);
+	}
+
+	return pclCloud;
+}
+
+
 ccCloudPtr PointCloudIO::convertToCCCloud(PCLCloudPtr pclCloud)
 {
-    ccCloudPtr ccCloud(new ccPointCloud());
-    size_t numPoints = pclCloud->size();
-    ccCloud->reserve(numPoints);
+	ccCloudPtr ccCloud(new ccPointCloud());
+	size_t numPoints = pclCloud->size();
+	ccCloud->reserve(numPoints);
 
-    std::vector<CCVector3> tempPoints(numPoints);
+	std::vector<CCVector3> tempPoints(numPoints);
 
-	#pragma omp parallel for
-    for (int i = 0; i < static_cast<int>(numPoints); ++i)
-    {
-        tempPoints[i] = CCVector3(pclCloud->points[i].x, pclCloud->points[i].y, pclCloud->points[i].z);
-    }
+#pragma omp parallel for
+	for (int i = 0; i < static_cast<int>(numPoints); ++i)
+	{
+		tempPoints[i] = CCVector3(pclCloud->points[i].x, pclCloud->points[i].y, pclCloud->points[i].z);
+	}
 
-    for (size_t i = 0; i < numPoints; ++i)
-    {
-        ccCloud->addPoint(tempPoints[i]);
-    }
-    return ccCloud;
+	for (size_t i = 0; i < numPoints; ++i)
+	{
+		ccCloud->addPoint(tempPoints[i]);
+	}
+	return ccCloud;
 }
 
 PCLCloudXYZIPtr PointCloudIO::convertToPCLCloudXYZI(ccCloudPtr cloud)
@@ -82,7 +110,7 @@ PCLCloudXYZIPtr PointCloudIO::convertToPCLCloudXYZI(ccCloudPtr cloud)
 	ccScalarField* intensitySF = (intensitySFIndex >= 0) ? static_cast<ccScalarField*>(cloud->getScalarField(intensitySFIndex)) : nullptr;
 	float defaultIntensity = 0.0f;
 
-	#pragma omp parallel for
+#pragma omp parallel for
 	for (int i = 0; i < static_cast<int>(numPoints); ++i)
 	{
 		const CCVector3* point = cloud->getPoint(i);
@@ -114,4 +142,3 @@ ccCloudPtr PointCloudIO::convertToCCCloudXYZI(PCLCloudXYZIPtr pclCloud)
 	intensitySF->computeMinAndMax();
 	return ccCloud;
 }
-

@@ -12,7 +12,8 @@
 #include <ccHObject.h>
 #include <ccLog.h>
 
-#include "CloudProcess.h";
+#include "CloudProcess.h"
+#include "RoadMarkingExtract.h"
 
 using namespace roadmarking;
 
@@ -282,7 +283,11 @@ CCVector3 qSignExtractDlg::screenToWorld(int x, int y)
 }
 
 // ²å²ÛÂß¼­£¨Áô¿Õ¿ÉºóÐø²¹³ä£©
-void qSignExtractDlg::onAutoExtract() {}
+void qSignExtractDlg::onAutoExtract()
+{
+	RoadMarkingExtract::automaticExtraction(PointCloudIO::convertToCCCloud(p_select_cloud), m_app);
+	m_objectTree->refresh();
+}
 void qSignExtractDlg::onBoxSelectExtract() {}
 void qSignExtractDlg::onPointGrowExtract() {}
 void qSignExtractDlg::onBoxClip() {}
@@ -346,10 +351,12 @@ CloudObjectTreeWidget::CloudObjectTreeWidget(QWidget* parent)
 			return;
 
 		bool visible = (item->checkState(0) == Qt::Checked);
+		if (!visible && *pp_select_cloud == obj)
+		{
+			obj->setSelected(false);
+			*pp_select_cloud = nullptr;
+		}
 		obj->setVisible(visible);
-		obj->setSelected(false);
-
-
 
 		if (m_glWindow)
 			m_glWindow->redraw();
@@ -359,7 +366,7 @@ CloudObjectTreeWidget::CloudObjectTreeWidget(QWidget* parent)
 	connect(this, &QTreeWidget::itemClicked, this, [=](QTreeWidgetItem* item, int column)
 	{
 		auto obj = static_cast<ccHObject*>(item->data(0, Qt::UserRole).value<void*>());
-		if (!obj)
+		if (!obj || !obj->isVisible()) 
 			return;
 
 		if(*pp_select_cloud)(*pp_select_cloud)->setSelected(false);
@@ -447,8 +454,11 @@ void CloudObjectTreeWidget::contextMenuEvent(QContextMenuEvent* event)
 			auto obj = static_cast<ccHObject*>(item->data(0, Qt::UserRole).value<void*>());
 			if (!obj)
 				continue;
-
-			m_glWindow->removeFromOwnDB(obj);
+			if (*pp_select_cloud == obj)
+			{
+				*pp_select_cloud = nullptr;
+			}
+			m_app->removeFromDB(obj);
 		}
 		refresh();
 	});
@@ -457,8 +467,6 @@ void CloudObjectTreeWidget::contextMenuEvent(QContextMenuEvent* event)
 
 	menu.exec(event->globalPos());
 }
-
-
 
 // ============================================================================ CloudBackup
 CloudBackup::CloudBackup()

@@ -413,8 +413,11 @@ ccHObject* CloudProcess::applyVectorization(std::vector<PCLCloudPtr> pclClouds)
 		}
 
 		// 将创建的 ccPolyline 添加到 allLinesContainer 中
+		polylineObj->setVisible(true);
+		polylineObj->setColor(ccColor::redRGB);
 		allLinesContainer->addChild(polylineObj);
 	}
+	allLinesContainer->setVisible(true);
 	return allLinesContainer;
 }
 

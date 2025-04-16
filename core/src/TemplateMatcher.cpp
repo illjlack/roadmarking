@@ -61,6 +61,11 @@ public:
 		// 读取原始点云文件
 		raw_point_cloud = loadPointCloud(raw_path);
 
+		if (outline_point_cloud->empty() || raw_point_cloud->empty())
+		{
+			return;
+		}
+
 		calculatePCA();
 
 		calculateCentroid();

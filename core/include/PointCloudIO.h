@@ -7,9 +7,8 @@
 #include <ccScalarField.h>
 #include <ccHObject.h>
 #include <ccMainAppInterface.h>
-#include <memory>
-#include <ccHObject.h>
-#include <pcl/octree/octree.h>
+#include <ccGLWindowInterface.h>
+
 #include "comm.h"
 
 
@@ -23,8 +22,9 @@ namespace roadmarking
 
 		static ccCloudPtr getSelectedCloud(ccMainAppInterface* app);
 		static void saveCloudToDB(ccMainAppInterface* app, ccCloudPtr cloud);
-
+		static ccCloudPtr convertToCCCloud(ccHObject* ob, ccMainAppInterface* app = nullptr);
 		static PCLCloudPtr convertToPCLCloud(ccCloudPtr cloud);
+		static PCLCloudPtr convertToPCLCloud(PCLCloudXYZIPtr cloud);
 		static ccCloudPtr convertToCCCloud(PCLCloudPtr pclCloud);
 
 		static PCLCloudXYZIPtr convertToPCLCloudXYZI(ccCloudPtr cloud);
