@@ -28,47 +28,13 @@
 #include "ccProgressDialog.h"
 #include "comm.h"
 
-/// <summary>
-/// 点云状态备份与恢复工具类
-/// 用于插件中临时修改点云属性后，支持一键还原
-/// </summary>
-struct CloudBackup
-{
-	CloudBackup();
-	~CloudBackup();
-
-	/// 备份状态
-	void backup(ccCloudPtr cloud);
-
-	/// 恢复状态
-	void restore();
-
-	/// 清理资源
-	void clear();
-
-private:
-	ccCloudPtr ref;
-
-	// 原始状态备份
-	ccGenericGLDisplay* originalDisplay;
-	bool wasVisible;
-	bool wasEnabled;
-	bool wasSelected;
-	bool colorsWereDisplayed;
-	bool sfWasDisplayed;
-	int displayedSFIndex;
-	bool hadColors;
-
-	RGBAColorsTableType* backupColors;
-};
-
-
+class CloudBackup;
 class CloudObjectTreeWidget;
 
 // 选择模式枚举
 enum SelectionMode
 {
-	NO_SELECTION,      // 非选择状态
+	ENTITY_SELECTION,  // 实体选择状态
 	POINT_SELECTION,   // 点选择模式
 	RECT_SELECTION,    // 矩形框选模式
 	POLY_SELECTION     // 多边形框选模式
@@ -82,13 +48,17 @@ public:
 	qSignExtractDlg(ccMainAppInterface* app);
 	~qSignExtractDlg();
 
-	/// 设置并显示目标点云
+	/// <summary>
+	/// 设置目标点云
+	/// </summary>
+	/// <param name="cloud">目标点云</param>
+	/// <returns>是否成功</returns>
 	bool setCloud(ccCloudPtr cloud);
 
 protected:
 
 
-	// 屏幕坐标转世界坐标（z=0 平面）
+	
 	CCVector3 screenToWorld(int x, int y);
 
 private slots:
@@ -103,30 +73,36 @@ private slots:
 	void onMouseMoved(int x, int y, Qt::MouseButtons button);
 	void onButtonReleased();
 	void onEntitySelectionChanged(ccHObject* entity);
+	
 private:
-	ccMainAppInterface* m_app = nullptr;
-	ccGLWindowInterface* m_glWindow = nullptr;
-	QWidget* m_glWidget = nullptr;
+	void startDraw();
+	void finishDraw();
 
-	// 目录树 
-	CloudObjectTreeWidget* m_objectTree = nullptr;
-
-	// 点云备份
-	CloudBackup m_cloudBackup;
-
-	SelectionMode m_selectionMode = POLY_SELECTION;
 
 	bool m_selecting = false;
-	QPoint m_selectionStart;
-	QPoint m_mousePos;
-
 
 	ccHObject* p_select_cloud = nullptr;
+
+	QWidget* m_glWidget = nullptr;
+	ccMainAppInterface* m_app = nullptr;
+	ccGLWindowInterface* m_glWindow = nullptr;
+	
+	std::shared_ptr<CloudBackup> m_cloudBackup;
+	CloudObjectTreeWidget* m_objectTree = nullptr;
+	SelectionMode m_selectionMode = ENTITY_SELECTION;
+
+	// 备份标记
+	ccGLWindowInterface::INTERACTION_FLAGS interaction_flags_backup;
+	ccGLWindowInterface::PICKING_MODE picking_mode_backup;
+
+signals:
+	void enableButtons();  // 启用按钮的信号
+	void disableButtons(); // 禁用按钮的信号
 };
 
 
 /// <summary>
-/// 内部类：对象目录树，用于选中点云，设置点云可见性，删除点云
+/// 对象目录树，用于选中点云，设置点云可见性，删除点云
 /// </summary>
 class CloudObjectTreeWidget : public QTreeWidget
 {
@@ -135,21 +111,63 @@ class CloudObjectTreeWidget : public QTreeWidget
 public:
 	explicit CloudObjectTreeWidget(QWidget * parent = nullptr);
 
-	/// 初始化目录树（绑定窗口和 app）
+	/// <summary>
+	/// 初始化，绑定窗口，根节点点云
+	/// </summary>
+	/// <param name="win">窗口接口</param>
+	/// <param name="app">主程序接口</param>
+	/// <param name="select_cloud">根节点点云</param>
 	void initialize(ccGLWindowInterface* win, ccMainAppInterface* app, ccHObject** select_cloud);
 
-	// 刷新目录（重新加载树）
+	/// <summary>
+	/// 刷新目录
+	/// </summary>
 	void refresh();
-
-
 protected:
-	// 右键菜单, 提供删除选项
 	void contextMenuEvent(QContextMenuEvent* event) override;
-	// 迭代的加载树的目录
 	void loadTreeItem(ccHObject* object, QTreeWidgetItem* parentItem);
 private:
-	ccGLWindowInterface* m_glWindow = nullptr;
-	ccMainAppInterface* m_app = nullptr;
-	ccHObject** pp_select_cloud = nullptr;
 	ccHObject* root = nullptr;
+	ccHObject** pp_select_cloud = nullptr;
+	ccMainAppInterface* m_app = nullptr;
+	ccGLWindowInterface* m_glWindow = nullptr;
+};
+
+
+/// <summary>
+/// 点云状态备份与恢复工具类
+/// 用于插件中临时修改点云属性后，支持一键还原(现在主要是设置自己及所有孩子的display属性)
+/// </summary>
+class CloudBackup
+{
+public:
+	CloudBackup();
+	~CloudBackup();
+
+	/// <summary>
+	/// 备份点云状态
+	/// </summary>
+	/// <param name="cloud">备份目标点云</param>
+	void backup(ccCloudPtr cloud);
+
+	/// <summary>
+	/// 恢复点云状态
+	/// </summary>
+	void restore();
+
+	/// <summary>
+	/// 清理备份
+	/// </summary>
+	void clear();
+
+private:
+	int displayedSFIndex;
+	bool wasVisible;
+	bool wasEnabled;
+	bool wasSelected;
+	bool colorsWereDisplayed;
+	bool sfWasDisplayed;
+
+	ccCloudPtr ref;
+	ccGenericGLDisplay* originalDisplay;
 };

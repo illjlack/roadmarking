@@ -11,6 +11,7 @@
 #include <ccPointCloud.h>
 #include <ccHObject.h>
 #include <ccLog.h>
+#include <ccPolyline.h>
 
 #include "CloudProcess.h"
 #include "RoadMarkingExtract.h"
@@ -79,6 +80,7 @@ ccCloudPtr get_ground_xy_cloud(ccCloudPtr ccCloud)
 qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	: QDialog(app ? app->getMainWindow() : nullptr, Qt::WindowMaximizeButtonHint | Qt::WindowCloseButtonHint)
 	, m_app(app)
+	, m_cloudBackup(new CloudBackup())
 {
 	setWindowTitle("路标点云识别");
 	resize(1200, 800);
@@ -90,26 +92,26 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	if (m_app)
 		m_app->createGLWindow(m_glWindow, m_glWidget);
 
-	// 对象目录
+	// ==================================== 对象目录
 	{
 		QGroupBox* objectGroup = new QGroupBox("对象目录", this);
-		m_objectTree = new CloudObjectTreeWidget();
+		m_objectTree = new CloudObjectTreeWidget(objectGroup);
 		m_objectTree->initialize(m_glWindow, m_app, &p_select_cloud);
 
-		QVBoxLayout* objectLayout = new QVBoxLayout(this);
+		QVBoxLayout* objectLayout = new QVBoxLayout(objectGroup);
 		objectLayout->addWidget(m_objectTree);
 		objectGroup->setLayout(objectLayout);
 		leftLayout->addWidget(objectGroup);
 	}
 
-	// 视图切换
+	// ==================================== 视图切换
 	{
 		QGroupBox* viewGroup = new QGroupBox("视图切换", this);
-		QHBoxLayout* viewLayout = new QHBoxLayout(this);
+		QHBoxLayout* viewLayout = new QHBoxLayout(viewGroup);  // 设置 parent 为 viewGroup
 
-		auto addViewButton = [this](QHBoxLayout* layout, const QString& name, CC_VIEW_ORIENTATION view)
+		auto addViewButton = [&](QHBoxLayout* layout, const QString& name, CC_VIEW_ORIENTATION view)
 		{
-			QToolButton* btn = new QToolButton(this);
+			QToolButton* btn = new QToolButton(viewGroup);
 			btn->setText(name);
 			layout->addWidget(btn);
 			connect(btn, &QToolButton::clicked, [=]() {
@@ -127,7 +129,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		viewGroup->setLayout(viewLayout);
 		leftLayout->addWidget(viewGroup);
 
-		QToolButton* btn = new QToolButton(this);
+		QToolButton* btn = new QToolButton(viewGroup);  // 设置 parent 为 viewGroup
 		btn->setText("1:1");
 		viewLayout->addWidget(btn);
 		connect(btn, &QToolButton::clicked, [=]()
@@ -138,19 +140,42 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 					m_glWindow->updateConstellationCenterAndZoom(&bbox);
 				}
 			});
+
+		connect(this, &qSignExtractDlg::enableButtons, [viewGroup]()
+			{
+				for (int i = 0; i < viewGroup->layout()->count(); ++i) {
+					QToolButton* btn = qobject_cast<QToolButton*>(viewGroup->layout()->itemAt(i)->widget());
+					if (btn) {
+						btn->setEnabled(true);
+					}
+				}
+			});
+
+		connect(this, &qSignExtractDlg::disableButtons, [viewGroup]()
+			{
+				for (int i = 0; i < viewGroup->layout()->count(); ++i) {
+					QToolButton* btn = qobject_cast<QToolButton*>(viewGroup->layout()->itemAt(i)->widget());
+					if (btn) {
+						if (btn->text() == "1:1") {
+							continue;
+						}
+						btn->setEnabled(false);
+					}
+				}
+			});
 	}
 
-	// 功能按钮组
+	// ==================================== 功能按钮组
 	{
-		QGroupBox* functionGroup = new QGroupBox("功能选择");
-		QVBoxLayout* functionLayout = new QVBoxLayout();
+		QGroupBox* functionGroup = new QGroupBox("功能选择", this);
+		QVBoxLayout* functionLayout = new QVBoxLayout(functionGroup);
 
 		QButtonGroup* buttonGroup = new QButtonGroup(this);
 		buttonGroup->setExclusive(true);
 
 		auto addCheckableButton = [&](const QString& text, std::function<void()> callback)
 		{
-			QPushButton* btn = new QPushButton(text);
+			QPushButton* btn = new QPushButton(text, functionGroup);
 			btn->setCheckable(true);
 			functionLayout->addWidget(btn);
 			connect(btn, &QPushButton::clicked, this, std::move(callback));
@@ -164,61 +189,79 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 
 		functionGroup->setLayout(functionLayout);
 		leftLayout->addWidget(functionGroup);
+
+
+		connect(this, &qSignExtractDlg::enableButtons, [buttonGroup]()
+			{
+				for (auto* btn : buttonGroup->buttons())
+				{
+					btn->setEnabled(true);
+				}
+			});
+
+		connect(this, &qSignExtractDlg::disableButtons, [buttonGroup]()
+			{
+				for (auto* btn : buttonGroup->buttons())
+				{
+					btn->setEnabled(false);
+				}
+			});
 	}
+
 
 	leftLayout->addStretch();
 	mainLayout->addLayout(leftLayout, 2);
 
-	// GL窗口区域
-	QFrame* glFrame = new QFrame(this);
-	glFrame->setFrameStyle(QFrame::Box);
-	QVBoxLayout* glLayout = new QVBoxLayout(glFrame);
-
-
-	glLayout->addWidget(m_glWidget);
-	glFrame->setLayout(glLayout);
-	mainLayout->addWidget(glFrame, 8);
-	setLayout(mainLayout);
-
-	/*
-	enum PICKING_MODE {
-		NO_PICKING,                           // 禁用拾取功能，用户无法选择任何物体
-		ENTITY_PICKING,                       // 选择整个实体，允许用户选择如点云、网格等实体
-		ENTITY_RECT_PICKING,                  // 矩形区域选择，允许用户通过矩形框选择多个实体
-		FAST_PICKING,                         // 快速选择，优化了性能，但精度较低，适用于大数据集
-		POINT_PICKING,                        // 选择单个点，允许用户选择点云中的点
-		TRIANGLE_PICKING,                     // 选择三角形，允许用户选择网格中的三角形面片
-		POINT_OR_TRIANGLE_PICKING,            // 选择点或三角形，允许用户选择点云中的点或网格中的三角形
-		POINT_OR_TRIANGLE_OR_LABEL_PICKING,   // 选择点、三角形或标签，允许用户选择点云中的点、网格中的三角形或标签（如点云标注）
-		LABEL_PICKING,                        // 选择标签，允许用户选择点云中的标签或其他注释信息
-		DEFAULT_PICKING,                      // 默认拾取模式，通常与 `ENTITY_PICKING` 相同，用于选择实体
-	};
-	*/
-
-	if (m_glWindow)
+	// ==================================== GL窗口区域
 	{
-		m_glWindow->setPerspectiveState(false, true);
-		m_glWindow->displayOverlayEntities(true, true);
-		m_glWindow->setInteractionMode(ccGLWindowInterface::MODE_TRANSFORM_CAMERA);
-		m_glWindow->setPickingMode(ccGLWindowInterface::ENTITY_PICKING);
+		QFrame* glFrame = new QFrame(this);
+		glFrame->setFrameStyle(QFrame::Box);
+		QVBoxLayout* glLayout = new QVBoxLayout(glFrame);
+
+		glLayout->addWidget(m_glWidget);
+		glFrame->setLayout(glLayout);
+		mainLayout->addWidget(glFrame, 8);
+		setLayout(mainLayout);
+
+
+		/*
+		enum PICKING_MODE {
+			NO_PICKING,                           // 禁用拾取功能，用户无法选择任何物体
+			ENTITY_PICKING,                       // 选择整个实体，允许用户选择如点云、网格等实体
+			ENTITY_RECT_PICKING,                  // 矩形区域选择，允许用户通过矩形框选择多个实体
+			FAST_PICKING,                         // 快速选择，优化了性能，但精度较低，适用于大数据集
+			POINT_PICKING,                        // 选择单个点，允许用户选择点云中的点
+			TRIANGLE_PICKING,                     // 选择三角形，允许用户选择网格中的三角形面片
+			POINT_OR_TRIANGLE_PICKING,            // 选择点或三角形，允许用户选择点云中的点或网格中的三角形
+			POINT_OR_TRIANGLE_OR_LABEL_PICKING,   // 选择点、三角形或标签，允许用户选择点云中的点、网格中的三角形或标签（如点云标注）
+			LABEL_PICKING,                        // 选择标签，允许用户选择点云中的标签或其他注释信息
+			DEFAULT_PICKING,                      // 默认拾取模式，通常与 `ENTITY_PICKING` 相同，用于选择实体
+		};
+		*/
+
+		if (m_glWindow)
+		{
+			m_glWindow->setPerspectiveState(false, true);
+			m_glWindow->displayOverlayEntities(true, true);
+			m_glWindow->setInteractionMode(ccGLWindowInterface::MODE_TRANSFORM_CAMERA);
+			m_glWindow->setPickingMode(ccGLWindowInterface::ENTITY_PICKING);
+		}
+
+		connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::entitySelectionChanged, this, &qSignExtractDlg::onEntitySelectionChanged);
+		connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::itemPicked, this, &qSignExtractDlg::onItemPicked);
+		connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::itemPickedFast, this, &qSignExtractDlg::onItemPickedFast);
+
+		connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::leftButtonClicked, this, &qSignExtractDlg::onLeftButtonClicked);
+		connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::mouseMoved, this, &qSignExtractDlg::onMouseMoved);
+		connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::buttonReleased, this, &qSignExtractDlg::onButtonReleased);
 	}
-
-	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::entitySelectionChanged, this, &qSignExtractDlg::onEntitySelectionChanged);
-	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::itemPicked, this, &qSignExtractDlg::onItemPicked);
-	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::itemPickedFast, this, &qSignExtractDlg::onItemPickedFast);
-
-	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::leftButtonClicked, this, &qSignExtractDlg::onLeftButtonClicked);
-	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::mouseMoved, this, &qSignExtractDlg::onMouseMoved);
-	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::buttonReleased, this, &qSignExtractDlg::onButtonReleased);
-
 }
-
 qSignExtractDlg::~qSignExtractDlg()
 {
 	if (m_glWindow)
 	{
 		m_glWindow->getOwnDB()->removeAllChildren();
-		m_cloudBackup.restore();
+		m_cloudBackup->restore();
 
 		if (m_app)
 		{
@@ -238,7 +281,7 @@ bool qSignExtractDlg::setCloud(ccCloudPtr cloud)
 		return false;
 	}
 
-	m_cloudBackup.backup(cloud);
+	m_cloudBackup->backup(cloud);
 
 	if (!cloud->hasColors())
 	{
@@ -282,22 +325,114 @@ CCVector3 qSignExtractDlg::screenToWorld(int x, int y)
 	return (A + t * dir).toPC();
 }
 
-// 插槽逻辑（留空可后续补充）
 void qSignExtractDlg::onAutoExtract()
 {
 	RoadMarkingExtract::automaticExtraction(PointCloudIO::convertToCCCloud(p_select_cloud), m_app);
 	m_objectTree->refresh();
 }
-void qSignExtractDlg::onBoxSelectExtract() {}
-void qSignExtractDlg::onPointGrowExtract() {}
-void qSignExtractDlg::onBoxClip() {}
+
+void qSignExtractDlg::onBoxSelectExtract()
+{
+	startDraw();
+	m_selectionMode = POINT_SELECTION;
+	// 固定为从上往下的正交视图，初始为1：1大小，禁止相机旋转
+	m_glWindow->setView(CC_TOP_VIEW);
+	if (p_select_cloud)
+	{
+		ccBBox bbox = p_select_cloud->getOwnBB();
+		m_glWindow->updateConstellationCenterAndZoom(&bbox);
+
+		{
+			ccBBox bbox = p_select_cloud->getOwnBB(true);
+			// 获取包围盒的四个角
+			CCVector3 p0 = bbox.maxCorner();
+			CCVector3 p1 = bbox.minCorner();
+			p0.x += 5; p0.y += 5;
+			p1.x -= 5; p1.y -= 5;
+			// 计算投影到 2D 平面（XY）的坐标
+			// 由于我们只关心 2D 包围盒，所以将 Z 坐标设置为 0
+			CCVector3 p0_2D(p0.x, p0.y, 0);
+			CCVector3 p1_2D(p1.x, p0.y, 0);  // 左下角到右下角
+			CCVector3 p2_2D(p1.x, p1.y, 0);  // 右下角到右上角
+			CCVector3 p3_2D(p0.x, p1.y, 0);  // 右上角到左上角
+
+			// 创建一个新的 ccPolyline 对象
+			ccPointCloud* polylineCloud = new ccPointCloud("2D Bounding Box");
+
+			// 添加包围盒的四个角点到 polylineCloud
+			polylineCloud->addPoint(p0_2D);
+			polylineCloud->addPoint(p1_2D);
+			polylineCloud->addPoint(p2_2D);
+			polylineCloud->addPoint(p3_2D);
+
+
+			// 创建一条 ccPolyline 对象
+			ccPolyline* boundingBox = new ccPolyline(polylineCloud);
+
+
+			// 预留空间用于折线点索引
+			boundingBox->reserve(static_cast<unsigned>(polylineCloud->size()));
+
+			// 将折线中的每个点添加到 ccPolyline 中
+			for (size_t i = 0; i < polylineCloud->size(); ++i)
+			{
+				boundingBox->addPointIndex(static_cast<unsigned>(i));
+			}
+
+			/*
+			m_segmentationPoly = new ccPolyline(m_polyVertices, static_cast<unsigned>(ReservedIDs::INTERACTIVE_SEGMENTATION_TOOL_POLYLINE));
+			m_segmentationPoly->setForeground(true);
+			m_segmentationPoly->setColor(ccColor::green);
+			m_segmentationPoly->showColors(true);
+			m_segmentationPoly->set2DMode(true);
+			*/
+
+			// 设置颜色
+			//boundingBox->setColor(ccColor::red); // 例如设置为红色
+			//boundingBox->showColors(true);
+			//boundingBox->setWidth(1.0);
+			//boundingBox->set2DMode(true);
+			//boundingBox->setForeground(true);
+
+			boundingBox->setForeground(true);
+			boundingBox->setColor(ccColor::green);
+			boundingBox->showColors(true);
+			boundingBox->set2DMode(true);
+
+			p_select_cloud->addChild(polylineCloud);
+			p_select_cloud->addChild(boundingBox);
+			m_objectTree->refresh();
+		}
+
+	}
+	m_glWindow->setInteractionMode(ccGLWindowInterface::MODE_PAN_ONLY);
+	m_glWindow->setPickingMode(ccGLWindowInterface::FAST_PICKING);
+
+	
+}
+
+void qSignExtractDlg::onPointGrowExtract()
+{
+	
+}
+
+void qSignExtractDlg::onBoxClip()
+{
+	
+}
+
+
 
 void qSignExtractDlg::onItemPicked(ccHObject* entity, unsigned itemIdx, int x, int y, const CCVector3&, const CCVector3d&)
 {
+
 }
 
+// 快速点击，可以用来进行绘制(固定正交视图，二维网格保存地面高程)
 void qSignExtractDlg::onItemPickedFast(ccHObject* entity, int subEntityID, int x, int y)
 {
+	
+	
 }
 
 void qSignExtractDlg::onLeftButtonClicked(int x, int y)
@@ -325,6 +460,20 @@ void qSignExtractDlg::onEntitySelectionChanged(ccHObject* entity)
 	entity->setSelected(true);
 	p_select_cloud = entity;
 	m_glWindow->redraw();
+}
+
+void qSignExtractDlg::startDraw()
+{
+	interaction_flags_backup = m_glWindow->getInteractionMode();
+	picking_mode_backup = m_glWindow->getPickingMode();
+	emit disableButtons();
+}
+
+void qSignExtractDlg::finishDraw()
+{
+	m_glWindow->setInteractionMode(interaction_flags_backup);
+	m_glWindow->setPickingMode(picking_mode_backup);
+	emit disableButtons();
 }
 
 // ============================================================================ CloudObjectTreeWidget
@@ -480,8 +629,6 @@ CloudBackup::CloudBackup()
 	, colorsWereDisplayed(false)
 	, sfWasDisplayed(false)
 	, displayedSFIndex(-1)
-	, hadColors(false)
-	, backupColors(nullptr)
 {
 }
 
@@ -503,25 +650,6 @@ void CloudBackup::backup(ccCloudPtr cloud)
 	colorsWereDisplayed = cloud->colorsShown();
 	sfWasDisplayed = cloud->sfShown();
 	displayedSFIndex = cloud->getCurrentDisplayedScalarFieldIndex();
-	hadColors = cloud->hasColors();
-
-	// 可选：备份颜色数据
-	if (hadColors)
-	{
-		backupColors = new RGBAColorsTableType();
-		if (backupColors->reserveSafe(cloud->size()))
-		{
-			backupColors->resizeSafe(cloud->size());
-			for (unsigned i = 0; i < cloud->size(); ++i)
-				backupColors->setValue(i, cloud->getPointColor(i));
-		}
-		else
-		{
-			delete backupColors;
-			backupColors = nullptr;
-			ccLog::Warning("[CloudBackup] Not enough memory to backup colors.");
-		}
-	}
 }
 
 void CloudBackup::restore()
@@ -553,23 +681,9 @@ void CloudBackup::restore()
 	};
 
 	dfsChild(ref.get());
-
-	if (hadColors)
-	{
-		if (backupColors && ref->hasColors())
-		{
-			for (unsigned i = 0; i < ref->size(); ++i)
-				ref->setPointColor(i, backupColors->getValue(i));
-		}
-	}
-	else
-	{
-		ref->unallocateColors();
-	}
 }
 
 void CloudBackup::clear()
 {
-	backupColors = nullptr;
 	ref = nullptr;
 }
