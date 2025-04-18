@@ -343,32 +343,22 @@ void qSignExtractDlg::onBoxSelectExtract()
 		m_glWindow->updateConstellationCenterAndZoom(&bbox);
 
 		{
-			ccBBox bbox = p_select_cloud->getOwnBB(true);
-			// 获取包围盒的四个角
-			CCVector3 p0 = bbox.maxCorner();
-			CCVector3 p1 = bbox.minCorner();
-			p0.x += 5; p0.y += 5;
-			p1.x -= 5; p1.y -= 5;
-			// 计算投影到 2D 平面（XY）的坐标
-			// 由于我们只关心 2D 包围盒，所以将 Z 坐标设置为 0
-			CCVector3 p0_2D(p0.x, p0.y, 0);
-			CCVector3 p1_2D(p1.x, p0.y, 0);  // 左下角到右下角
-			CCVector3 p2_2D(p1.x, p1.y, 0);  // 右下角到右上角
-			CCVector3 p3_2D(p0.x, p1.y, 0);  // 右上角到左上角
+			CCVector3 p0(10, 10, 0);   // 左下角
+			CCVector3 p1(50, 10, 0);   // 右下角
+			CCVector3 p2(50, 50, 0);   // 右上角
+			CCVector3 p3(10, 50, 0);   // 左上角
 
-			// 创建一个新的 ccPolyline 对象
+			// 创建一个新的 ccPointCloud 对象
 			ccPointCloud* polylineCloud = new ccPointCloud("2D Bounding Box");
 
 			// 添加包围盒的四个角点到 polylineCloud
-			polylineCloud->addPoint(p0_2D);
-			polylineCloud->addPoint(p1_2D);
-			polylineCloud->addPoint(p2_2D);
-			polylineCloud->addPoint(p3_2D);
-
+			polylineCloud->addPoint(p0);
+			polylineCloud->addPoint(p1);
+			polylineCloud->addPoint(p2);
+			polylineCloud->addPoint(p3);
 
 			// 创建一条 ccPolyline 对象
 			ccPolyline* boundingBox = new ccPolyline(polylineCloud);
-
 
 			// 预留空间用于折线点索引
 			boundingBox->reserve(static_cast<unsigned>(polylineCloud->size()));
@@ -379,29 +369,24 @@ void qSignExtractDlg::onBoxSelectExtract()
 				boundingBox->addPointIndex(static_cast<unsigned>(i));
 			}
 
-			/*
-			m_segmentationPoly = new ccPolyline(m_polyVertices, static_cast<unsigned>(ReservedIDs::INTERACTIVE_SEGMENTATION_TOOL_POLYLINE));
-			m_segmentationPoly->setForeground(true);
-			m_segmentationPoly->setColor(ccColor::green);
-			m_segmentationPoly->showColors(true);
-			m_segmentationPoly->set2DMode(true);
-			*/
-
-			// 设置颜色
-			//boundingBox->setColor(ccColor::red); // 例如设置为红色
-			//boundingBox->showColors(true);
-			//boundingBox->setWidth(1.0);
-			//boundingBox->set2DMode(true);
-			//boundingBox->setForeground(true);
-
+			// 设置折线颜色
 			boundingBox->setForeground(true);
 			boundingBox->setColor(ccColor::green);
 			boundingBox->showColors(true);
 			boundingBox->set2DMode(true);
 
+			// 将 polylineCloud 和 boundingBox 添加到选择的点云中
 			p_select_cloud->addChild(polylineCloud);
 			p_select_cloud->addChild(boundingBox);
+
+			// 将 boundingBox 添加到显示窗口
+			boundingBox->setDisplay(m_glWindow);
+
+			// 刷新视图
 			m_objectTree->refresh();
+
+			// 强制重绘窗口，确保折线显示
+			m_glWindow->redraw(true, false);
 		}
 
 	}
