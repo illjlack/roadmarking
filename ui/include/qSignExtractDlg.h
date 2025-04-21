@@ -30,14 +30,14 @@
 
 class CloudBackup;
 class CloudObjectTreeWidget;
+class ForegroundPolylineEditor;
 
 // 选择模式枚举
 enum SelectionMode
 {
 	ENTITY_SELECTION,  // 实体选择状态
 	POINT_SELECTION,   // 点选择模式
-	RECT_SELECTION,    // 矩形框选模式
-	POLY_SELECTION     // 多边形框选模式
+	DRAW_SELECTION     // 多边形框选模式
 };
 
 class qSignExtractDlg : public QDialog
@@ -73,12 +73,9 @@ private slots:
 	void onMouseMoved(int x, int y, Qt::MouseButtons button);
 	void onButtonReleased();
 	void onEntitySelectionChanged(ccHObject* entity);
-	
+	void onMouseWheelRotated(int delta);
+
 private:
-	void startDraw();
-	void finishDraw();
-
-
 	bool m_selecting = false;
 
 	ccHObject* p_select_cloud = nullptr;
@@ -91,13 +88,50 @@ private:
 	CloudObjectTreeWidget* m_objectTree = nullptr;
 	SelectionMode m_selectionMode = ENTITY_SELECTION;
 
+
+
+	ForegroundPolylineEditor* foregroundPolylineEditor;
+
+
+};
+
+// ================================================================== ForegroundPolylineEditor
+class ForegroundPolylineEditor: public QObject
+{
+	Q_OBJECT
+public:
+	// 构造函数，传入gl窗口、点云对象等参数
+	ForegroundPolylineEditor(ccGLWindowInterface* glWindow);
+
+	// 析构函数，销毁时清理资源
+	~ForegroundPolylineEditor();
+
+	void setSelectCloudPtr(ccHObject** select_cloud);
+	void setCallbackfunc(std::function<void()> callback);
+	void startDraw();
+
+	void onLeftButtonClicked(int x, int y);
+	void onMouseMoved(int x, int y, Qt::MouseButtons button);
+	void onMouseWheelRotated(int delta);
+
+private:
+	void updatePoly();
+	void finishDraw();
+
+	ccGLWindowInterface* m_glWindow;             // 用于显示的OpenGL窗口
+	ccPointCloud* m_pointCloud;                  // 用于绑定折线的点云对象(2D屏幕的坐标)
+	ccPolyline* m_foregroundPolyline;            // 前景折线对象
+	std::vector<CCVector3d> m_3DPoints;		 // 用于保存点击位置
+
 	// 备份标记
 	ccGLWindowInterface::INTERACTION_FLAGS interaction_flags_backup;
 	ccGLWindowInterface::PICKING_MODE picking_mode_backup;
 
+	ccHObject** pp_select_cloud = nullptr;
+	std::function<void()> m_callback;            // 回调函数
 signals:
-	void enableButtons();  // 启用按钮的信号
-	void disableButtons(); // 禁用按钮的信号
+	void draw_start();
+	void draw_finish();
 };
 
 
