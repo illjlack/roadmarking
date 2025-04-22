@@ -104,7 +104,7 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 	{
 		ccCloudPtr bugCloud = PointCloudIO::convertToCCCloud(voxelCloud);
 		bugCloud->setName("VoxelGridFiltering");
-		applyDefaultIntensityDisplay(bugCloud);
+		CloudProcess::applyDefaultIntensityDisplay(bugCloud);
 		inputCloud->addChild(bugCloud.release());
 	}
 #endif // DEBUG
@@ -123,7 +123,7 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 		if (groundCloud)
 		{
 			groundCloud->setName("groundCloud");
-			applyDefaultIntensityDisplay(groundCloud);
+			CloudProcess::applyDefaultIntensityDisplay(groundCloud);
 			inputCloud->addChild(groundCloud.release());
 		}
 	}
@@ -142,7 +142,7 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 	{
 		ccCloudPtr bugCloud = PointCloudIO::convertToCCCloud(largestClusterCloud);
 		bugCloud->setName("euclideanClusterCloud");
-		applyDefaultIntensityDisplay(bugCloud);
+		CloudProcess::applyDefaultIntensityDisplay(bugCloud);
 		inputCloud->addChild(bugCloud.release());
 	}
 #endif // DEBUG
@@ -155,7 +155,7 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 	{
 		ccCloudPtr bugCloud = PointCloudIO::convertToCCCloud(roadCloud);
 		bugCloud->setName("roadCloud");
-		applyDefaultIntensityDisplay(bugCloud);
+		CloudProcess::applyDefaultIntensityDisplay(bugCloud);
 		inputCloud->addChild(bugCloud.release());
 	}
 #endif // DEBUG
@@ -166,7 +166,7 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 #ifdef DEBUG
 	{
 		oRoadCloud->setName("oroadCloud");
-		applyDefaultIntensityDisplay(oRoadCloud);
+		CloudProcess::applyDefaultIntensityDisplay(oRoadCloud);
 		inputCloud->addChild(oRoadCloud.release());
 	}
 #endif // DEBUG
@@ -182,7 +182,7 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 		{
 			ccCloudPtr markingCloud = PointCloudIO::convertToCCCloudXYZI(cluster);
 			markingCloud->setName(QString("Cluster_%1").arg(clusterId++));
-			applyDefaultIntensityDisplay(markingCloud);
+			CloudProcess::applyDefaultIntensityDisplay(markingCloud);
 			parentNode->addChild(markingCloud.release());
 		}
 		parentNode->setVisible(true);
@@ -202,38 +202,4 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 	inputCloud->addChild(markings);
 
 	if (m_app) timer.elapsed(m_app, "处理完成,一共耗时");
-}
-
-void RoadMarkingExtract::applyDefaultIntensityDisplay(ccCloudPtr cloud)
-{
-	if (!cloud)
-		return;
-
-	// 查找名为“intensity”的标量字段
-	int sfIdx = -1;
-	const int sfCount = cloud->getNumberOfScalarFields();
-	for (int i = 0; i < sfCount; ++i)
-	{
-		if (QString::fromStdString(cloud->getScalarField(i)->getName()).contains("intensity", Qt::CaseInsensitive))
-		{
-			sfIdx = i;
-			break;
-		}
-	}
-
-	// 如果找到了强度标量字段
-	if (sfIdx >= 0)
-	{
-		// 设置该标量字段作为颜色显示
-		cloud->setCurrentDisplayedScalarField(sfIdx);
-		cloud->showSF(true);  // 显示标量字段
-		cloud->showColors(true);  // 启用颜色显示
-	}
-	else
-	{
-		// 如果没有强度标量字段，保持默认行为
-		cloud->showSF(false);
-		cloud->showColors(false);
-	}
-	cloud->setVisible(true);
 }

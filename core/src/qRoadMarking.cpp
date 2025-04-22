@@ -61,8 +61,8 @@ void qRoadMarking::doAction()
 		return;
 	}
 
-	ccCloudPtr cloud = PointCloudIO::getSelectedCloud(m_app);
-	if (!cloud)
+	auto clouds = PointCloudIO::getSelectedClouds(m_app);
+	if (!clouds.size())
 	{
 		m_app->dispToConsole("未选择点云");
 		return;
@@ -75,9 +75,13 @@ void qRoadMarking::doAction()
 	QCoreApplication::processEvents();
 
 	//automatically deselect the input cloud
-	m_app->setSelectedInDB(cloud.get(), false);
+	for (auto cloud : clouds)
+	{
+		m_app->setSelectedInDB(cloud, false);
 
-	if (dlg.setCloud(cloud))
+	}
+
+	if (dlg.setCloud(clouds))
 	{
 		dlg.exec();
 	}

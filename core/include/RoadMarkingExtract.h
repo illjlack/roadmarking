@@ -53,6 +53,6 @@ namespace roadmarking
 			float searchRadius = 0.3f
 			);
 
-		static void applyDefaultIntensityDisplay(ccCloudPtr cloud);
+
 	};
 };

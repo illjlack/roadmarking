@@ -21,6 +21,7 @@ namespace roadmarking
 		~PointCloudIO() = default;
 
 		static ccCloudPtr getSelectedCloud(ccMainAppInterface* app);
+		static std::vector<ccHObject*> getSelectedClouds(ccMainAppInterface* app);
 		static void saveCloudToDB(ccMainAppInterface* app, ccCloudPtr cloud);
 		static ccCloudPtr convertToCCCloud(ccHObject* ob, ccMainAppInterface* app = nullptr);
 		static PCLCloudPtr convertToPCLCloud(ccCloudPtr cloud);
@@ -29,5 +30,8 @@ namespace roadmarking
 
 		static PCLCloudXYZIPtr convertToPCLCloudXYZI(ccCloudPtr cloud);
 		static ccCloudPtr convertToCCCloudXYZI(PCLCloudXYZIPtr pclCloud);
+
+		static int getIntensityIdx(ccCloudPtr cloud);
+		static int getIntensityIdx(ccPointCloud* cloud);
 	};
 }

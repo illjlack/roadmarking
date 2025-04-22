@@ -24,6 +24,7 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <pcl/filters/radius_outlier_removal.h>
+#include <pcl/filters/crop_hull.h>
 
 using namespace roadmarking;
 
@@ -208,7 +209,7 @@ ccCloudPtr CloudProcess::applyCSFGroundExtraction(ccCloudPtr ccCloud)
 	bool result = CSF::Apply(ccCloud.get(), csfParams, groundCloud, offGroundCloud, false, clothMesh);
 
 	if (offGroundCloud) delete offGroundCloud;
-	if (clothMesh)delete clothMesh;
+	//  clothMesh 未开启
 
 	if (result)
 	{
@@ -376,11 +377,13 @@ ccHObject* CloudProcess::applyVectorization(std::vector<PCLCloudPtr> pclClouds)
 	ccHObject* allLinesContainer = new ccHObject();
 
 	// 提示用户选择一个 JSON 文件
-	QString model_path = QFileDialog::getOpenFileName(nullptr, "选择 JSON 文件", "", "JSON Files (*.json);;All Files (*)");
+	/*QString model_path = QFileDialog::getOpenFileName(nullptr, "选择 JSON 文件", "", "JSON Files (*.json);;All Files (*)");
 	if (model_path.isEmpty()) {
 		QMessageBox::information(nullptr, "提示", "未选择文件");
 		return allLinesContainer;
-	}
+	}*/
+
+	QString model_path = "F:\\RoadMarking\\CloudCompare\\plugins\\core\\Standard\\qRoadMarking\\model\\model.json";
 
 	// 调用分类函数
 	classifier.ClassifyRoadMarkings(pclClouds, roadmarkings, model_path.toStdString());
@@ -605,4 +608,140 @@ std::vector<PCLPoint> CloudProcess::visualizeAndDrawPolyline(const PCLCloudPtr& 
 	// 清除所有图形对象
 	viewer.removeAllShapes();
 	return polylinePoints;
+}
+
+/// <summary>
+/// 裁剪点云：
+/// 直接用射线法精细筛选点（没必要先使用凸包筛一遍）
+/// </summary>
+/// <param name="clouds">原始点云</param>
+/// <param name="polygon_points">裁剪的闭合折线</param>
+/// <param name="cloud_cropped">裁剪后的点云</param>
+void CloudProcess::cropPointCloudWithFineSelection(
+	const std::vector<ccPointCloud*>& clouds,            // 输入点云
+	const std::vector<CCVector3d>& polygon_points,     // 自定义的裁剪区域（多边形）
+	ccPointCloud* cloud_cropped                       // 输出裁剪后的点云
+)
+{
+	if (clouds.empty() || !cloud_cropped)
+	{
+		return;
+	}
+
+	std::vector<cv::Point> polygon_cv;
+	for (const auto& pt : polygon_points)
+	{
+		polygon_cv.push_back(cv::Point(pt.x, pt.y));
+	}
+
+	cloud_cropped->addScalarField("intensity");
+	auto _sf = cloud_cropped->getScalarField(cloud_cropped->getScalarFieldIndexByName("intensity"));
+
+	for (auto cloud : clouds)
+	{
+		int sfIdx = PointCloudIO::getIntensityIdx(cloud);
+		if (sfIdx > -1)
+		{
+
+			auto sf = cloud->getScalarField(sfIdx);
+			for (size_t i = 0; i < cloud->size(); ++i)
+			{
+				const auto& point = cloud->getPoint(i);
+				cv::Point pt_2d(point->x, point->y);
+
+				if (cv::pointPolygonTest(polygon_cv, pt_2d, true) >= 0)
+				{
+					if (sf) {
+						cloud_cropped->addPoint(*point);
+						_sf->addElement(sf->getValue(i));
+					}
+				}
+			}
+		}
+	}
+	CloudProcess::applyDefaultIntensityDisplay(cloud_cropped);
+}
+
+
+//#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+//#include <CGAL/convex_hull_2.h>
+//#include <CGAL/Polygon_2_algorithms.h>
+//#include <vector>
+//
+//typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
+//typedef K::Point_2 Point_2;
+//typedef std::vector<Point_2> Polygon_2;
+//
+//void CloudProcess::cropPointCloudWithFineSelection(
+//	const std::vector<ccPointCloud*>& clouds,            // 输入点云
+//	const std::vector<CCVector3d>& polygon_points,     // 自定义的裁剪区域（多边形）
+//	ccPointCloud* cloud_cropped                       // 输出裁剪后的点云
+//)
+//{
+//	if (clouds.empty() || !cloud_cropped)
+//	{
+//		return;
+//	}
+//
+//	// 使用CGAL表示多边形
+//	Polygon_2 polygon_cgal;
+//	for (const auto& pt : polygon_points)
+//	{
+//		polygon_cgal.push_back(Point_2(pt.x, pt.y));  // 将点云中的点转换为CGAL的Point_2
+//	}
+//
+//	cloud_cropped->addScalarField("intensity");
+//	auto _sf = cloud_cropped->getScalarField(cloud_cropped->getScalarFieldIndexByName("intensity"));
+//
+//	for (auto cloud : clouds)
+//	{
+//		int sfIdx = PointCloudIO::getIntensityIdx(cloud);
+//		if (sfIdx > -1)
+//		{
+//			auto sf = cloud->getScalarField(sfIdx);
+//			for (size_t i = 0; i < cloud->size(); ++i)
+//			{
+//				const auto& point = cloud->getPoint(i);
+//				Point_2 pt_2d(point->x, point->y); // 将点云中的点转换为CGAL的Point_2
+//
+//				// 使用CGAL的bounded_side_2判断点是否在多边形内
+//				if (CGAL::bounded_side_2(polygon_cgal.begin(), polygon_cgal.end(), pt_2d, K()) == CGAL::ON_BOUNDED_SIDE)
+//				{
+//					if (sf) {
+//						cloud_cropped->addPoint(*point);
+//						_sf->addElement(sf->getValue(i));
+//					}
+//				}
+//			}
+//		}
+//	}
+//}
+
+void CloudProcess::applyDefaultIntensityDisplay(ccCloudPtr cloud)
+{
+	applyDefaultIntensityDisplay(cloud.get());
+}
+
+void CloudProcess::applyDefaultIntensityDisplay(ccPointCloud* cloud)
+{
+	if (!cloud)
+		return;
+
+	int sfIdx = PointCloudIO::getIntensityIdx(cloud);
+
+	// 如果找到了强度标量字段
+	if (sfIdx >= 0)
+	{
+		// 设置该标量字段作为颜色显示
+		cloud->setCurrentDisplayedScalarField(sfIdx);
+		cloud->showSF(true);  // 显示标量字段
+		cloud->showColors(true);  // 启用颜色显示
+	}
+	else
+	{
+		// 如果没有强度标量字段，保持默认行为
+		cloud->showSF(false);
+		cloud->showColors(false);
+	}
+	cloud->setVisible(true);
 }

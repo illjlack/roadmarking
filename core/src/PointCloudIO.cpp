@@ -23,6 +23,18 @@ ccCloudPtr PointCloudIO::getSelectedCloud(ccMainAppInterface* app)
 	return nullptr;
 }
 
+std::vector<ccHObject*> PointCloudIO::getSelectedClouds(ccMainAppInterface* app)
+{
+	const ccHObject::Container& selectedEntities = app->getSelectedEntities();
+	if (selectedEntities.empty())
+	{
+		app->dispToConsole("请先选择至少一个点云", ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+		return {};
+	}
+
+	return selectedEntities;
+}
+
 ccCloudPtr PointCloudIO::convertToCCCloud(ccHObject* ob, ccMainAppInterface* app)
 {
 	if (ob == nullptr)return nullptr;
@@ -44,6 +56,7 @@ void PointCloudIO::saveCloudToDB(ccMainAppInterface* app, ccCloudPtr cloud)
 }
 
 #include <omp.h>
+#include "..\include\PointCloudIO.h"
 
 PCLCloudPtr PointCloudIO::convertToPCLCloud(ccCloudPtr cloud)
 {
@@ -106,7 +119,7 @@ PCLCloudXYZIPtr PointCloudIO::convertToPCLCloudXYZI(ccCloudPtr cloud)
 	size_t numPoints = cloud->size();
 	pclCloud->resize(numPoints);
 
-	int intensitySFIndex = cloud->getScalarFieldIndexByName("Intensity");
+	int intensitySFIndex = PointCloudIO::getIntensityIdx(cloud);
 	ccScalarField* intensitySF = (intensitySFIndex >= 0) ? static_cast<ccScalarField*>(cloud->getScalarField(intensitySFIndex)) : nullptr;
 	float defaultIntensity = 0.0f;
 
@@ -142,3 +155,27 @@ ccCloudPtr PointCloudIO::convertToCCCloudXYZI(PCLCloudXYZIPtr pclCloud)
 	intensitySF->computeMinAndMax();
 	return ccCloud;
 }
+
+int PointCloudIO::getIntensityIdx(ccCloudPtr cloud)
+{
+	return getIntensityIdx(cloud.get());
+}
+
+int PointCloudIO::getIntensityIdx(ccPointCloud* cloud)
+{
+	if (!cloud)
+		return -1;
+
+	int sfIdx = -1;
+	const int sfCount = cloud->getNumberOfScalarFields();
+	for (int i = 0; i < sfCount; ++i)
+	{
+		if (QString::fromStdString(cloud->getScalarField(i)->getName()).contains("intensity", Qt::CaseInsensitive))
+		{
+			sfIdx = i;
+			break;
+		}
+	}
+	return sfIdx;
+}
+

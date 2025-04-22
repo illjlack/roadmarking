@@ -29,8 +29,6 @@
 #include <QGraphicsView>
 #include <vector>
 
-#include <CloudFilterDlg.h>
-
 using namespace roadmarking;
 
 GridProcess::GridProcess(float resolution) :
@@ -62,7 +60,7 @@ void GridProcess::performOrthogonalGridMapping(ccCloudPtr roadCloud)
 	Grid totalWeight(numRows, std::vector<float>(numCols, 0.0f));  // 权重累加器
 
 	// 获取强度字段
-	const int intensitySFIndex = roadCloud->getScalarFieldIndexByName("Intensity");
+	const int intensitySFIndex = PointCloudIO::getIntensityIdx(roadCloud);;
 	ccScalarField* intensitySF = intensitySFIndex >= 0 ?
 		dynamic_cast<ccScalarField*>(roadCloud->getScalarField(intensitySFIndex)) : nullptr;
 
@@ -557,9 +555,6 @@ int GridProcess::otsuThreshold(const std::vector<float>& gridI)
 			optimalThreshold = k;
 		}
 	}
-
-
-	showThresholdHistogram(histogram, optimalThreshold, 250);
 	return optimalThreshold;
 }
 

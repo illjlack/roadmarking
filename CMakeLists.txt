@@ -73,6 +73,23 @@ if (PLUGIN_STANDARD_QROADMAKING)
     include_directories(${OpenCV_INCLUDE_DIRS})
     target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS})
 
+    # ====================================================== CGAL
+    find_package(CGAL REQUIRED)
+    include_directories(${CGAL_INCLUDE_DIRS})
+    target_link_libraries(${PROJECT_NAME} ${CGAL_LIBRARIES})
+    # GMP
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(gmp REQUIRED IMPORTED_TARGET gmp)
+    target_link_libraries(${PROJECT_NAME} PkgConfig::gmp)
+    # MPFR
+    find_package(MPFR REQUIRED)
+    include_directories(${MPFR_INCLUDE_DIRS})
+    target_link_libraries(${PROJECT_NAME} ${MPFR_LIBRARIES})
+    # Boost (system + filesystem)
+    find_package(Boost REQUIRED COMPONENTS system filesystem)
+    include_directories(${Boost_INCLUDE_DIRS})
+    target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES})
+
     # 启用私有访问
     target_compile_definitions(${PROJECT_NAME} PRIVATE CC_ACCESS_PRIVATE_MEMBERS)
 

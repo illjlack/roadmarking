@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PointCloudIO.h"
+#include <opencv2/opencv.hpp>
 
 namespace roadmarking
 {
@@ -42,10 +43,16 @@ namespace roadmarking
 
 		static std::vector<PCLPoint> visualizeAndDrawPolyline(const PCLCloudPtr& inputCloud);
 
+
+		static void cropPointCloudWithFineSelection(const std::vector<ccPointCloud*>& clouds, const std::vector<CCVector3d>& polygon_points, ccPointCloud* cloud_cropped);
+
 		template<typename PointT>
 		static void extractEuclideanClusters(typename pcl::PointCloud<PointT>::Ptr inputCloud,
 			std::vector<typename pcl::PointCloud<PointT>::Ptr>& outputClusters,
 			double euclideanClusterRadius = 0.075,
 			int minNum = 10);
+
+		static void applyDefaultIntensityDisplay(ccCloudPtr cloud);
+		static void applyDefaultIntensityDisplay(ccPointCloud* cloud);
 	};
 }

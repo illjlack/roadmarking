@@ -12,9 +12,12 @@
 #include <ccHObject.h>
 #include <ccLog.h>
 #include <ccPolyline.h>
+#include <QThread>
+#include <QApplication>
 
 #include "CloudProcess.h"
 #include "RoadMarkingExtract.h"
+#include "CloudFilterDlg.h"
 
 using namespace roadmarking;
 
@@ -80,10 +83,10 @@ ccCloudPtr get_ground_xy_cloud(ccCloudPtr ccCloud)
 qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	: QDialog(app ? app->getMainWindow() : nullptr, Qt::WindowMaximizeButtonHint | Qt::WindowCloseButtonHint)
 	, m_app(app)
-	, m_cloudBackup(new CloudBackup())
 {
 	setWindowTitle("路标点云识别");
 	resize(1200, 800);
+	setFocusPolicy(Qt::StrongFocus);
 
 	QHBoxLayout* mainLayout = new QHBoxLayout(this);
 	QVBoxLayout* leftLayout = new QVBoxLayout();
@@ -93,14 +96,14 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		m_app->createGLWindow(m_glWindow, m_glWidget);
 
 	// ==================================== 前景绘制器
-	foregroundPolylineEditor = new ForegroundPolylineEditor(m_glWindow);
-	foregroundPolylineEditor->setSelectCloudPtr(&p_select_cloud);
+	m_foregroundPolylineEditor = new ForegroundPolylineEditor(m_glWindow);
+	m_foregroundPolylineEditor->setSelectCloudPtr(&p_select_cloud);
 
 	// ==================================== 对象目录
 	{
 		QGroupBox* objectGroup = new QGroupBox("对象目录", this);
 		m_objectTree = new CloudObjectTreeWidget(objectGroup);
-		m_objectTree->initialize(m_glWindow, m_app, &p_select_cloud);
+		m_objectTree->initialize(m_glWindow, m_app, &p_select_cloud, {});
 
 		QVBoxLayout* objectLayout = new QVBoxLayout(objectGroup);
 		objectLayout->addWidget(m_objectTree);
@@ -145,7 +148,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 				}
 			});
 
-		connect(foregroundPolylineEditor, &ForegroundPolylineEditor::draw_start, [viewGroup]()
+		connect(m_foregroundPolylineEditor, &ForegroundPolylineEditor::draw_finish, [viewGroup]()
 			{
 				for (int i = 0; i < viewGroup->layout()->count(); ++i) {
 					QToolButton* btn = qobject_cast<QToolButton*>(viewGroup->layout()->itemAt(i)->widget());
@@ -155,7 +158,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 				}
 			});
 
-		connect(foregroundPolylineEditor, &ForegroundPolylineEditor::draw_finish, [viewGroup]()
+		connect(m_foregroundPolylineEditor, &ForegroundPolylineEditor::draw_start, [viewGroup]()
 			{
 				for (int i = 0; i < viewGroup->layout()->count(); ++i) {
 					QToolButton* btn = qobject_cast<QToolButton*>(viewGroup->layout()->itemAt(i)->widget());
@@ -188,6 +191,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 			buttonGroup->addButton(btn);
 		};
 
+		addCheckableButton("选择强度过滤点云", [this]() { onFilteCloud(); });
 		addCheckableButton("全自动提取", [this]() { onAutoExtract(); });
 		addCheckableButton("框选提取", [this]() { onBoxSelectExtract(); });
 		addCheckableButton("点选生长提取", [this]() { onPointGrowExtract(); });
@@ -197,7 +201,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		leftLayout->addWidget(functionGroup);
 
 
-		connect(foregroundPolylineEditor, &ForegroundPolylineEditor::draw_start, [buttonGroup]()
+		connect(m_foregroundPolylineEditor, &ForegroundPolylineEditor::draw_finish, [buttonGroup]()
 			{
 				for (auto* btn : buttonGroup->buttons())
 				{
@@ -205,7 +209,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 				}
 			});
 
-		connect(foregroundPolylineEditor, &ForegroundPolylineEditor::draw_finish, [buttonGroup]()
+		connect(m_foregroundPolylineEditor, &ForegroundPolylineEditor::draw_start, [buttonGroup]()
 			{
 				for (auto* btn : buttonGroup->buttons())
 				{
@@ -255,6 +259,10 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	}
 
 	// ==================================== 一些信号
+
+	connect(m_foregroundPolylineEditor, &ForegroundPolylineEditor::update_tree, m_objectTree, [=]() { m_objectTree->refresh(); });
+
+
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::entitySelectionChanged, this, &qSignExtractDlg::onEntitySelectionChanged);
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::itemPicked, this, &qSignExtractDlg::onItemPicked);
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::itemPickedFast, this, &qSignExtractDlg::onItemPickedFast);
@@ -263,15 +271,13 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::mouseMoved, this, &qSignExtractDlg::onMouseMoved);
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::buttonReleased, this, &qSignExtractDlg::onButtonReleased);
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::mouseWheelRotated, this, &qSignExtractDlg::onMouseWheelRotated);
-
-
 }
 qSignExtractDlg::~qSignExtractDlg()
 {
 	if (m_glWindow)
 	{
+		m_objectTree->relase();
 		m_glWindow->getOwnDB()->removeAllChildren();
-		m_cloudBackup->restore();
 
 		if (m_app)
 		{
@@ -280,64 +286,24 @@ qSignExtractDlg::~qSignExtractDlg()
 		}
 	}
 
-	if (foregroundPolylineEditor)
+	if (m_foregroundPolylineEditor)
 	{
-		delete foregroundPolylineEditor;
+		delete m_foregroundPolylineEditor;
 	}
 }
 
-bool qSignExtractDlg::setCloud(ccCloudPtr cloud)
+bool qSignExtractDlg::setCloud(std::vector<ccHObject*>cloud)
 {
-	if (!cloud || !m_glWindow || !m_app)
+	if (!cloud.size() || !m_glWindow || !m_app)
 		return false;
-	if (cloud->size() < 10)
-	{
-		ccLog::Error("点云数据太少！");
-		return false;
-	}
 
-	m_cloudBackup->backup(cloud);
-
-	if (!cloud->hasColors())
-	{
-		bool success = cloud->hasDisplayedScalarField() ?
-			cloud->convertCurrentScalarFieldToColors() :
-			cloud->setColor(ccColor::white);
-
-		if (!success)
-		{
-			ccLog::Error("颜色处理失败！");
-			return false;
-		}
-	}
-
-	cloud->convertRGBToGreyScale();
-	cloud->setEnabled(true);
-	cloud->setVisible(true);
-	cloud->setSelected(false);
-	cloud->showColors(true);
-	cloud->showSF(false);
-	m_glWindow->addToOwnDB(cloud.release());
-
-	ccBBox bbox = cloud->getOwnBB();
+	m_objectTree->initialize(m_glWindow, m_app, &p_select_cloud, cloud);
+	ccBBox bbox = cloud[0]->getOwnBB();
 	m_glWindow->updateConstellationCenterAndZoom(&bbox);
 	m_glWindow->redraw();
 
 	m_objectTree->refresh();
 	return true;
-}
-
-CCVector3 qSignExtractDlg::screenToWorld(int x, int y)
-{
-	CCVector3d A, B;
-	QPointF glPos = m_glWindow->toCornerGLCoordinates(x, y);
-	ccGLCameraParameters camera;
-	m_glWindow->getGLCameraParameters(camera);
-	camera.unproject(CCVector3(glPos.x(), glPos.y(), 0.0f), A);
-	camera.unproject(CCVector3(glPos.x(), glPos.y(), 1.0f), B);
-	CCVector3d dir = B - A;
-	double t = -A.z / dir.z;
-	return (A + t * dir).toPC();
 }
 
 void qSignExtractDlg::onAutoExtract()
@@ -349,10 +315,27 @@ void qSignExtractDlg::onAutoExtract()
 void qSignExtractDlg::onBoxSelectExtract()
 {
 	m_selectionMode = DRAW_SELECTION;
-	foregroundPolylineEditor->startDraw();
-	foregroundPolylineEditor->setCallbackfunc([=]
+	m_foregroundPolylineEditor->startDraw();
+	m_foregroundPolylineEditor->setCallbackfunc([=]
 		{
-			
+
+			std::vector<CCVector3d> polyline;
+			m_foregroundPolylineEditor->getPoints(polyline);
+			std::vector <ccPointCloud*> clouds;
+			m_objectTree->getAllPointClouds(clouds);
+
+			ccPointCloud* cloud = new ccPointCloud;
+			CloudProcess::cropPointCloudWithFineSelection(clouds, polyline, cloud);
+
+			cloud->setName("cloud_cropped");
+			m_glWindow->addToOwnDB(cloud);
+			m_objectTree->refresh();
+
+			if (p_select_cloud)p_select_cloud->setSelected(false);
+			p_select_cloud = cloud;
+
+			RoadMarkingExtract::automaticExtraction(PointCloudIO::convertToCCCloud(p_select_cloud), m_app);
+			m_objectTree->refresh();
 		});
 	m_objectTree->refresh();
 }
@@ -362,9 +345,52 @@ void qSignExtractDlg::onPointGrowExtract()
 	
 }
 
+void qSignExtractDlg::onFilteCloud()
+{
+	auto cloud = PointCloudIO::getSelectedCloud(m_app);
+	if (!cloud)
+	{
+		m_app->dispToConsole("未选择点云");
+		return;
+	}
+
+	//CloudFilterDlg dlg(m_app);
+
+	////the widget should be visible before we add the cloud
+	//dlg.show();
+	//QCoreApplication::processEvents();
+
+	////automatically deselect the input cloud
+	//m_app->setSelectedInDB(cloud.get(), false);
+
+	//if (dlg.setCloud(cloud))
+	//{
+	//	dlg.exec();
+	//}
+
+	//currently selected entities appearance may have changed!
+	m_app->refreshAll();
+}
+
 void qSignExtractDlg::onBoxClip()
 {
-	
+	m_selectionMode = DRAW_SELECTION;
+	m_foregroundPolylineEditor->startDraw();
+	m_foregroundPolylineEditor->setCallbackfunc([=]
+		{
+			std::vector<CCVector3d> polyline;
+			m_foregroundPolylineEditor->getPoints(polyline);
+			std::vector <ccPointCloud*> clouds;
+			m_objectTree->getAllPointClouds(clouds);
+
+			ccPointCloud* cloud = new ccPointCloud;
+			CloudProcess::cropPointCloudWithFineSelection(clouds, polyline, cloud);
+
+			cloud->setName("cloud_cropped");
+			m_glWindow->addToOwnDB(cloud);
+			m_objectTree->refresh();
+		});
+	m_objectTree->refresh();
 }
 
 
@@ -384,7 +410,7 @@ void qSignExtractDlg::onLeftButtonClicked(int x, int y)
 {
 	if (m_selectionMode == DRAW_SELECTION)
 	{
-		foregroundPolylineEditor->onLeftButtonClicked(x, y);
+		m_foregroundPolylineEditor->onLeftButtonClicked(x, y);
 	}
 	m_glWindow->redraw();
 }
@@ -393,7 +419,7 @@ void qSignExtractDlg::onMouseMoved(int x, int y, Qt::MouseButtons button)
 {
 	if (m_selectionMode == DRAW_SELECTION)
 	{
-		foregroundPolylineEditor->onMouseMoved(x, y, button);
+		m_foregroundPolylineEditor->onMouseMoved(x, y, button);
 	}
 	m_glWindow->redraw();
 }
@@ -407,7 +433,7 @@ void qSignExtractDlg::onMouseWheelRotated(int delta)
 {
 	if (m_selectionMode == DRAW_SELECTION)
 	{
-		foregroundPolylineEditor->onMouseWheelRotated(delta);
+		m_foregroundPolylineEditor->onMouseWheelRotated(delta);
 	}
 	m_glWindow->redraw();
 }
@@ -424,7 +450,16 @@ void qSignExtractDlg::onEntitySelectionChanged(ccHObject* entity)
 	m_glWindow->redraw();
 }
 
-// ============================================================================
+// 应该是很多键被主程序当作快捷键拦截了，只有部分键有效
+void qSignExtractDlg::keyPressEvent(QKeyEvent* event)
+{
+	if (m_selectionMode == DRAW_SELECTION)
+	{
+		m_foregroundPolylineEditor->onKeyPressEvent(event);
+	}
+}
+
+// ============================================================================ ForegroundPolylineEditor
 
 ForegroundPolylineEditor::ForegroundPolylineEditor(ccGLWindowInterface* glWindow)
 	: m_glWindow(glWindow), m_pointCloud(new ccPointCloud()), m_foregroundPolyline(new ccPolyline(m_pointCloud))
@@ -460,20 +495,6 @@ void ForegroundPolylineEditor::setSelectCloudPtr(ccHObject** select_cloud)
 	pp_select_cloud = select_cloud;
 }
 
-void ForegroundPolylineEditor::finishDraw()
-{
-	m_glWindow->setInteractionMode(interaction_flags_backup);
-	m_glWindow->setPickingMode(picking_mode_backup);
-	emit draw_start();
-	m_glWindow->removeFromOwnDB(m_foregroundPolyline);
-}
-
-void ForegroundPolylineEditor:: setCallbackfunc(std::function<void()> callback)
-{
-	// 设置回调函数
-	m_callback = callback;
-}
-
 void ForegroundPolylineEditor::startDraw()
 {
 	// 窗口的准备
@@ -481,15 +502,15 @@ void ForegroundPolylineEditor::startDraw()
 		// 备份交互方式，结束时恢复，禁用其他按钮
 		interaction_flags_backup = m_glWindow->getInteractionMode();
 		picking_mode_backup = m_glWindow->getPickingMode();
-		emit draw_finish();
+		emit draw_start();
 
-		// 固定为从上往下的正交视图，初始为1：1大小，禁止相机旋转
+		// 固定为从上往下的正交视图，禁止相机旋转
 		m_glWindow->setView(CC_TOP_VIEW);
-		if (pp_select_cloud  && *pp_select_cloud)
-		{
-			ccBBox bbox = (*pp_select_cloud)->getOwnBB();
-			m_glWindow->updateConstellationCenterAndZoom(&bbox);
-		}
+		//if (pp_select_cloud && *pp_select_cloud)
+		//{
+		//	ccBBox bbox = (*pp_select_cloud)->getOwnBB();
+		//	m_glWindow->updateConstellationCenterAndZoom(&bbox);
+		//}
 		m_glWindow->setInteractionMode(ccGLWindowInterface::MODE_PAN_ONLY | ccGLWindowInterface::INTERACT_SEND_ALL_SIGNALS);
 		m_glWindow->setPickingMode(ccGLWindowInterface::NO_PICKING);
 	}
@@ -507,9 +528,51 @@ void ForegroundPolylineEditor::startDraw()
 	}
 }
 
+void ForegroundPolylineEditor::finishDraw(bool doAction)
+{
+	isFreezeUI = true;
+	if (doAction && m_callback)
+	{
+		// 执行任务期间显示闭合曲线
+		closeLine();
+		m_callback();
+	}
+	m_glWindow->setInteractionMode(interaction_flags_backup);
+	m_glWindow->setPickingMode(picking_mode_backup);
+	emit draw_finish();
+	m_glWindow->removeFromOwnDB(m_foregroundPolyline);
+	emit update_tree();
+	if (m_foregroundPolyline->size())
+	{
+		m_foregroundPolyline->clear();
+		m_pointCloud->clear();
+		m_3DPoints.clear();
+	}
+	m_glWindow->redraw(true, false);
+	isFreezeUI = false;
+}
+
+void ForegroundPolylineEditor:: setCallbackfunc(std::function<void()> callback)
+{
+	// 设置回调函数
+	m_callback = callback;
+}
+
+void ForegroundPolylineEditor::closeLine()
+{
+	if (m_pointCloud->size())
+	{
+		CCVector3* lastPoint = const_cast<CCVector3*>(m_pointCloud->getPointPersistentPtr(m_foregroundPolyline->size() - 1));
+		*lastPoint = *m_pointCloud->getPoint(0);
+		m_3DPoints.push_back(m_3DPoints[0]);
+		m_glWindow->redraw();
+		QApplication::processEvents();
+	}
+}
+
 void ForegroundPolylineEditor::onLeftButtonClicked(int x, int y)
 {
-
+	if (isFreezeUI)return;
 	QPointF pos2D = m_glWindow->toCenteredGLCoordinates(x, y);
 	CCVector3 newPoint(static_cast<PointCoordinateType>(pos2D.x()), static_cast<PointCoordinateType>(pos2D.y()), 0);
 
@@ -542,6 +605,8 @@ void ForegroundPolylineEditor::onLeftButtonClicked(int x, int y)
 
 void ForegroundPolylineEditor::onMouseMoved(int x, int y, Qt::MouseButtons button)
 {
+	if (isFreezeUI)return;
+
 	if (!m_pointCloud->size())
 		return;
 
@@ -560,7 +625,24 @@ void ForegroundPolylineEditor::onMouseMoved(int x, int y, Qt::MouseButtons butto
 
 void ForegroundPolylineEditor::onMouseWheelRotated(int delta)
 {
+	if (isFreezeUI)return;
+
 	updatePoly();
+}
+
+void ForegroundPolylineEditor::onKeyPressEvent(QKeyEvent* event)
+{
+	if (isFreezeUI)return;
+
+	if (event->key() == Qt::Key_F)
+	{
+		finishDraw(true);
+	}
+
+	if (event->key() == Qt::Key_G)
+	{
+		finishDraw(false);
+	}
 }
 
 void ForegroundPolylineEditor::updatePoly()
@@ -588,7 +670,10 @@ void ForegroundPolylineEditor::updatePoly()
 }
 
 
-
+void ForegroundPolylineEditor::getPoints(std::vector<CCVector3d>& polyline)
+{
+	polyline = m_3DPoints;
+}
 // ============================================================================ CloudObjectTreeWidget
 #include <QMenu>
 #include <QAction>
@@ -641,12 +726,74 @@ CloudObjectTreeWidget::CloudObjectTreeWidget(QWidget* parent)
 	});
 }
 
-void CloudObjectTreeWidget::initialize(ccGLWindowInterface* win, ccMainAppInterface* app, ccHObject** select_cloud)
+void CloudObjectTreeWidget::initialize(ccGLWindowInterface* win, ccMainAppInterface* app, ccHObject** select_cloud, const std::vector<ccHObject*>& objects)
 {
 	m_glWindow = win;
 	m_app = app;
 	pp_select_cloud = select_cloud;
+
+	if (objects.size())
+	{
+		originalDisplay = objects[0]->getDisplay();
+		for (auto object : objects)
+		{
+			// if (!object->getParent()) // 只用放入所有根节点
+			{
+				if (object->isA(CC_TYPES::POINT_CLOUD))
+				{
+					addCloud(static_cast<ccPointCloud*>(object));
+				}
+				else
+				{
+					m_glWindow->addToOwnDB(object);
+				}
+			}
+			
+		}
+	}
 	refresh();
+}
+
+void CloudObjectTreeWidget::addCloud(ccPointCloud* cloud, ccHObject* parent)
+{
+	// 查找名为“intensity”的标量字段
+	int sfIdx = -1;
+	const int sfCount = cloud->getNumberOfScalarFields();
+	for (int i = 0; i < sfCount; ++i)
+	{
+		if (QString::fromStdString(cloud->getScalarField(i)->getName()).contains("intensity", Qt::CaseInsensitive))
+		{
+			sfIdx = i;
+			break;
+		}
+	}
+
+	// 如果找到了强度标量字段
+	if (sfIdx >= 0)
+	{
+		// 设置该标量字段作为颜色显示
+		cloud->setCurrentDisplayedScalarField(sfIdx);
+		cloud->showSF(true);  // 显示标量字段
+		cloud->showColors(true);  // 启用颜色显示
+	}
+	else
+	{
+		// 如果没有强度标量字段，保持默认行为
+		cloud->showSF(false);
+		//cloud->showColors(false);
+	}
+
+	cloud->setEnabled(true);
+	cloud->setVisible(true);
+
+	if(parent)
+	{
+		parent->addChild(cloud);
+	}
+	else
+	{
+		m_glWindow->addToOwnDB(cloud);
+	}
 }
 
 void CloudObjectTreeWidget::refresh()
@@ -732,71 +879,84 @@ void CloudObjectTreeWidget::contextMenuEvent(QContextMenuEvent* event)
 	menu.exec(event->globalPos());
 }
 
-// ============================================================================ CloudBackup
-CloudBackup::CloudBackup()
-	: ref(nullptr)
-	, originalDisplay(nullptr)
-	, wasVisible(true)
-	, wasEnabled(true)
-	, wasSelected(false)
-	, colorsWereDisplayed(false)
-	, sfWasDisplayed(false)
-	, displayedSFIndex(-1)
+void CloudObjectTreeWidget::getAllPointClouds(std::vector<ccPointCloud*>& pointClouds)
 {
-}
-
-CloudBackup::~CloudBackup()
-{
-	clear();
-}
-
-void CloudBackup::backup(ccCloudPtr cloud)
-{
-	ref = cloud;
-	if (!cloud)
+	if (!m_glWindow)
 		return;
 
-	originalDisplay = cloud->getDisplay();
-	wasVisible = cloud->isVisible();
-	wasEnabled = cloud->isEnabled();
-	wasSelected = cloud->isSelected();
-	colorsWereDisplayed = cloud->colorsShown();
-	sfWasDisplayed = cloud->sfShown();
-	displayedSFIndex = cloud->getCurrentDisplayedScalarFieldIndex();
-}
-
-void CloudBackup::restore()
-{
-	if (!ref)
+	ccHObject* dbRoot = m_glWindow->getOwnDB();
+	if (!dbRoot || dbRoot->getChildrenNumber() == 0)
 		return;
 
-	ref->setDisplay(originalDisplay);
-	ref->setVisible(wasVisible);
-	ref->setEnabled(wasEnabled);
-	ref->setSelected(wasSelected);
-	ref->showColors(colorsWereDisplayed);
-	ref->showSF(sfWasDisplayed);
-	ref->setCurrentDisplayedScalarField(displayedSFIndex);
-
-	std::function<void(ccHObject*)> dfsChild = [&](ccHObject* parent)
+	// 递归遍历并查找所有的点云对象
+	for (int i = 0; i < dbRoot->getChildrenNumber(); ++i)
 	{
-		if (!parent)
-			return;
-		for (int i = 0; i < parent->getChildrenNumber(); i++)
+		ccHObject* child = dbRoot->getChild(i);
+		if (child)
 		{
-			ccHObject* child = parent->getChild(i);
+			// 检查该对象是否为ccPointCloud类型
+			if (ccPointCloud* cloud = dynamic_cast<ccPointCloud*>(child))
+			{
+				pointClouds.push_back(cloud);  // 将该点云对象添加到结果向量中
+			}
+			// 继续递归查找子对象
+			getAllPointCloudsRecursive(child, pointClouds);
+		}
+	}
+}
+
+void CloudObjectTreeWidget::getAllPointCloudsRecursive(ccHObject* object, std::vector<ccPointCloud*>& pointClouds)
+{
+	// 如果该对象是 ccPointCloud 类型，则添加到结果向量中
+	if (ccPointCloud* cloud = dynamic_cast<ccPointCloud*>(object))
+	{
+		pointClouds.push_back(cloud);
+	}
+
+	// 递归查找子对象
+	for (int i = 0; i < object->getChildrenNumber(); ++i)
+	{
+		ccHObject* child = object->getChild(i);
+		if (child)
+		{
+			getAllPointCloudsRecursive(child, pointClouds);  // 递归遍历子项
+		}
+	}
+}
+
+void CloudObjectTreeWidget::relase()
+{
+	std::function<void(ccHObject*)> dfsChild = [&](ccHObject* object)
+	{
+		if (!object)
+			return;
+
+		// 恢复状态
+		object->setVisible(true);
+		object->setSelected(false);
+
+		for (int i = 0; i < object->getChildrenNumber(); i++)
+		{
+			ccHObject* child = object->getChild(i);
 			if (child)
 			{
-				child->setDisplay(parent->getDisplay());
+				child->setDisplay(object->getDisplay());
 				dfsChild(child);
 			}
 		}
 	};
 
-	dfsChild(ref.get());
-}
+	if (!m_glWindow)
+		return;
 
-void CloudBackup::clear()
-{
-	ref = nullptr;
+	ccHObject* dbRoot = m_glWindow->getOwnDB();
+	if (!dbRoot || dbRoot->getChildrenNumber() == 0)
+		return;
+
+	for (int i = 0; i < dbRoot->getChildrenNumber(); i++)
+	{
+		dbRoot->getChild(i)->setDisplay(originalDisplay);
+		m_app->addToDB(dbRoot->getChild(i));
+		dfsChild(dbRoot->getChild(i));
+	}
 }
