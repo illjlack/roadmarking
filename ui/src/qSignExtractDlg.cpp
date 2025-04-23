@@ -17,7 +17,7 @@
 
 #include "CloudProcess.h"
 #include "RoadMarkingExtract.h"
-#include "CloudFilterDlg.h"
+
 
 using namespace roadmarking;
 
@@ -98,6 +98,12 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	// ==================================== 前景绘制器
 	m_foregroundPolylineEditor = new ForegroundPolylineEditor(m_glWindow);
 	m_foregroundPolylineEditor->setSelectCloudPtr(&p_select_cloud);
+
+
+	// ==================================== 阈值筛选
+	histogramWidget = new ThresholdHistogramWidget(this);
+	histogramWidget->setWindowFlag(Qt::Window);
+	histogramWidget -> hide();
 
 	// ==================================== 对象目录
 	{
@@ -261,7 +267,8 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	// ==================================== 一些信号
 
 	connect(m_foregroundPolylineEditor, &ForegroundPolylineEditor::update_tree, m_objectTree, [=]() { m_objectTree->refresh(); });
-
+	connect(m_foregroundPolylineEditor, &ForegroundPolylineEditor::draw_start, [&]() {m_selectionMode = DRAW_SELECTION; });
+	connect(m_foregroundPolylineEditor, &ForegroundPolylineEditor::draw_finish, [&](){m_selectionMode = ENTITY_SELECTION;});
 
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::entitySelectionChanged, this, &qSignExtractDlg::onEntitySelectionChanged);
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::itemPicked, this, &qSignExtractDlg::onItemPicked);
@@ -314,7 +321,6 @@ void qSignExtractDlg::onAutoExtract()
 
 void qSignExtractDlg::onBoxSelectExtract()
 {
-	m_selectionMode = DRAW_SELECTION;
 	m_foregroundPolylineEditor->startDraw();
 	m_foregroundPolylineEditor->setCallbackfunc([=]
 		{
@@ -342,41 +348,37 @@ void qSignExtractDlg::onBoxSelectExtract()
 
 void qSignExtractDlg::onPointGrowExtract()
 {
-	
+	m_foregroundPolylineEditor->startDraw();
+	m_foregroundPolylineEditor->setDraw(2, false);
+	m_foregroundPolylineEditor->setCallbackfunc([&]
+		{
+			std::vector<CCVector3d> polyline;
+			m_foregroundPolylineEditor->getPoints(polyline);
+
+
+		});
+	m_objectTree->refresh();
 }
 
 void qSignExtractDlg::onFilteCloud()
 {
-	auto cloud = PointCloudIO::getSelectedCloud(m_app);
-	if (!cloud)
+	if (!p_select_cloud || !dynamic_cast<ccPointCloud*>(p_select_cloud))
 	{
-		m_app->dispToConsole("未选择点云");
+		ccLog::Error("未选择点云");
 		return;
 	}
 
-	//CloudFilterDlg dlg(m_app);
+	ccPointCloud* cloud = dynamic_cast<ccPointCloud*>(p_select_cloud);
 
-	////the widget should be visible before we add the cloud
-	//dlg.show();
-	//QCoreApplication::processEvents();
-
-	////automatically deselect the input cloud
-	//m_app->setSelectedInDB(cloud.get(), false);
-
-	//if (dlg.setCloud(cloud))
-	//{
-	//	dlg.exec();
-	//}
-
-	//currently selected entities appearance may have changed!
-	m_app->refreshAll();
+	showThresholdHistogram(cloud);
+	m_objectTree->refresh();
 }
 
 void qSignExtractDlg::onBoxClip()
 {
 	m_selectionMode = DRAW_SELECTION;
 	m_foregroundPolylineEditor->startDraw();
-	m_foregroundPolylineEditor->setCallbackfunc([=]
+	m_foregroundPolylineEditor->setCallbackfunc([&]
 		{
 			std::vector<CCVector3d> polyline;
 			m_foregroundPolylineEditor->getPoints(polyline);
@@ -392,7 +394,6 @@ void qSignExtractDlg::onBoxClip()
 		});
 	m_objectTree->refresh();
 }
-
 
 
 void qSignExtractDlg::onItemPicked(ccHObject* entity, unsigned itemIdx, int x, int y, const CCVector3&, const CCVector3d&)
@@ -458,6 +459,16 @@ void qSignExtractDlg::keyPressEvent(QKeyEvent* event)
 		m_foregroundPolylineEditor->onKeyPressEvent(event);
 	}
 }
+
+void qSignExtractDlg::showThresholdHistogram(ccPointCloud* pointCloud, bool is_has_threshold, float lowerThreshold, float upperThreshold)
+{
+	histogramWidget->setPointCloud(pointCloud); // 设置点云数据
+
+	histogramWidget->setUpperAndLowerThreshold(is_has_threshold, lowerThreshold, upperThreshold); // 设置阈值
+
+	histogramWidget->show();
+}
+
 
 // ============================================================================ ForegroundPolylineEditor
 
@@ -531,10 +542,11 @@ void ForegroundPolylineEditor::startDraw()
 void ForegroundPolylineEditor::finishDraw(bool doAction)
 {
 	isFreezeUI = true;
+	if (isClosed)closeLine();
+
 	if (doAction && m_callback)
 	{
 		// 执行任务期间显示闭合曲线
-		closeLine();
 		m_callback();
 	}
 	m_glWindow->setInteractionMode(interaction_flags_backup);
@@ -550,6 +562,7 @@ void ForegroundPolylineEditor::finishDraw(bool doAction)
 	}
 	m_glWindow->redraw(true, false);
 	isFreezeUI = false;
+	resetDraw();
 }
 
 void ForegroundPolylineEditor:: setCallbackfunc(std::function<void()> callback)
@@ -596,6 +609,12 @@ void ForegroundPolylineEditor::onLeftButtonClicked(int x, int y)
 		CCVector3d _3DPoint;
 		camera.unproject(*lastPoint, _3DPoint);
 		m_3DPoints.push_back(_3DPoint);
+
+		if (m_3DPoints.size() == max_points_num)
+		{
+			finishDraw(true);
+			return;
+		}
 	}
 
 	m_pointCloud->addPoint(newPoint);
@@ -674,6 +693,19 @@ void ForegroundPolylineEditor::getPoints(std::vector<CCVector3d>& polyline)
 {
 	polyline = m_3DPoints;
 }
+
+void ForegroundPolylineEditor::setDraw(int max_points_num,bool isClosed)
+{
+	this->max_points_num = max_points_num;
+	this->isClosed = isClosed;
+}
+
+void ForegroundPolylineEditor::resetDraw()
+{
+	max_points_num = INF;
+	isClosed = true;
+}
+
 // ============================================================================ CloudObjectTreeWidget
 #include <QMenu>
 #include <QAction>
@@ -897,6 +929,7 @@ void CloudObjectTreeWidget::getAllPointClouds(std::vector<ccPointCloud*>& pointC
 			// 检查该对象是否为ccPointCloud类型
 			if (ccPointCloud* cloud = dynamic_cast<ccPointCloud*>(child))
 			{
+				if(cloud->isVisible())
 				pointClouds.push_back(cloud);  // 将该点云对象添加到结果向量中
 			}
 			// 继续递归查找子对象

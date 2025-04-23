@@ -27,6 +27,9 @@
 #include "ccPointCloud.h"
 #include "ccProgressDialog.h"
 #include "comm.h"
+#include "CloudFilterDlg.h"
+
+#define INF 0x3f3f3f3f
 
 // 前向声明
 class CloudObjectTreeWidget;
@@ -72,9 +75,11 @@ private slots:
 	void onMouseWheelRotated(int delta);
 
 private:
+	void showThresholdHistogram(ccPointCloud* pointCloud, bool is_has_threshold = true, float lowerThreshold = 50, float upperThreshold = 200);
+
 	bool m_selecting = false;          // 是否正在选择
 	ccHObject* p_select_cloud = nullptr; // 选择的点云对象
-
+	ThresholdHistogramWidget* histogramWidget;
 	QWidget* m_glWidget = nullptr;      // OpenGL Widget
 	ccMainAppInterface* m_app = nullptr; // 主程序接口
 	ccGLWindowInterface* m_glWindow = nullptr;  // OpenGL 窗口接口
@@ -109,6 +114,9 @@ public:
 
 	void getPoints(std::vector<CCVector3d>& polyline);
 
+	void setDraw(int max_points_num, bool isClosed);
+
+	void resetDraw();
 private:
 	void updatePoly();
 	void finishDraw(bool doAction);
@@ -126,6 +134,9 @@ private:
 	std::function<void()> m_callback;       // 回调函数
 
 	bool isFreezeUI = false;  // 是否冻结UI
+
+	int max_points_num = INF;
+	bool isClosed = true;
 
 signals:
 	void draw_start();  // 开始绘制

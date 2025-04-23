@@ -4,64 +4,99 @@
 #include <QMouseEvent>
 #include <algorithm>
 
+#include "CloudProcess.h"
+#include <QApplication>
+using namespace roadmarking;
+
 ThresholdHistogramWidget::ThresholdHistogramWidget(QWidget* parent)
 	: QWidget(parent), lowerThreshold(50), upperThreshold(200) {}
 
-void ThresholdHistogramWidget::setData(const std::vector<int>& histogram) {
-	this->histogram = histogram;
-	calculateSum();
+ThresholdHistogramWidget::~ThresholdHistogramWidget()
+{
+	if (pointCloud)pointCloud->setUpperAndLowerThreshold(false);
 }
 
-void ThresholdHistogramWidget::setLowerThreshold(int value) {
-	lowerThreshold = value;
-	update();
+void ThresholdHistogramWidget::setPointCloud(ccPointCloud* pointCloud) {
+	this->pointCloud = pointCloud;
+	computeIntensityRange(); // 计算强度的最小值和最大值
+	updateHistogramData();   // 生成直方图数据
+	calculateSum();          // 计算阈值下方和上方的强度和
+	update();                // 更新显示
 }
 
-void ThresholdHistogramWidget::setUpperThreshold(int value) {
-	upperThreshold = value;
-	update();
+void ThresholdHistogramWidget::setUpperAndLowerThreshold(bool is_has_threshold, float lowerThreshold, float upperThreshold)
+{
+	if (is_has_threshold) {
+		// 如果传入了阈值，使用传入的值
+		this->lowerThreshold = lowerThreshold;
+		this->upperThreshold = upperThreshold;
+	}
+	else {
+		// 如果没有传入阈值，使用点云数据的最小和最大强度值作为阈值
+		this->lowerThreshold = minIntensity;
+		this->upperThreshold = maxIntensity;
+	}
+	if (pointCloud)
+	{
+		pointCloud->setUpperAndLowerThreshold(is_has_threshold,
+			lowerThreshold * (maxIntensity - minIntensity) + minIntensity,
+			upperThreshold * (maxIntensity - minIntensity) + minIntensity);
+		pointCloud->getDisplay()->redraw(false, true);
+		QApplication::processEvents();
+	}
+	update(); // 更新显示
+
 }
 
-void ThresholdHistogramWidget::paintEvent(QPaintEvent* event) {
+void ThresholdHistogramWidget::paintEvent(QPaintEvent* event)
+{
+	if (!pointCloud)return;
 	QPainter painter(this);
 	painter.setRenderHint(QPainter::Antialiasing);
-	drawHistogram(painter);
+	drawHistogram(painter); // 绘制直方图
 }
 
 void ThresholdHistogramWidget::mousePressEvent(QMouseEvent* event) {
+	int debug_x = event->x();
+
 	if (event->x() >= lowerThresholdX && event->x() <= lowerThresholdX + 10) {
-		draggingLower = true;
+		draggingLower = true; // 如果点击在下阈值附近，开始拖动下阈值
 	}
 	else if (event->x() >= upperThresholdX && event->x() <= upperThresholdX + 10) {
-		draggingUpper = true;
+		draggingUpper = true; // 如果点击在上阈值附近，开始拖动上阈值
 	}
 }
 
 void ThresholdHistogramWidget::mouseMoveEvent(QMouseEvent* event) {
-	if (draggingLower) {
-		int newThreshold = event->x() - 20;
-		if (newThreshold >= 0 && newThreshold <= upperThreshold - 10) {
-			lowerThreshold = newThreshold;
-			update();
+	float histWidth = width() - 40;
+	float newThreshold = (event->x() - 20) / (histWidth / 256);
+	if (draggingLower)
+	{
+		if (newThreshold >= 0 && newThreshold <= 255 && newThreshold < upperThreshold - 5)
+		{
+			setUpperAndLowerThreshold(true, newThreshold, upperThreshold);
+			update(); // 更新显示
 		}
 	}
-	else if (draggingUpper) {
-		int newThreshold = event->x() - 20;
-		if (newThreshold <= width() && newThreshold >= lowerThreshold + 10) {
-			upperThreshold = newThreshold;
-			update();
+	else if (draggingUpper)
+	{
+		if (newThreshold >= 0 && newThreshold <= 255 && newThreshold > lowerThreshold + 5)
+		{
+			setUpperAndLowerThreshold(true, lowerThreshold, newThreshold);
+			update(); // 更新显示
 		}
 	}
 }
 
 void ThresholdHistogramWidget::mouseReleaseEvent(QMouseEvent* event) {
-	draggingLower = draggingUpper = false;
+	draggingLower = draggingUpper = false; // 释放拖动标志
 }
 
 void ThresholdHistogramWidget::calculateSum() {
 	belowThresholdSum = 0;
 	aboveThresholdSum = 0;
-	for (int i = 0; i < 256; ++i) {
+	// 计算阈值下方和上方的强度和
+	for (int i = 0; i < histogram.size(); ++i) {
 		if (i <= lowerThreshold) {
 			belowThresholdSum += histogram[i];
 		}
@@ -72,9 +107,9 @@ void ThresholdHistogramWidget::calculateSum() {
 }
 
 void ThresholdHistogramWidget::drawHistogram(QPainter& painter) {
-	int histWidth = width() - 40;
-	int histHeight = height() - 40;
-	int binWidth = histWidth / 256;
+	float histWidth = width() - 40;
+	float histHeight = height() - 40;
+	float binWidth = histWidth / 256;
 
 	painter.fillRect(20, 20, histWidth, histHeight, QBrush(Qt::white));
 
@@ -123,20 +158,43 @@ void ThresholdHistogramWidget::drawHistogram(QPainter& painter) {
 	painter.drawText(40, histHeight + 90, QString("Above Threshold Sum: %1").arg(aboveThresholdSum));
 }
 
-void showThresholdHistogram(const std::vector<int>& data, int lowerThreshold, int upperThreshold) {
-	QDialog histogramWindow;
-	histogramWindow.setWindowTitle("Threshold Histogram");
+void ThresholdHistogramWidget::computeIntensityRange() {
+	if (pointCloud)
+	{
+		minIntensity = std::numeric_limits<float>::max();
+		maxIntensity = std::numeric_limits<float>::lowest();
 
-	ThresholdHistogramWidget* histogramWidget = new ThresholdHistogramWidget(&histogramWindow);
-	histogramWidget->setData(data);
+		int sfIdx = PointCloudIO::getIntensityIdx(pointCloud);
 
-	histogramWidget->setLowerThreshold(lowerThreshold);
-	histogramWidget->setUpperThreshold(upperThreshold);
+		auto sf = pointCloud->getScalarField(sfIdx);
 
-	QVBoxLayout* layout = new QVBoxLayout(&histogramWindow);
-	layout->addWidget(histogramWidget);
+		if (!sf)return;
 
-	histogramWindow.setLayout(layout);
-	histogramWindow.resize(520, 380);
-	histogramWindow.exec();
+		// 遍历点云数据，计算强度的最小值和最大值
+		for (unsigned i = 0; i < pointCloud->size(); ++i)
+		{
+			const float intensity = sf->getValue(i);
+			minIntensity = std::min(minIntensity, intensity);
+			maxIntensity = std::max(maxIntensity, intensity);
+		}
+	}
+}
+
+void ThresholdHistogramWidget::updateHistogramData()
+{
+	histogram.resize(256, 0); // 初始化直方图数据
+	int sfIdx = PointCloudIO::getIntensityIdx(pointCloud);
+	auto sf = pointCloud->getScalarField(sfIdx);
+	if (!sf)return;
+	if (pointCloud)
+	{
+		// 遍历点云数据，根据强度值更新直方图
+		for (unsigned i = 0; i < pointCloud->size(); ++i)
+		{
+			const float intensity = sf->getValue(i);
+			int bin = (int)(255 * (intensity - minIntensity) / (maxIntensity - minIntensity)); // 映射到0-255区间
+			bin = std::min(std::max(bin, 0), 255); // 确保bin在有效范围内
+			++histogram[bin]; // 增加相应bin的计数
+		}
+	}
 }
