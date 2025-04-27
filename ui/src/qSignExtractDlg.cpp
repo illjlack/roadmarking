@@ -21,64 +21,6 @@
 
 using namespace roadmarking;
 
-
-
-/// <summary>
-/// 提取地面且平面化
-/// </summary>
-/// <param name="ccCloud">原始CC点云</param>
-/// <returns>z值为0的地面点云, 高程保存在"elevation"标量</returns>
-ccCloudPtr get_ground_xy_cloud(ccCloudPtr ccCloud)
-{
-	//float targetVoxelSize = 0.2;
-	//float euclideanClusterRadius = 0.3;
-	//float curvatureBaseThreshold = 0.01;
-	//float angleDegrees = 5.0;
-	//float angleThreshold = cos(angleDegrees * M_PI / 180.0);  // 角度转弧度再计算余弦
-	//float searchRadius = 0.3;
-	//float gridSize = 0.05;
-
-
-	//PCLCloudPtr pclCloud = PointCloudIO::convertToPCLCloud(ccCloud);
-	//PCLCloudPtr voxelCloud = CloudProcess::applyVoxelGridFiltering(pclCloud, targetVoxelSize);
-	//ccCloudPtr groundCloud = CloudProcess::applyCSFGroundExtraction(PointCloudIO::convertToCCCloud(voxelCloud));
-	//PCLCloudPtr largestClusterCloud = CloudProcess::extractMaxCloudByEuclideanCluster(PointCloudIO::convertToPCLCloud(groundCloud), euclideanClusterRadius);
-	//PCLCloudPtr roadCloud = CloudProcess::extractRoadPoints(largestClusterCloud, searchRadius, angleThreshold, curvatureBaseThreshold);
-	//ccCloudPtr oRoadCloud = CloudProcess::CropBySparseCloud(ccCloud, roadCloud);
-
-	ccCloudPtr groundCloud = CloudProcess::applyCSFGroundExtraction(ccCloud);
-
-	ccCloudPtr groundCloud_xy(new ccPointCloud);
-
-	size_t scalarFieldCount = groundCloud->getNumberOfScalarFields();
-	for (size_t fieldIdx = 0; fieldIdx < scalarFieldCount; ++fieldIdx)
-	{
-		const std::string sfName = groundCloud->getScalarField(fieldIdx)->getName();
-		groundCloud_xy->addScalarField(sfName);
-	}
-	int elevationSfIdx = groundCloud_xy->addScalarField("Elevation");
-
-	for (size_t i = 0; i < groundCloud->getPointSize(); i++)
-	{
-		CCVector3 point = *groundCloud->getPoint(i);
-		ScalarType elev = point.z;
-		point.z = 0;
-		groundCloud_xy->addPoint(point);
-		for (size_t fieldIdx = 0; fieldIdx < scalarFieldCount; ++fieldIdx)
-		{
-			ScalarType val = groundCloud->getScalarField(fieldIdx)->getValue(i);
-			groundCloud_xy->getScalarField(fieldIdx)->addElement(val);
-		}
-		groundCloud_xy->getScalarField(elevationSfIdx)->addElement(elev);
-	}
-
-	for (size_t fieldIdx = 0; fieldIdx < groundCloud_xy->getNumberOfScalarFields(); ++fieldIdx)
-	{
-		groundCloud_xy->getScalarField(fieldIdx)->computeMinAndMax();
-	}
-	return groundCloud_xy;
-}
-
 // =========================================================================================================================== qSignExtractDlg
 qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	: QDialog(app ? app->getMainWindow() : nullptr, Qt::WindowMaximizeButtonHint | Qt::WindowCloseButtonHint)
@@ -926,12 +868,6 @@ void CloudObjectTreeWidget::getAllPointClouds(std::vector<ccPointCloud*>& pointC
 		ccHObject* child = dbRoot->getChild(i);
 		if (child)
 		{
-			// 检查该对象是否为ccPointCloud类型
-			if (ccPointCloud* cloud = dynamic_cast<ccPointCloud*>(child))
-			{
-				if(cloud->isVisible())
-				pointClouds.push_back(cloud);  // 将该点云对象添加到结果向量中
-			}
 			// 继续递归查找子对象
 			getAllPointCloudsRecursive(child, pointClouds);
 		}
@@ -940,10 +876,11 @@ void CloudObjectTreeWidget::getAllPointClouds(std::vector<ccPointCloud*>& pointC
 
 void CloudObjectTreeWidget::getAllPointCloudsRecursive(ccHObject* object, std::vector<ccPointCloud*>& pointClouds)
 {
-	// 如果该对象是 ccPointCloud 类型，则添加到结果向量中
+	// 检查该对象是否为ccPointCloud类型
 	if (ccPointCloud* cloud = dynamic_cast<ccPointCloud*>(object))
 	{
-		pointClouds.push_back(cloud);
+		if (cloud->isVisible())
+			pointClouds.push_back(cloud);  // 将该点云对象添加到结果向量中
 	}
 
 	// 递归查找子对象
@@ -952,7 +889,8 @@ void CloudObjectTreeWidget::getAllPointCloudsRecursive(ccHObject* object, std::v
 		ccHObject* child = object->getChild(i);
 		if (child)
 		{
-			getAllPointCloudsRecursive(child, pointClouds);  // 递归遍历子项
+			// 继续递归查找子对象
+			getAllPointCloudsRecursive(child, pointClouds);
 		}
 	}
 }

@@ -659,6 +659,7 @@ void CloudProcess::cropPointCloudWithFineSelection(
 			}
 		}
 	}
+	_sf->computeMinAndMax();
 	CloudProcess::applyDefaultIntensityDisplay(cloud_cropped);
 }
 
@@ -735,13 +736,11 @@ void CloudProcess::applyDefaultIntensityDisplay(ccPointCloud* cloud)
 		// 设置该标量字段作为颜色显示
 		cloud->setCurrentDisplayedScalarField(sfIdx);
 		cloud->showSF(true);  // 显示标量字段
-		cloud->showColors(true);  // 启用颜色显示
 	}
 	else
 	{
 		// 如果没有强度标量字段，保持默认行为
 		cloud->showSF(false);
-		cloud->showColors(false);
 	}
 	cloud->setVisible(true);
 }

@@ -39,8 +39,8 @@ void ThresholdHistogramWidget::setUpperAndLowerThreshold(bool is_has_threshold, 
 	if (pointCloud)
 	{
 		pointCloud->setUpperAndLowerThreshold(is_has_threshold,
-			lowerThreshold * (maxIntensity - minIntensity) + minIntensity,
-			upperThreshold * (maxIntensity - minIntensity) + minIntensity);
+			lowerThreshold / 256 * (maxIntensity - minIntensity) + minIntensity,
+			upperThreshold / 256 * (maxIntensity - minIntensity) + minIntensity);
 		pointCloud->getDisplay()->redraw(false, true);
 		QApplication::processEvents();
 	}
