@@ -54,5 +54,8 @@ namespace roadmarking
 
 		static void applyDefaultIntensityDisplay(ccCloudPtr cloud);
 		static void applyDefaultIntensityDisplay(ccPointCloud* cloud);
+
+		static void filterPointCloudByIntensity(ccPointCloud* inCloud, double lowerThreshold, double upperThreshold, ccPointCloud* cloud_filtered);
+
 	};
 }

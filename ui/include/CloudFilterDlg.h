@@ -39,15 +39,24 @@ protected:
 	// 鼠标释放事件，停止拖动阈值
 	void mouseReleaseEvent(QMouseEvent* event) override;
 
+	void closeEvent(QCloseEvent* event) override;
+signals:
+	void addCloudToDB(ccPointCloud* cloud);
+
+private slots:
+	// 槽函数：处理点击确定按钮的动作
+	void onConfirmButtonClicked();
+
 private:
+	QPushButton* confirmButton;       // 确定按钮（确认阈值选择）
 	ccPointCloud* pointCloud = nullptr; // 点云数据指针
+	std::vector<int> histogram; // 存储直方图数据
 	float lowerThreshold, upperThreshold; // 下限和上限阈值
-	float belowThresholdSum = 0, aboveThresholdSum = 0; // 阈值下方和上方的强度和
 	int lowerThresholdX = 0, upperThresholdX = 0; // 阈值在直方图中的位置
 	bool draggingLower = false, draggingUpper = false; // 是否正在拖动阈值
+	float minIntensity = std::numeric_limits<float>::max(), maxIntensity = std::numeric_limits<float>::lowest(); // 最小和最大强度值
 
-	// 计算阈值范围内的强度和
-	void calculateSum();
+
 
 	// 绘制直方图
 	void drawHistogram(QPainter& painter);
@@ -58,6 +67,4 @@ private:
 	// 更新直方图数据
 	void updateHistogramData();
 
-	std::vector<int> histogram; // 存储直方图数据
-	float minIntensity = std::numeric_limits<float>::max(), maxIntensity = std::numeric_limits<float>::lowest(); // 最小和最大强度值
 };

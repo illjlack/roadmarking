@@ -9,7 +9,23 @@
 using namespace roadmarking;
 
 ThresholdHistogramWidget::ThresholdHistogramWidget(QWidget* parent)
-	: QWidget(parent), lowerThreshold(50), upperThreshold(200) {}
+	: QWidget(parent), lowerThreshold(50), upperThreshold(200)
+{
+	this->setGeometry(100, 100, 600, 400);
+	// 初始化UI布局和控件
+	confirmButton = new QPushButton(tr("确定"), this);
+	// 使用垂直布局将按钮放在直方图下方
+	QVBoxLayout* mainLayout = new QVBoxLayout(this);
+	mainLayout->addStretch();  // 上方弹性区域，占据直方图绘制区域
+	QHBoxLayout* buttonLayout = new QHBoxLayout();
+	buttonLayout->addStretch();             // 左侧弹性区域，使按钮靠右
+	buttonLayout->addWidget(confirmButton); // 添加确定按钮
+	mainLayout->addLayout(buttonLayout);    // 将水平布局添加到主布局底部
+
+	// 连接按钮点击信号到槽函数
+	connect(confirmButton, &QPushButton::clicked, this, &ThresholdHistogramWidget::onConfirmButtonClicked);
+
+}
 
 ThresholdHistogramWidget::~ThresholdHistogramWidget()
 {
@@ -20,7 +36,6 @@ void ThresholdHistogramWidget::setPointCloud(ccPointCloud* pointCloud) {
 	this->pointCloud = pointCloud;
 	computeIntensityRange(); // 计算强度的最小值和最大值
 	updateHistogramData();   // 生成直方图数据
-	calculateSum();          // 计算阈值下方和上方的强度和
 	update();                // 更新显示
 }
 
@@ -92,20 +107,6 @@ void ThresholdHistogramWidget::mouseReleaseEvent(QMouseEvent* event) {
 	draggingLower = draggingUpper = false; // 释放拖动标志
 }
 
-void ThresholdHistogramWidget::calculateSum() {
-	belowThresholdSum = 0;
-	aboveThresholdSum = 0;
-	// 计算阈值下方和上方的强度和
-	for (int i = 0; i < histogram.size(); ++i) {
-		if (i <= lowerThreshold) {
-			belowThresholdSum += histogram[i];
-		}
-		else if (i >= upperThreshold) {
-			aboveThresholdSum += histogram[i];
-		}
-	}
-}
-
 void ThresholdHistogramWidget::drawHistogram(QPainter& painter) {
 	float histWidth = width() - 40;
 	float histHeight = height() - 40;
@@ -114,6 +115,7 @@ void ThresholdHistogramWidget::drawHistogram(QPainter& painter) {
 	painter.fillRect(20, 20, histWidth, histHeight, QBrush(Qt::white));
 
 	int maxBinHeight = *std::max_element(histogram.begin(), histogram.end());
+	int inRangeCount = 0;
 	for (int i = 0; i < 256; i++) {
 		int binHeight = histogram[i];
 		int normalizedHeight = binHeight * histHeight / maxBinHeight;
@@ -127,6 +129,7 @@ void ThresholdHistogramWidget::drawHistogram(QPainter& painter) {
 		}
 		else {
 			color = QColor(255, 255, 0);
+			inRangeCount += histogram[i];
 		}
 
 		QRect rect(20 + i * binWidth, histHeight - normalizedHeight + 20, binWidth, normalizedHeight);
@@ -134,7 +137,7 @@ void ThresholdHistogramWidget::drawHistogram(QPainter& painter) {
 	}
 
 	QFont font = painter.font();
-	font.setPointSize(6);
+	font.setPointSize(12);
 	painter.setFont(font);
 	for (int i = 0; i <= 255; i += 32) {
 		painter.drawText(20 + i * binWidth, height() - 5, QString::number(i));
@@ -145,7 +148,7 @@ void ThresholdHistogramWidget::drawHistogram(QPainter& painter) {
 	lowerThresholdX = 20 + lowerThreshold * binWidth;
 	upperThresholdX = 20 + upperThreshold * binWidth;
 
-	painter.setPen(QPen(Qt::red, 3));
+	painter.setPen(QPen(Qt::red, 6));
 	painter.drawLine(lowerThresholdX, 20, lowerThresholdX, histHeight + 20);
 	painter.drawLine(upperThresholdX, 20, upperThresholdX, histHeight + 20);
 
@@ -154,8 +157,15 @@ void ThresholdHistogramWidget::drawHistogram(QPainter& painter) {
 	painter.drawText(lowerThresholdX + 10, histHeight + 15, QString("Lower: %1").arg(lowerThreshold));
 	painter.drawText(upperThresholdX + 10, histHeight + 15, QString("Upper: %1").arg(upperThreshold));
 
-	painter.drawText(40, histHeight + 60, QString("Below Threshold Sum: %1").arg(belowThresholdSum));
-	painter.drawText(40, histHeight + 90, QString("Above Threshold Sum: %1").arg(aboveThresholdSum));
+	// 区间内点数（右上角）
+	QString countText = QString("区间内点数: %1 , 总点数: %2")
+		.arg(inRangeCount)
+		.arg(static_cast<int>(pointCloud->size()));
+	int textWidth = painter.fontMetrics().horizontalAdvance(countText);
+	painter.drawText(
+		width() - textWidth - 10,  // 右侧留 10px
+		15,                        // 距离顶部 15px
+		countText);
 }
 
 void ThresholdHistogramWidget::computeIntensityRange() {
@@ -197,4 +207,31 @@ void ThresholdHistogramWidget::updateHistogramData()
 			++histogram[bin]; // 增加相应bin的计数
 		}
 	}
+}
+
+
+void ThresholdHistogramWidget::onConfirmButtonClicked()
+{
+	// 点击“确定”按钮处理：
+	// 先禁用点云的阈值过滤模式，然后生成新的点云
+	if (pointCloud) {
+		pointCloud->setUpperAndLowerThreshold(false);
+	}
+
+	ccPointCloud* cloud = new ccPointCloud;
+	CloudProcess::filterPointCloudByIntensity(pointCloud,
+		lowerThreshold / 256 * (maxIntensity - minIntensity) + minIntensity,
+		upperThreshold / 256 * (maxIntensity - minIntensity) + minIntensity,
+		cloud);
+	cloud->setName("filtedCloud");
+	emit addCloudToDB(cloud);
+	this->hide();
+}
+
+
+void ThresholdHistogramWidget::closeEvent(QCloseEvent* event)
+{
+	setUpperAndLowerThreshold(false);
+	hide();
+	event->accept();
 }

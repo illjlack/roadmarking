@@ -744,3 +744,52 @@ void CloudProcess::applyDefaultIntensityDisplay(ccPointCloud* cloud)
 	}
 	cloud->setVisible(true);
 }
+
+
+void CloudProcess::filterPointCloudByIntensity(
+	ccPointCloud* inCloud,   // 输入点云列表
+	double lowerThreshold,                      // 强度下限
+	double upperThreshold,                      // 强度上限
+	ccPointCloud* cloud_filtered                // 输出：阈值过滤后的点云
+)
+{
+	if (!inCloud || !cloud_filtered)
+		return;
+
+	// 为输出点云创建一个“intensity”标量场
+	cloud_filtered->addScalarField("intensity");
+	int outSfIdx = cloud_filtered->getScalarFieldIndexByName("intensity");
+	auto sfOut = cloud_filtered->getScalarField(outSfIdx);
+
+	// 找到输入点云的“intensity”标量场索引
+	int inSfIdx = PointCloudIO::getIntensityIdx(inCloud);
+	if (inSfIdx < 0)return;
+
+	auto sfIn = inCloud->getScalarField(inSfIdx);
+	if (!sfIn)return;
+
+	// 对每个点，判断其强度是否在阈值区间内
+	for (size_t i = 0; i < inCloud->size(); ++i)
+	{
+		const CCVector3* P = inCloud->getPoint(i);
+		double intensity = sfIn->getValue(i);
+
+		if (intensity >= lowerThreshold && intensity <= upperThreshold)
+		{
+			// 符合条件：添加到输出点云，并同步强度值
+			cloud_filtered->addPoint(*P);
+			sfOut->addElement(intensity);
+		}
+	}
+
+	// 重新计算输出标量场的最小/最大，用于后续显示
+	sfOut->computeMinAndMax();
+
+	// 设置当前显示标量场并应用默认显示
+	cloud_filtered->setCurrentDisplayedScalarField(outSfIdx);
+	CloudProcess::applyDefaultIntensityDisplay(cloud_filtered);
+
+	// 请求重绘（如果有可视化窗口）
+	if (cloud_filtered->getDisplay())
+		cloud_filtered->getDisplay()->redraw(false, true);
+}

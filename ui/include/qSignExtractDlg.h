@@ -55,7 +55,6 @@ public:
 	~qSignExtractDlg();
 
 	bool setCloud(std::vector<ccHObject*> cloud);
-
 protected:
 	void keyPressEvent(QKeyEvent* event) override;
 
@@ -73,6 +72,8 @@ private slots:
 	void onButtonReleased();
 	void onEntitySelectionChanged(ccHObject* entity);
 	void onMouseWheelRotated(int delta);
+
+	void addCloudToDB(ccPointCloud* cloud);
 
 private:
 	void showThresholdHistogram(ccPointCloud* pointCloud, bool is_has_threshold = true, float lowerThreshold = 50, float upperThreshold = 200);

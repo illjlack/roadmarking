@@ -46,7 +46,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	histogramWidget = new ThresholdHistogramWidget(this);
 	histogramWidget->setWindowFlag(Qt::Window);
 	histogramWidget -> hide();
-
+	connect(histogramWidget, &ThresholdHistogramWidget::addCloudToDB, this, &qSignExtractDlg::addCloudToDB);
 	// ==================================== 对象目录
 	{
 		QGroupBox* objectGroup = new QGroupBox("对象目录", this);
@@ -333,7 +333,14 @@ void qSignExtractDlg::onBoxClip()
 			cloud->setName("cloud_cropped");
 			m_glWindow->addToOwnDB(cloud);
 			m_objectTree->refresh();
+
 		});
+	m_objectTree->refresh();
+}
+
+void qSignExtractDlg::addCloudToDB(ccPointCloud* cloud)
+{
+	m_glWindow->addToOwnDB(cloud);
 	m_objectTree->refresh();
 }
 
