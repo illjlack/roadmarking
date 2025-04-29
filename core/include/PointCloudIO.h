@@ -20,18 +20,20 @@ namespace roadmarking
 		PointCloudIO() = default;
 		~PointCloudIO() = default;
 
-		static ccCloudPtr getSelectedCloud(ccMainAppInterface* app);
-		static std::vector<ccHObject*> getSelectedClouds(ccMainAppInterface* app);
-		static void saveCloudToDB(ccMainAppInterface* app, ccCloudPtr cloud);
-		static ccCloudPtr convertToCCCloud(ccHObject* ob, ccMainAppInterface* app = nullptr);
-		static PCLCloudPtr convertToPCLCloud(ccCloudPtr cloud);
-		static PCLCloudPtr convertToPCLCloud(PCLCloudXYZIPtr cloud);
-		static ccCloudPtr convertToCCCloud(PCLCloudPtr pclCloud);
+		static ccCloudPtr get_selected_cloud_from_DB(ccMainAppInterface* app);
+		ccCloudPtr get_ptr_from_front(ccPointCloud* p_cloud);
+		static std::vector<ccHObject*> get_selected_clouds_from_DB(ccMainAppInterface* app);
+		static void save_ccCloudPtr_to_DB(ccMainAppInterface* app, ccCloudPtr cloud);
+		static ccCloudPtr convert_to_ccCloudPtr(ccHObject* ob, ccMainAppInterface* app = nullptr);
+		static PCLCloudPtr convert_to_PCLCloudPtr(ccPointCloud* cloud);
+		static PCLCloudPtr convert_to_PCLCloudPtr(ccCloudPtr cloud);
+		static PCLCloudPtr convert_to_PCLCloudPtr(PCLCloudXYZIPtr cloud);
+		static ccCloudPtr convert_to_ccCloudPtr(PCLCloudPtr pclCloud);
 
-		static PCLCloudXYZIPtr convertToPCLCloudXYZI(ccCloudPtr cloud);
-		static ccCloudPtr convertToCCCloudXYZI(PCLCloudXYZIPtr pclCloud);
+		static PCLCloudXYZIPtr convert_to_PCLCloudPtr_with_XYZI(ccCloudPtr cloud);
+		static ccCloudPtr convert_to_ccCloudPtr_with_XYZI(PCLCloudXYZIPtr pclCloud);
 
-		static int getIntensityIdx(ccCloudPtr cloud);
-		static int getIntensityIdx(ccPointCloud* cloud);
+		static int get_intensity_idx(ccCloudPtr cloud);
+		static int get_intensity_idx(ccPointCloud* cloud);
 	};
 }

@@ -60,7 +60,7 @@ namespace roadmarking
 			const std::string& model_path);
 
 	private:
-		void MarkingVectorization(std::vector<Model>& models, RoadMarkings& roadmarkings);
+		void vectorize_roadmarking(std::vector<Model>& models, RoadMarkings& roadmarkings);
 
 		bool model_match(const std::vector<Model>& models, const std::vector<PCLCloudPtr>& scenePointClouds, RoadMarkings& roadmarkings);
 
@@ -68,17 +68,17 @@ namespace roadmarking
 
 		float icp_reg(const PCLCloudPtr& SourceCloud, const PCLCloudPtr& TargetCloud, Eigen::Matrix4f& initial_guess, Eigen::Matrix4f& transformationS2T, int max_iter, float thre_dis);
 
-		void alignWithPCA(const PCLCloudPtr& ModelCloud, const PCLCloudPtr& SceneCloud, Eigen::Matrix4f& initial_transformation);
+		void align_with_PCA(const PCLCloudPtr& ModelCloud, const PCLCloudPtr& SceneCloud, Eigen::Matrix4f& initial_transformation);
 
 		float reg_pca_then_icp(const  Model& model, const PCLCloudPtr& sceneCloud, Eigen::Matrix4f& tran_mat_m2s_best, float heading_step_d, int max_iter_num, float dis_thre);
 
-		PCLCloudPtr getHullCloud(PCLCloudPtr cloud);
+		PCLCloudPtr get_hull_cloud(PCLCloudPtr cloud);
 
 		bool is_line_cloud_and_get_direction(PCLCloudPtr cloud, RoadMarkings& roadmarkings);
 
-		void CombineSideLines(const RoadMarkings& roadmarkings, double Combine_length, RoadMarkings& combine_sideline_markings);
+		void combine_side_lines(const RoadMarkings& roadmarkings, double Combine_length, RoadMarkings& combine_sideline_markings);
 
-		void alignPointCloudToXAxisInPlace(const PCLCloudPtr& cloud, Eigen::Matrix4f& transformation);
+		void align_cloud_to_x_axis(const PCLCloudPtr& cloud, Eigen::Matrix4f& transformation);
 	};
 };
 

@@ -61,7 +61,7 @@ void qRoadMarking::doAction()
 		return;
 	}
 
-	auto clouds = PointCloudIO::getSelectedClouds(m_app);
+	auto clouds = PointCloudIO::get_selected_clouds_from_DB(m_app);
 	if (!clouds.size())
 	{
 		m_app->dispToConsole("未选择点云");

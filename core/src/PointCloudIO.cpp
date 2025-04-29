@@ -3,12 +3,12 @@
 
 using namespace roadmarking;
 
-ccCloudPtr PointCloudIO::getSelectedCloud(ccMainAppInterface* app)
+ccCloudPtr PointCloudIO::get_selected_cloud_from_DB(ccMainAppInterface* p_app)
 {
-	const ccHObject::Container& selectedEntities = app->getSelectedEntities();
+	const ccHObject::Container& selectedEntities = p_app->getSelectedEntities();
 	if (selectedEntities.empty())
 	{
-		app->dispToConsole("请先选择至少一个点云", ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+		p_app->dispToConsole("请先选择至少一个点云", ccMainAppInterface::ERR_CONSOLE_MESSAGE);
 		return nullptr;
 	}
 	for (ccHObject* ent : selectedEntities)
@@ -19,11 +19,17 @@ ccCloudPtr PointCloudIO::getSelectedCloud(ccMainAppInterface* app)
 			return ccCloudPtr(static_cast<ccPointCloud*>(ent), [](ccPointCloud*) {});
 		}
 	}
-	app->dispToConsole("选择的实体不是点云", ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+	p_app->dispToConsole("选择的实体不是点云", ccMainAppInterface::ERR_CONSOLE_MESSAGE);
 	return nullptr;
 }
 
-std::vector<ccHObject*> PointCloudIO::getSelectedClouds(ccMainAppInterface* app)
+ccCloudPtr PointCloudIO::get_ptr_from_front(ccPointCloud* p_cloud)
+{
+	// 生命周期归前端管理, 使用空的析构函数
+	return ccCloudPtr(static_cast<ccPointCloud*>(p_cloud), [](ccPointCloud*) {});
+}
+
+std::vector<ccHObject*> PointCloudIO::get_selected_clouds_from_DB(ccMainAppInterface* app)
 {
 	const ccHObject::Container& selectedEntities = app->getSelectedEntities();
 	if (selectedEntities.empty())
@@ -31,11 +37,10 @@ std::vector<ccHObject*> PointCloudIO::getSelectedClouds(ccMainAppInterface* app)
 		app->dispToConsole("请先选择至少一个点云", ccMainAppInterface::ERR_CONSOLE_MESSAGE);
 		return {};
 	}
-
 	return selectedEntities;
 }
 
-ccCloudPtr PointCloudIO::convertToCCCloud(ccHObject* ob, ccMainAppInterface* app)
+ccCloudPtr PointCloudIO::convert_to_ccCloudPtr(ccHObject* ob, ccMainAppInterface* app)
 {
 	if (ob == nullptr)return nullptr;
 	if (ob->isA(CC_TYPES::POINT_CLOUD))
@@ -46,7 +51,7 @@ ccCloudPtr PointCloudIO::convertToCCCloud(ccHObject* ob, ccMainAppInterface* app
 	return nullptr;
 }
 
-void PointCloudIO::saveCloudToDB(ccMainAppInterface* app, ccCloudPtr cloud)
+void PointCloudIO::save_ccCloudPtr_to_DB(ccMainAppInterface* app, ccCloudPtr cloud)
 {
 	// 完全获得点云的所有权,生命周期交给前端控制
 	ccPointCloud* cccloud = cloud.release();
@@ -55,10 +60,7 @@ void PointCloudIO::saveCloudToDB(ccMainAppInterface* app, ccCloudPtr cloud)
 	app->refreshAll();
 }
 
-#include <omp.h>
-#include "..\include\PointCloudIO.h"
-
-PCLCloudPtr PointCloudIO::convertToPCLCloud(ccCloudPtr cloud)
+PCLCloudPtr PointCloudIO::convert_to_PCLCloudPtr(ccPointCloud* cloud)
 {
 	PCLCloudPtr pclCloud(new PCLCloud);
 	size_t numPoints = cloud->size();
@@ -75,7 +77,13 @@ PCLCloudPtr PointCloudIO::convertToPCLCloud(ccCloudPtr cloud)
 }
 
 
-PCLCloudPtr PointCloudIO::convertToPCLCloud(PCLCloudXYZIPtr cloud)
+PCLCloudPtr PointCloudIO::convert_to_PCLCloudPtr(ccCloudPtr cloud)
+{
+	return convert_to_PCLCloudPtr(cloud.get());
+}
+
+
+PCLCloudPtr PointCloudIO::convert_to_PCLCloudPtr(PCLCloudXYZIPtr cloud)
 {
 	PCLCloudPtr pclCloud(new PCLCloud);
 	size_t numPoints = cloud->size();
@@ -92,7 +100,7 @@ PCLCloudPtr PointCloudIO::convertToPCLCloud(PCLCloudXYZIPtr cloud)
 }
 
 
-ccCloudPtr PointCloudIO::convertToCCCloud(PCLCloudPtr pclCloud)
+ccCloudPtr PointCloudIO::convert_to_ccCloudPtr(PCLCloudPtr pclCloud)
 {
 	ccCloudPtr ccCloud(new ccPointCloud());
 	size_t numPoints = pclCloud->size();
@@ -113,13 +121,13 @@ ccCloudPtr PointCloudIO::convertToCCCloud(PCLCloudPtr pclCloud)
 	return ccCloud;
 }
 
-PCLCloudXYZIPtr PointCloudIO::convertToPCLCloudXYZI(ccCloudPtr cloud)
+PCLCloudXYZIPtr PointCloudIO::convert_to_PCLCloudPtr_with_XYZI(ccCloudPtr cloud)
 {
 	PCLCloudXYZIPtr pclCloud(new PCLCloudXYZI);
 	size_t numPoints = cloud->size();
 	pclCloud->resize(numPoints);
 
-	int intensitySFIndex = PointCloudIO::getIntensityIdx(cloud);
+	int intensitySFIndex = PointCloudIO::get_intensity_idx(cloud);
 	ccScalarField* intensitySF = (intensitySFIndex >= 0) ? static_cast<ccScalarField*>(cloud->getScalarField(intensitySFIndex)) : nullptr;
 	float defaultIntensity = 0.0f;
 
@@ -138,7 +146,7 @@ PCLCloudXYZIPtr PointCloudIO::convertToPCLCloudXYZI(ccCloudPtr cloud)
 }
 
 
-ccCloudPtr PointCloudIO::convertToCCCloudXYZI(PCLCloudXYZIPtr pclCloud)
+ccCloudPtr PointCloudIO::convert_to_ccCloudPtr_with_XYZI(PCLCloudXYZIPtr pclCloud)
 {
 	ccCloudPtr ccCloud(new ccPointCloud());
 
@@ -156,12 +164,12 @@ ccCloudPtr PointCloudIO::convertToCCCloudXYZI(PCLCloudXYZIPtr pclCloud)
 	return ccCloud;
 }
 
-int PointCloudIO::getIntensityIdx(ccCloudPtr cloud)
+int PointCloudIO::get_intensity_idx(ccCloudPtr cloud)
 {
-	return getIntensityIdx(cloud.get());
+	return get_intensity_idx(cloud.get());
 }
 
-int PointCloudIO::getIntensityIdx(ccPointCloud* cloud)
+int PointCloudIO::get_intensity_idx(ccPointCloud* cloud)
 {
 	if (!cloud)
 		return -1;

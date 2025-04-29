@@ -28,7 +28,7 @@
 
 using namespace roadmarking;
 
-PCLOctreePtr CloudProcess::buildOctree(PCLCloudPtr pclCloud, float targetVoxelSize)
+PCLOctreePtr CloudProcess::build_octree(PCLCloudPtr pclCloud, float targetVoxelSize)
 {
 	PCLOctreePtr pclOctree(new PCLOctree(targetVoxelSize));
 	pclOctree->setInputCloud(pclCloud);
@@ -36,7 +36,7 @@ PCLOctreePtr CloudProcess::buildOctree(PCLCloudPtr pclCloud, float targetVoxelSi
 	return pclOctree;
 }
 
-ccCloudPtr CloudProcess::CropBySparseCloud(ccCloudPtr ccCloud, PCLCloudPtr pclCloud, PCLOctreePtr octree)
+ccCloudPtr CloudProcess::crop_raw_by_sparse_cloud(ccCloudPtr ccCloud, PCLCloudPtr pclCloud, PCLOctreePtr octree)
 {
 	ccPointCloud* croppedCloud = new ccPointCloud();
 	std::unordered_set<int> unique_indices;
@@ -46,7 +46,7 @@ ccCloudPtr CloudProcess::CropBySparseCloud(ccCloudPtr ccCloud, PCLCloudPtr pclCl
 
 	if (!octree)
 	{
-		octree = buildOctree(PointCloudIO::convertToPCLCloud(ccCloud), 0.2);
+		octree = build_octree(PointCloudIO::convert_to_PCLCloudPtr(ccCloud), 0.2);
 	}
 
 	size_t targetSize = pclCloud->size();
@@ -102,7 +102,7 @@ ccCloudPtr CloudProcess::CropBySparseCloud(ccCloudPtr ccCloud, PCLCloudPtr pclCl
 #include <omp.h> // OpenMP 进行并行加速
 #include <comm.h>
 
-ccCloudPtr CloudProcess::applyVoxelGridFiltering(ccCloudPtr ccCloud, float targetVoxelSize, PCLOctreePtr octree)
+ccCloudPtr CloudProcess::apply_voxel_grid_filtering(ccCloudPtr ccCloud, float targetVoxelSize, PCLOctreePtr octree)
 {
 	// 创建新的点云
 	ccPointCloud* croppedCloud = new ccPointCloud();
@@ -119,13 +119,13 @@ ccCloudPtr CloudProcess::applyVoxelGridFiltering(ccCloudPtr ccCloud, float targe
 
 	if (!octree)
 	{
-		octree = buildOctree(PointCloudIO::convertToPCLCloud(ccCloud), 0.2);
+		octree = build_octree(PointCloudIO::convert_to_PCLCloudPtr(ccCloud), 0.2);
 	}
 
 	// 转换为 PCL 格式点云
-	PCLCloudPtr pclCloud = PointCloudIO::convertToPCLCloud(ccCloud);
+	PCLCloudPtr pclCloud = PointCloudIO::convert_to_PCLCloudPtr(ccCloud);
 	// 体素网格滤波
-	PCLCloudPtr filteredCloud = applyVoxelGridFiltering(pclCloud, targetVoxelSize);
+	PCLCloudPtr filteredCloud = apply_voxel_grid_filtering(pclCloud, targetVoxelSize);
 
 	croppedCloud->reserve(filteredCloud->points.size()); // 预分配，减少动态扩容
 	for (int sfIdx : scalarFieldIndices)
@@ -174,7 +174,7 @@ ccCloudPtr CloudProcess::applyVoxelGridFiltering(ccCloudPtr ccCloud, float targe
 	return ccCloudPtr(croppedCloud);
 }
 
-PCLCloudPtr CloudProcess::applyVoxelGridFiltering(PCLCloudPtr pclCloud, float targetVoxelSize)
+PCLCloudPtr CloudProcess::apply_voxel_grid_filtering(PCLCloudPtr pclCloud, float targetVoxelSize)
 {
 	pcl::octree::OctreePointCloudVoxelCentroid<PCLPoint> octree(targetVoxelSize);
 	octree.setInputCloud(pclCloud);
@@ -192,7 +192,7 @@ PCLCloudPtr CloudProcess::applyVoxelGridFiltering(PCLCloudPtr pclCloud, float ta
 	return filteredCloud;
 }
 
-ccCloudPtr CloudProcess::applyCSFGroundExtraction(ccCloudPtr ccCloud)
+ccCloudPtr CloudProcess::apply_csf_ground_extraction(ccCloudPtr ccCloud)
 {
 	CSF::Parameters csfParams;
 	csfParams.cloth_resolution = 2.0;
@@ -219,18 +219,18 @@ ccCloudPtr CloudProcess::applyCSFGroundExtraction(ccCloudPtr ccCloud)
 	return nullptr;
 }
 
-PCLCloudPtr CloudProcess::applyCSFGroundExtraction(PCLCloudPtr pclCloud)
+PCLCloudPtr CloudProcess::apply_csf_ground_extraction(PCLCloudPtr pclCloud)
 {
-	ccCloudPtr ccCloud = PointCloudIO::convertToCCCloud(pclCloud);
-	ccCloudPtr groundCloud = applyCSFGroundExtraction(ccCloud);
-	PCLCloudPtr pclGroundCloud = PointCloudIO::convertToPCLCloud(groundCloud);
+	ccCloudPtr ccCloud = PointCloudIO::convert_to_ccCloudPtr(pclCloud);
+	ccCloudPtr groundCloud = apply_csf_ground_extraction(ccCloud);
+	PCLCloudPtr pclGroundCloud = PointCloudIO::convert_to_PCLCloudPtr(groundCloud);
 	return pclGroundCloud;
 }
 
-PCLCloudPtr CloudProcess::extractMaxCloudByEuclideanCluster(PCLCloudPtr groundCloud, float euclideanClusterRadius)
+PCLCloudPtr CloudProcess::extract_max_cloud_by_euclidean_cluster(PCLCloudPtr groundCloud, float euclideanClusterRadius)
 {
 	std::vector<PCLCloudPtr> clouds;
-	extractEuclideanClusters<PCLPoint>(groundCloud, clouds, euclideanClusterRadius);
+	extract_euclidean_clusters<PCLPoint>(groundCloud, clouds, euclideanClusterRadius);
 	if (clouds.size() == 0)
 	{
 		return nullptr;
@@ -240,7 +240,7 @@ PCLCloudPtr CloudProcess::extractMaxCloudByEuclideanCluster(PCLCloudPtr groundCl
 	return *largestCluster;
 }
 
-PCLCloudPtr CloudProcess::extractRoadPoints(PCLCloudPtr groundCloud,
+PCLCloudPtr CloudProcess::extract_road_points(PCLCloudPtr groundCloud,
 	float searchRadius,
 	float angleThreshold,
 	float curvatureBaseThreshold,
@@ -331,24 +331,24 @@ PCLCloudPtr CloudProcess::extractRoadPoints(PCLCloudPtr groundCloud,
 	return roadCloud;
 }
 
-std::vector<PCLCloudXYZIPtr> CloudProcess::extractRoadMarking(ccCloudPtr roadCloud,
+std::vector<PCLCloudXYZIPtr> CloudProcess::extract_roadmarking(ccCloudPtr roadCloud,
 	float resolution,
 	double euclideanClusterRadius,
 	int minNum)
 {
 	GridProcess gridProcess(resolution);
-	gridProcess.performOrthogonalGridMapping(roadCloud);
-	gridProcess.divByDoubleAdaptiveIntensityThreshold();
+	gridProcess.perform_orthogonal_grid_mapping(roadCloud);
+	gridProcess.div_by_adaptive_intensity_threshold();
 	PCLCloudXYZIPtr markingCloud(new PCLCloudXYZI);
-	gridProcess.restoreFromGridToPointCloud(markingCloud);
+	gridProcess.restore_from_grid_to_cloud(markingCloud);
 
 	std::vector<PCLCloudXYZIPtr> clouds;
-	extractEuclideanClusters<PCLPointXYZI>(markingCloud, clouds, euclideanClusterRadius, minNum);
+	extract_euclidean_clusters<PCLPointXYZI>(markingCloud, clouds, euclideanClusterRadius, minNum);
 
 	return clouds;
 }
 
-PCLCloudPtr CloudProcess::matchRoadMarking(PCLCloudPtr pclCloud)
+PCLCloudPtr CloudProcess::match_roadmarking(PCLCloudPtr pclCloud)
 {
 	//TemplateMatcher matcher;
 	//matcher.setScenePointCloud(pclCloud);
@@ -357,16 +357,16 @@ PCLCloudPtr CloudProcess::matchRoadMarking(PCLCloudPtr pclCloud)
 	return nullptr;
 }
 
-ccHObject* CloudProcess::applyVectorization(ccCloudPtr cloud)
+ccHObject* CloudProcess::apply_roadmarking_vectorization(ccCloudPtr cloud)
 {
 	ccHObject* polylineContainer(new ccHObject);
 	GridProcess gridProcess(0.05);
-	gridProcess.performOrthogonalGridMapping(cloud);
-	gridProcess.processGridToPolylineCloud(polylineContainer);
+	gridProcess.perform_orthogonal_grid_mapping(cloud);
+	gridProcess.process_grid_to_polylines(polylineContainer);
 	return polylineContainer;
 }
 
-ccHObject* CloudProcess::applyVectorization(std::vector<PCLCloudPtr> pclClouds)
+ccHObject* CloudProcess::apply_roadmarking_vectorization(std::vector<PCLCloudPtr> pclClouds)
 {
 	// 创建分类器对象
 	RoadMarkingClassifier classifier;
@@ -406,6 +406,8 @@ ccHObject* CloudProcess::applyVectorization(std::vector<PCLCloudPtr> pclClouds)
 		// 创建 ccPolyline 对象并将 polylineCloud 作为输入点云
 		ccPolyline* polylineObj = new ccPolyline(polylineCloud.release());
 
+		polylineObj->addChild(polylineCloud.get()); // 一起删除
+
 		// 预留空间用于折线点索引
 		polylineObj->reserve(static_cast<unsigned>(polyline.size()));
 
@@ -418,6 +420,7 @@ ccHObject* CloudProcess::applyVectorization(std::vector<PCLCloudPtr> pclClouds)
 		// 将创建的 ccPolyline 添加到 allLinesContainer 中
 		polylineObj->setVisible(true);
 		polylineObj->setColor(ccColor::redRGB);
+		polylineObj->showColors(true);
 		allLinesContainer->addChild(polylineObj);
 	}
 	allLinesContainer->setVisible(true);
@@ -425,7 +428,7 @@ ccHObject* CloudProcess::applyVectorization(std::vector<PCLCloudPtr> pclClouds)
 }
 
 template <typename PointT>
-void CloudProcess::extractEuclideanClusters(
+void CloudProcess::extract_euclidean_clusters(
 	typename pcl::PointCloud<PointT>::Ptr inputCloud,
 	std::vector<typename pcl::PointCloud<PointT>::Ptr>& outputClusters,
 	double euclideanClusterRadius,
@@ -471,7 +474,7 @@ void CloudProcess::extractEuclideanClusters(
 	}
 }
 
-PCLCloudPtr CloudProcess::extractOutline(const PCLCloudPtr& inputCloud, float alpha)
+PCLCloudPtr CloudProcess::extract_outline(const PCLCloudPtr& inputCloud, float alpha)
 {
 	if (!inputCloud || inputCloud->empty())
 	{
@@ -503,7 +506,7 @@ PCLCloudPtr CloudProcess::extractOutline(const PCLCloudPtr& inputCloud, float al
 	return hullCloud;
 }
 
-std::vector<PCLPoint> CloudProcess::visualizeAndDrawPolyline(const PCLCloudPtr& inputCloud) {
+std::vector<PCLPoint> CloudProcess::draw_polyline_on_cloud_by_pcl_view(const PCLCloudPtr& inputCloud) {
 	// 创建可视化器并设置窗口名称
 	pcl::visualization::PCLVisualizer viewer("Point Cloud Polyline Drawer");
 
@@ -617,7 +620,7 @@ std::vector<PCLPoint> CloudProcess::visualizeAndDrawPolyline(const PCLCloudPtr& 
 /// <param name="clouds">原始点云</param>
 /// <param name="polygon_points">裁剪的闭合折线</param>
 /// <param name="cloud_cropped">裁剪后的点云</param>
-void CloudProcess::cropPointCloudWithFineSelection(
+void CloudProcess::crop_cloud_with_polygon(
 	const std::vector<ccPointCloud*>& clouds,            // 输入点云
 	const std::vector<CCVector3d>& polygon_points,     // 自定义的裁剪区域（多边形）
 	ccPointCloud* cloud_cropped                       // 输出裁剪后的点云
@@ -639,7 +642,7 @@ void CloudProcess::cropPointCloudWithFineSelection(
 
 	for (auto cloud : clouds)
 	{
-		int sfIdx = PointCloudIO::getIntensityIdx(cloud);
+		int sfIdx = PointCloudIO::get_intensity_idx(cloud);
 		if (sfIdx > -1)
 		{
 
@@ -660,7 +663,7 @@ void CloudProcess::cropPointCloudWithFineSelection(
 		}
 	}
 	_sf->computeMinAndMax();
-	CloudProcess::applyDefaultIntensityDisplay(cloud_cropped);
+	CloudProcess::apply_default_intensity_and_visible(cloud_cropped);
 }
 
 
@@ -718,17 +721,17 @@ void CloudProcess::cropPointCloudWithFineSelection(
 //	}
 //}
 
-void CloudProcess::applyDefaultIntensityDisplay(ccCloudPtr cloud)
+void CloudProcess::apply_default_intensity_and_visible(ccCloudPtr cloud)
 {
-	applyDefaultIntensityDisplay(cloud.get());
+	apply_default_intensity_and_visible(cloud.get());
 }
 
-void CloudProcess::applyDefaultIntensityDisplay(ccPointCloud* cloud)
+void CloudProcess::apply_default_intensity_and_visible(ccPointCloud* cloud)
 {
 	if (!cloud)
 		return;
 
-	int sfIdx = PointCloudIO::getIntensityIdx(cloud);
+	int sfIdx = PointCloudIO::get_intensity_idx(cloud);
 
 	// 如果找到了强度标量字段
 	if (sfIdx >= 0)
@@ -746,7 +749,7 @@ void CloudProcess::applyDefaultIntensityDisplay(ccPointCloud* cloud)
 }
 
 
-void CloudProcess::filterPointCloudByIntensity(
+void CloudProcess::filter_cloud_by_intensity(
 	ccPointCloud* inCloud,   // 输入点云列表
 	double lowerThreshold,                      // 强度下限
 	double upperThreshold,                      // 强度上限
@@ -762,7 +765,7 @@ void CloudProcess::filterPointCloudByIntensity(
 	auto sfOut = cloud_filtered->getScalarField(outSfIdx);
 
 	// 找到输入点云的“intensity”标量场索引
-	int inSfIdx = PointCloudIO::getIntensityIdx(inCloud);
+	int inSfIdx = PointCloudIO::get_intensity_idx(inCloud);
 	if (inSfIdx < 0)return;
 
 	auto sfIn = inCloud->getScalarField(inSfIdx);
@@ -787,9 +790,601 @@ void CloudProcess::filterPointCloudByIntensity(
 
 	// 设置当前显示标量场并应用默认显示
 	cloud_filtered->setCurrentDisplayedScalarField(outSfIdx);
-	CloudProcess::applyDefaultIntensityDisplay(cloud_filtered);
+	CloudProcess::apply_default_intensity_and_visible(cloud_filtered);
 
 	// 请求重绘（如果有可视化窗口）
 	if (cloud_filtered->getDisplay())
 		cloud_filtered->getDisplay()->redraw(false, true);
+}
+
+
+// 简单版：用AABB盒子筛选点
+void getPointsInBox(ccPointCloud* cloud, const ccBBox& aabb, std::vector<unsigned>& indices)
+{
+	if (!cloud)
+		return;
+
+	unsigned n = cloud->size();
+	indices.clear();
+	indices.reserve(n / 10); // 预留一点空间，避免多次扩容
+
+	for (unsigned i = 0; i < n; ++i)
+	{
+		const CCVector3* P = cloud->getPoint(i);
+		if (P->x >= aabb.minCorner().x && P->x <= aabb.maxCorner().x &&
+			P->y >= aabb.minCorner().y && P->y <= aabb.maxCorner().y 
+			/*&&P->z >= aabb.minCorner().z && P->z <= aabb.maxCorner().z*/)
+		{
+			indices.push_back(i);
+		}
+	}
+}
+
+
+void getPointsCentroidAndAxis(ccPointCloud* ccCloud, std::vector<unsigned>& candIndices,  Eigen::Vector4f& centroid, Eigen::Vector3f& axis)
+{
+	Eigen::Matrix3f covariance;
+	PCLCloudPtr cloud(new PCLCloud);
+	for (auto idx : candIndices)
+	{
+		auto& point = *ccCloud->getPoint(idx);
+		cloud->push_back({ point.x, point.y,point.z });
+	}
+
+	pcl::computeMeanAndCovarianceMatrix(*cloud, covariance, centroid);
+
+	Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> model_solver(covariance);
+	Eigen::Matrix3f eigenvectors = model_solver.eigenvectors();
+
+	axis = eigenvectors.col(2);
+}
+
+void getPointsCentroidAndAxis(std::vector<CCVector3>& points, Eigen::Vector4f& centroid, Eigen::Vector3f& axis)
+{
+	Eigen::Matrix3f covariance;
+	PCLCloudPtr cloud(new PCLCloud);
+	for (auto point : points)
+	{
+		cloud->push_back({ point.x, point.y,point.z });
+	}
+
+	pcl::computeMeanAndCovarianceMatrix(*cloud, covariance, centroid);
+
+	Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> model_solver(covariance);
+	Eigen::Matrix3f eigenvectors = model_solver.eigenvectors();
+
+	axis = eigenvectors.col(2);
+}
+
+
+// p: 三维点；C: 矩形中心；dir: 矩形长边方向；halfL/halfW: 长/宽半轴
+
+/// <summary>
+/// 判断点是否在矩形内
+/// </summary>
+/// <param name="p">判断的点</param>
+/// <param name="C">矩形的中心点</param>
+/// <param name="dir">矩形长边的方向（要单位向量化！）</param>
+/// <param name="halfL">一半的长</param>
+/// <param name="halfW">一半的宽</param>
+/// <returns></returns>
+bool pointInOrientedRect(const CCVector3& p,
+	const CCVector3& C,
+	const CCVector3& dir,
+	double halfL,
+	double halfW)
+{
+	double dx = p.x - C.x;
+	double dy = p.y - C.y;
+
+	CCVector3 u = dir;         // 长边单位向量
+	CCVector3 v(-u.y, u.x, 0); // 矩形短边方向
+	v.normalize();
+
+	// 投影长度
+	double a = dx * u.x + dy * u.y; // = d · u
+	double b = dx * v.x + dy * v.y; // = d · v
+
+	// 范围判断
+	return std::abs(a) <= halfL && std::abs(b) <= halfW;
+}
+
+
+/// <summary>
+/// 获得点云中，在矩形内的点
+/// （判断每个点是否在矩形内）
+/// </summary>
+/// <param name="cloud">点云</param>
+/// <param name="C">矩形中心</param>
+/// <param name="dir">矩形长边方向</param>
+/// <param name="halfL">半长</param>
+/// <param name="halfW">半宽</param>
+/// <param name="indices">输出参数：在矩形内点的索引</param>
+void getPointsInBox(ccPointCloud* cloud,
+	const CCVector3& C,
+	const CCVector3& dir,
+	double halfL,
+	double halfW,
+	std::vector<unsigned>& indices)
+{
+	if (!cloud)
+		return;
+
+	unsigned n = cloud->size();
+	indices.clear();
+	indices.reserve(n / 10); // 预留一点空间，避免多次扩容
+
+	for (unsigned i = 0; i < n; ++i)
+	{
+		const CCVector3* P = cloud->getPoint(i);
+		if (pointInOrientedRect(*P, C, dir, halfL, halfW))
+		{
+			indices.push_back(i);
+		}
+	}
+}
+
+/// <summary>
+/// 获得点云中，在矩形内的点
+/// （使用八叉树）
+/// </summary>
+/// <param name="cloud">点云</param>
+/// <param name="C">矩形中心</param>
+/// <param name="dir">矩形长边方向</param>
+/// <param name="halfL">半长</param>
+/// <param name="halfW">半宽</param>
+/// <param name="indices">输出参数：在矩形内的点</param>
+void getPointsInBox(ccPointCloud* cloud,
+	const CCVector3& C,
+	const CCVector3& dir,
+	float L,
+	float W,
+	std::vector<CCVector3>& points)
+{
+	if (!cloud)
+		return;
+
+	unsigned n = cloud->size();
+	points.clear();
+
+	if (!cloud->getOctree())
+	{
+		cloud->computeOctree();
+	}
+
+	CCCoreLib::DgmOctree::BoxNeighbourhood boxParams;
+	boxParams.center = C;  // 中心点
+	boxParams.dimensions = { L , W, /*INFINITY*/ L};  // 长宽高
+	boxParams.axes = new CCVector3[3];
+	{
+		boxParams.axes[0] = { dir.x, dir.y, 0 };
+		boxParams.axes[0].normalize();
+		boxParams.axes[1] = { -dir.y, dir.x, 0 };
+		boxParams.axes[1].normalize();
+		boxParams.axes[2] = {0,0,1};
+	}
+	boxParams.level = 0;
+	cloud->getOctree()->getPointsInBoxNeighbourhood(boxParams);
+
+	for (auto p : boxParams.neighbours)
+	{
+		points.push_back(*p.point);
+	}
+}
+
+ccPointCloud* rotate_cloud(ccPointCloud* P, const CCVector3& now_v, const CCVector3& new_v)
+{
+	Eigen::Vector3f _now_v = { now_v.x, now_v.y, now_v.z };
+	Eigen::Vector3f _new_v = { new_v.x, new_v.y, new_v.z };
+	// 旋转角度
+	double theta = acos(_now_v.dot(_new_v) / (_now_v.norm() * _now_v.norm()));
+	// 旋转轴：_now_v和_new_v轴的叉积
+	Eigen::Vector3f axis = _now_v.cross(_new_v);
+	axis.normalize();
+
+	// 使用 Eigen 计算旋转矩阵
+	Eigen::AngleAxisf rotation(theta, axis);
+	Eigen::Matrix3f rotationMatrix = rotation.toRotationMatrix();
+	Eigen::Matrix4f rotationMatrix4 = Eigen::Matrix4f::Identity();
+	rotationMatrix4.block<3, 3>(0, 0) = rotationMatrix;
+	PCLCloudPtr pclCloud = PointCloudIO::convert_to_PCLCloudPtr(P);
+	PCLCloudPtr cloud(new PCLCloud);
+	pcl::transformPointCloud(*pclCloud, *cloud, rotationMatrix4);
+
+
+	/*
+	auto inverse_rotated = [&](CCVector3 vec)
+	{
+		Eigen::Vector3f eigenVec(vec.x, vec.y, vec.z);
+		Eigen::Vector3f restoredVec = rotationMatrix.transpose() * eigenVec;
+		return CCVector3(restoredVec.x(), restoredVec.y(), restoredVec.z());
+	};
+	*/
+	return PointCloudIO::convert_to_ccCloudPtr(cloud).release();
+}
+
+
+/*
+延伸直线、跨越断裂
+*/
+void CloudProcess::grow_line_from_seed(ccPointCloud* P,
+	const CCVector3& p0,
+	const CCVector3& v0,
+	ccPointCloud* select_points,
+	std::vector<CCVector3>& result,
+	ccGLWindowInterface* m_glWindow, // debug
+	double W,
+	double L,
+	unsigned Nmin,
+	double theta_max,
+	unsigned Kmax)
+{
+	if (!P || !select_points)return;
+
+	CCVector3 curr_pt = p0;
+	CCVector3 curr_dir = v0;
+	unsigned jumpCount = 0;
+
+
+	ccCloudPtr ground = CloudProcess::apply_csf_ground_extraction(PointCloudIO::convert_to_ccCloudPtr(P));
+	// 初步估计高程
+	if (ground->size())curr_pt.z = ground->getPoint(0)->z;
+
+	// debug计数
+	int cnt = 0;
+
+	while (true)
+	{
+		curr_dir.normalize();
+		cnt++;
+
+		CCVector3 next_pt = curr_pt + curr_dir * L;
+		std::vector<CCVector3> points;
+
+		getPointsInBox(ground.get(), (next_pt+curr_pt)/2, curr_dir, L, W, points);
+		if(m_glWindow){
+			CCVector3 dv(-curr_dir.y, curr_dir.x, 0);
+			dv.normalize();
+			ccPointCloud* cloud = new ccPointCloud;
+			cloud->addPoint(curr_pt + dv * W / 2);
+			cloud->addPoint(curr_pt - dv * W / 2);
+			cloud->addPoint(next_pt - dv * W / 2);
+			cloud->addPoint(next_pt + dv * W / 2);
+			ccPolyline* poly = new ccPolyline(cloud);
+			poly->addChild(cloud);
+
+			poly->addPointIndex(0);
+			poly->addPointIndex(1);
+			poly->addPointIndex(2);
+			poly->addPointIndex(3);
+			poly->addPointIndex(0);
+			poly->setName(QString("debug_aabb_%1 _cloud_size:%2  _axis:%3,%4,%5").arg(cnt).arg(points.size()).arg(curr_dir[0]).arg(curr_dir[1]).arg(curr_dir[2]));
+
+			m_glWindow->addToOwnDB(poly);
+		}
+
+		for (auto point : points)
+		{
+			select_points->addPoint(point);
+		}
+
+		// 如果找到足够的点，继续延伸
+		if (points.size() >= Nmin)
+		{
+			Eigen::Vector4f centroid;
+			Eigen::Vector3f axis;
+			getPointsCentroidAndAxis(points, centroid, axis);
+			CCVector3 axis_n = { axis[0], axis[1], axis[2] };
+
+			float centroidDisplacement = (CCVector3(centroid[0], centroid[1], centroid[2]) - (next_pt + curr_pt) / 2).norm();
+
+			if (centroidDisplacement > L/4)
+			{
+				//质心太偏了，丢弃这部分
+				curr_pt = next_pt;
+				result.push_back(curr_pt);
+				continue;
+			}
+
+			if (fabs(axis_n.z) > fabs(axis_n.x + axis_n.y)*10)
+			{
+				// xy方向特征太小了
+				break;
+			}
+
+			if (curr_dir.dot(axis_n) < 0)
+			{
+				axis_n = -axis_n;
+			}
+
+			curr_pt = CCVector3(centroid[0], centroid[1], centroid[2]);
+			axis_n.normalize();
+			curr_dir += axis_n;  // 主方向
+			axis[2] = 0;
+			curr_dir.normalize();
+			result.push_back(curr_pt);  // 将新点加入结果
+
+			// 重置跳跃计数器
+			jumpCount = 0;
+		}
+		else
+		{
+			// 否则，进行跳跃（向前延伸）
+			jumpCount++;
+
+			// 如果超过最大跳跃次数，停止延伸
+			if (jumpCount > Kmax)
+			{
+				break;
+			}
+
+			// 否则，继续跳跃
+			curr_pt = next_pt; // 更新当前点
+		}
+	}
+}
+
+
+
+
+/*
+根据设置的起始点和方向，延申提取点云中的“线”，可跨越断裂处
+
+plan1:
+（1）基础的，搜索出连续的点云。
+（2）判断断裂处延伸方向：用矩形一段段拟合，找到末尾的方向 （这里比较有疑问）
+（3）按这个方向，往前延伸矩形，直到阔选到新的点。
+
+plan2：
+（1）使用初始的线段拓展为一个矩形（确定长宽），计算矩形中点云数量和方向
+（2）数量足够就往这个方向继续延申
+（3）不够处继续往前延伸，直到最大阈值的跳跃
+
+plan1：寻找末端方向有问题，且不够鲁棒（比如出现割裂，与别的线相交）。
+plan2：对于是否能按预期中的适应线的转弯有疑问（局部的弯曲过大，矩形中的点少判断不了方向）。
+
+*/
+static std::vector<CCVector3> growCloudFromSeed(
+	ccPointCloud* P,
+	const CCVector3& p0,					// 起始点
+	const CCVector3& v0,					// 方向
+	double W = 0.2,							// 矩形宽度，默认 0.2 米
+	double L = 1.0,							// 每次生长步长，默认 1.0 米
+	unsigned Nmin = 20,						// 最小点数，默认至少20个点
+	double theta_max = 10.0 * M_PI / 180.0, // 最大弯折角度，默认 10度，单位是弧度
+	unsigned Kmax = 3,						// 最大跳跃次数，默认 3 次
+	double epsilon_max = 0.01				// 最大拟合残差，默认 0.01
+)
+{
+	// 初始化结果折线端点序列
+	std::vector<CCVector3> result;
+
+	// 确保点云的八叉树已构建（用于快速邻域查询）
+	if (!P->getOctree())
+	{
+		P->computeOctree();
+	}
+	ccOctree::Shared octree = P->getOctree();
+	if (!octree)
+	{
+		// 如果八叉树构建失败，返回空结果
+		return result;
+	}
+
+	// 当前点和方向初始化
+	CCVector3 curr_pt = p0;
+	CCVector3 curr_dir = v0;
+	curr_dir.normalize(); // 归一化方向向量
+
+	// 将起始点加入结果序列
+	result.push_back(curr_pt);
+
+	// 循环生长步骤
+	while (true)
+	{
+		// 定义搜索矩形区域的中心：当前点前方 L/2 位置
+		CCVector3 rectCenter = curr_pt + curr_dir * (L / 2.0);
+
+		// 计算两个垂直方向（宽度方向）
+		CCVector3 upVec(0, 0, 1);
+		if (fabs(curr_dir.dot(upVec)) > 0.99)
+		{
+			// 如果与竖直方向接近平行，换个参考向量
+			upVec = CCVector3(0, 1, 0);
+		}
+		CCVector3 right = curr_dir.cross(upVec);
+		right.normalize();
+		CCVector3 rectUp = right.cross(curr_dir);
+		rectUp.normalize();
+
+		// 矩形半长和半宽
+		double halfLength = L / 2.0;
+		double halfWidth = W / 2.0;
+
+		// 计算矩形所在平面的4个角点（世界坐标系）
+		CCVector3 corners[4];
+		corners[0] = rectCenter + curr_dir * halfLength + right * halfWidth;
+		corners[1] = rectCenter + curr_dir * halfLength - right * halfWidth;
+		corners[2] = rectCenter - curr_dir * halfLength + right * halfWidth;
+		corners[3] = rectCenter - curr_dir * halfLength - right * halfWidth;
+
+		// 构造轴对齐包围盒 (AABB) 来加速邻域查询
+		ccBBox aabb;
+		aabb.add(corners[0]);
+		aabb.add(corners[1]);
+		aabb.add(corners[2]);
+		aabb.add(corners[3]);
+
+		// 查询八叉树，在包围盒内获取候选点
+		std::vector<unsigned> candIndices;
+		//octree->getPointsInBox(aabb, candIndices);
+		getPointsInBox(P, aabb, candIndices);
+
+		bool stepAccepted = false;
+		CCVector3 new_dir = curr_dir;
+		// 如果邻域点数足够，尝试拟合
+		if (candIndices.size() >= Nmin)
+		{
+			// 计算邻域点集合的质心
+			CCVector3 centroid(0, 0, 0);
+			for (unsigned idx : candIndices)
+			{
+				centroid += *P->getPoint(idx);
+			}
+			centroid /= (double)candIndices.size();
+
+			// 计算协方差矩阵 (3x3) 用于主方向拟合 (PCA)
+			double cov[3][3] = { {0,0,0},{0,0,0},{0,0,0} };
+			for (unsigned idx : candIndices)
+			{
+				CCVector3 diff = *P->getPoint(idx) - centroid;
+				cov[0][0] += diff.x * diff.x;
+				cov[0][1] += diff.x * diff.y;
+				cov[0][2] += diff.x * diff.z;
+				cov[1][1] += diff.y * diff.y;
+				cov[1][2] += diff.y * diff.z;
+				cov[2][2] += diff.z * diff.z;
+			}
+			cov[1][0] = cov[0][1];
+			cov[2][0] = cov[0][2];
+			cov[2][1] = cov[1][2];
+
+			// 功率迭代法近似求最大特征向量 (主方向)
+			new_dir = curr_dir;
+			for (int iter = 0; iter < 5; ++iter)
+			{
+				CCVector3 v(
+					cov[0][0] * new_dir.x + cov[0][1] * new_dir.y + cov[0][2] * new_dir.z,
+					cov[1][0] * new_dir.x + cov[1][1] * new_dir.y + cov[1][2] * new_dir.z,
+					cov[2][0] * new_dir.x + cov[2][1] * new_dir.y + cov[2][2] * new_dir.z
+				);
+				v.normalize();
+				new_dir = v;
+			}
+
+			// 计算拟合残差 (点到拟合直线的平方误差均值)
+			double mse = 0.0;
+			for (unsigned idx : candIndices)
+			{
+				CCVector3 diff = *P->getPoint(idx) - centroid;
+				CCVector3 crossProd = diff.cross(new_dir);
+				double dist2 = crossProd.norm2d(); // 距离的平方
+				mse += dist2;
+			}
+			mse /= candIndices.size();
+
+			double angle = acos(curr_dir.dot(new_dir)); // 方向变化角度
+			// 检查误差阈值和方向阈值
+			if (mse <= epsilon_max && angle <= theta_max)
+			{
+				stepAccepted = true;
+			}
+		}
+
+		if (stepAccepted)
+		{
+			// 接受拟合结果，生成新端点
+			CCVector3 next_pt = curr_pt + new_dir * L;
+			result.push_back(next_pt);
+			curr_pt = next_pt;
+			curr_dir = new_dir;
+			continue;
+		}
+		else
+		{
+			// 不满足条件，执行跳跃延伸
+			bool found = false;
+			CCVector3 search_pt = curr_pt;
+			for (unsigned k = 1; k <= Kmax; ++k)
+			{
+				// 沿当前方向跳跃
+				search_pt = search_pt + curr_dir * L;
+				// 更新矩形中心
+				rectCenter = search_pt + curr_dir * (L / 2.0);
+				// 更新角点和包围盒
+				corners[0] = rectCenter + curr_dir * halfLength + right * halfWidth;
+				corners[1] = rectCenter + curr_dir * halfLength - right * halfWidth;
+				corners[2] = rectCenter - curr_dir * halfLength + right * halfWidth;
+				corners[3] = rectCenter - curr_dir * halfLength - right * halfWidth;
+				ccBBox aabbJump;
+				aabbJump.add(corners[0]);
+				aabbJump.add(corners[1]);
+				aabbJump.add(corners[2]);
+				aabbJump.add(corners[3]);
+
+				candIndices.clear();
+				//octree->getPointsInBox(aabbJump, candIndices);
+				getPointsInBox(P, aabbJump, candIndices);
+
+
+				// 如果找到足够点，尝试拟合
+				if (candIndices.size() >= Nmin)
+				{
+					// 计算质心
+					CCVector3 centroid(0, 0, 0);
+					for (unsigned idx : candIndices)
+						centroid += *P->getPoint(idx);
+					centroid /= (double)candIndices.size();
+					// 计算协方差矩阵
+					double cov2[3][3] = { {0,0,0},{0,0,0},{0,0,0} };
+					for (unsigned idx : candIndices)
+					{
+						CCVector3 diff = *P->getPoint(idx) - centroid;
+						cov2[0][0] += diff.x * diff.x;
+						cov2[0][1] += diff.x * diff.y;
+						cov2[0][2] += diff.x * diff.z;
+						cov2[1][1] += diff.y * diff.y;
+						cov2[1][2] += diff.y * diff.z;
+						cov2[2][2] += diff.z * diff.z;
+					}
+					cov2[1][0] = cov2[0][1];
+					cov2[2][0] = cov2[0][2];
+					cov2[2][1] = cov2[1][2];
+
+					// 求特征向量
+					CCVector3 new_dir2 = curr_dir;
+					for (int iter = 0; iter < 5; ++iter)
+					{
+						CCVector3 v(
+							cov2[0][0] * new_dir2.x + cov2[0][1] * new_dir2.y + cov2[0][2] * new_dir2.z,
+							cov2[1][0] * new_dir2.x + cov2[1][1] * new_dir2.y + cov2[1][2] * new_dir2.z,
+							cov2[2][0] * new_dir2.x + cov2[2][1] * new_dir2.y + cov2[2][2] * new_dir2.z
+						);
+						v.normalize();
+						new_dir2 = v;
+					}
+
+					// 计算残差
+					double mse2 = 0.0;
+					for (unsigned idx : candIndices)
+					{
+						CCVector3 diff = *P->getPoint(idx) - centroid;
+						CCVector3 crossProd = diff.cross(new_dir2);
+						double dist2 = crossProd.norm2d();
+						mse2 += dist2;
+					}
+					mse2 /= candIndices.size();
+
+					double angle2 = acos(curr_dir.dot(new_dir2));
+					if (mse2 <= epsilon_max && angle2 <= theta_max)
+					{
+						// 接受拟合结果
+						CCVector3 next_pt = search_pt + new_dir2 * L;
+						result.push_back(next_pt);
+						curr_pt = next_pt;
+						curr_dir = new_dir2;
+						found = true;
+						break;
+					}
+				}
+			}
+			if (!found)
+			{
+				// 跳跃失败，终止提取
+				break;
+			}
+		}
+	}
+
+	return result;
 }

@@ -21,7 +21,7 @@ ccCloudPtr RoadMarkingExtract::applyVoxelGridFiltering(ccCloudPtr inputCloud, fl
 		return nullptr;
 	}
 
-	ccCloudPtr filteredCloud = CloudProcess::applyVoxelGridFiltering(inputCloud, voxelSize);
+	ccCloudPtr filteredCloud = CloudProcess::apply_voxel_grid_filtering(inputCloud, voxelSize);
 	filteredCloud->setName("downsampledCloud");
 
 	if (m_app)
@@ -39,7 +39,7 @@ ccCloudPtr RoadMarkingExtract::applyCSFGroundExtraction(ccCloudPtr inputCloud, c
 		return nullptr;
 	}
 
-	ccCloudPtr filteredCloud = CloudProcess::applyCSFGroundExtraction(inputCloud);
+	ccCloudPtr filteredCloud = CloudProcess::apply_csf_ground_extraction(inputCloud);
 	if (!filteredCloud)
 	{
 		if (m_app) m_app->dispToConsole("CSF 处理失败");
@@ -63,15 +63,15 @@ ccCloudPtr RoadMarkingExtract::extractLargestComponent(ccCloudPtr inputCloud, fl
 		return nullptr;
 	}
 
-	PCLCloudPtr pclCloud = PointCloudIO::convertToPCLCloud(inputCloud);
-	PCLCloudPtr filteredCloud = CloudProcess::extractMaxCloudByEuclideanCluster(pclCloud, clusterRadius);
+	PCLCloudPtr pclCloud = PointCloudIO::convert_to_PCLCloudPtr(inputCloud);
+	PCLCloudPtr filteredCloud = CloudProcess::extract_max_cloud_by_euclidean_cluster(pclCloud, clusterRadius);
 	if (!filteredCloud)
 	{
 		if (m_app) m_app->dispToConsole("找不到最大联通块");
 		return nullptr;
 	}
 
-	ccCloudPtr ccFilteredCloud = CloudProcess::CropBySparseCloud(inputCloud, filteredCloud);
+	ccCloudPtr ccFilteredCloud = CloudProcess::crop_raw_by_sparse_cloud(inputCloud, filteredCloud);
 	ccFilteredCloud->setName("LargestRoadComponent");
 
 	if (m_app)
@@ -93,24 +93,24 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 		return;
 	}
 
-	PCLCloudPtr pclCloud = PointCloudIO::convertToPCLCloud(inputCloud);
+	PCLCloudPtr pclCloud = PointCloudIO::convert_to_PCLCloudPtr(inputCloud);
 	if (m_app) timer.restart(m_app, "转换pcl点云");
 
 	// 2.================================体素滤波
-	PCLCloudPtr voxelCloud = CloudProcess::applyVoxelGridFiltering(pclCloud, voxelSize);
+	PCLCloudPtr voxelCloud = CloudProcess::apply_voxel_grid_filtering(pclCloud, voxelSize);
 	if (m_app) timer.restart(m_app, "体素滤波成功");
 
 #ifdef DEBUG
 	{
-		ccCloudPtr bugCloud = PointCloudIO::convertToCCCloud(voxelCloud);
+		ccCloudPtr bugCloud = PointCloudIO::convert_to_ccCloudPtr(voxelCloud);
 		bugCloud->setName("VoxelGridFiltering");
-		CloudProcess::applyDefaultIntensityDisplay(bugCloud);
+		CloudProcess::apply_default_intensity_and_visible(bugCloud);
 		inputCloud->addChild(bugCloud.release());
 	}
 #endif // DEBUG
 
 	// 3.================================csf
-	ccCloudPtr groundCloud = CloudProcess::applyCSFGroundExtraction(PointCloudIO::convertToCCCloud(voxelCloud));
+	ccCloudPtr groundCloud = CloudProcess::apply_csf_ground_extraction(PointCloudIO::convert_to_ccCloudPtr(voxelCloud));
 	if (!groundCloud)
 	{
 		if (m_app) timer.elapsed(m_app, "CSF 处理失败");
@@ -123,14 +123,14 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 		if (groundCloud)
 		{
 			groundCloud->setName("groundCloud");
-			CloudProcess::applyDefaultIntensityDisplay(groundCloud);
+			CloudProcess::apply_default_intensity_and_visible(groundCloud);
 			inputCloud->addChild(groundCloud.release());
 		}
 	}
 #endif // DEBUG
 
 	// 4.=====================================欧式聚类，提取最大联通块
-	PCLCloudPtr largestClusterCloud = CloudProcess::extractMaxCloudByEuclideanCluster(PointCloudIO::convertToPCLCloud(groundCloud), clusterRadius);
+	PCLCloudPtr largestClusterCloud = CloudProcess::extract_max_cloud_by_euclidean_cluster(PointCloudIO::convert_to_PCLCloudPtr(groundCloud), clusterRadius);
 	if (!largestClusterCloud)
 	{
 		if (m_app) timer.elapsed(m_app, "找不到最大联通块");
@@ -140,38 +140,38 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 
 #ifdef DEBUG
 	{
-		ccCloudPtr bugCloud = PointCloudIO::convertToCCCloud(largestClusterCloud);
+		ccCloudPtr bugCloud = PointCloudIO::convert_to_ccCloudPtr(largestClusterCloud);
 		bugCloud->setName("euclideanClusterCloud");
-		CloudProcess::applyDefaultIntensityDisplay(bugCloud);
+		CloudProcess::apply_default_intensity_and_visible(bugCloud);
 		inputCloud->addChild(bugCloud.release());
 	}
 #endif // DEBUG
 
 	// 5.====================================生长算法提取道路点云
-	PCLCloudPtr roadCloud = CloudProcess::extractRoadPoints(largestClusterCloud, searchRadius, angleThreshold, curvatureThreshold);
+	PCLCloudPtr roadCloud = CloudProcess::extract_road_points(largestClusterCloud, searchRadius, angleThreshold, curvatureThreshold);
 	if (m_app) timer.restart(m_app, "道路点云提取完成");
 
 #ifdef DEBUG
 	{
-		ccCloudPtr bugCloud = PointCloudIO::convertToCCCloud(roadCloud);
+		ccCloudPtr bugCloud = PointCloudIO::convert_to_ccCloudPtr(roadCloud);
 		bugCloud->setName("roadCloud");
-		CloudProcess::applyDefaultIntensityDisplay(bugCloud);
+		CloudProcess::apply_default_intensity_and_visible(bugCloud);
 		inputCloud->addChild(bugCloud.release());
 	}
 #endif // DEBUG
 
-	ccCloudPtr oRoadCloud = CloudProcess::CropBySparseCloud(inputCloud, roadCloud);
+	ccCloudPtr oRoadCloud = CloudProcess::crop_raw_by_sparse_cloud(inputCloud, roadCloud);
 	if (m_app) timer.restart(m_app, "密集道路点云提取完成");
 
 #ifdef DEBUG
 	{
 		oRoadCloud->setName("oroadCloud");
-		CloudProcess::applyDefaultIntensityDisplay(oRoadCloud);
+		CloudProcess::apply_default_intensity_and_visible(oRoadCloud);
 		inputCloud->addChild(oRoadCloud.release());
 	}
 #endif // DEBUG
 
-	auto markingClouds = CloudProcess::extractRoadMarking(oRoadCloud, 0.03);
+	auto markingClouds = CloudProcess::extract_roadmarking(oRoadCloud, 0.03);
 	if (m_app) timer.restart(m_app, "路标点云提取成功");
 
 #ifdef DEBUG
@@ -180,9 +180,9 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 		size_t clusterId = 0;
 		for (auto& cluster : markingClouds)
 		{
-			ccCloudPtr markingCloud = PointCloudIO::convertToCCCloudXYZI(cluster);
+			ccCloudPtr markingCloud = PointCloudIO::convert_to_ccCloudPtr_with_XYZI(cluster);
 			markingCloud->setName(QString("Cluster_%1").arg(clusterId++));
-			CloudProcess::applyDefaultIntensityDisplay(markingCloud);
+			CloudProcess::apply_default_intensity_and_visible(markingCloud);
 			parentNode->addChild(markingCloud.release());
 		}
 		parentNode->setVisible(true);
@@ -194,10 +194,10 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 	std::vector<PCLCloudPtr> pclClouds;
 	for (auto markingCloud : markingClouds)
 	{
-		pclClouds.push_back(PointCloudIO::convertToPCLCloud(markingCloud));
+		pclClouds.push_back(PointCloudIO::convert_to_PCLCloudPtr(markingCloud));
 	}
 
-	auto markings = CloudProcess::applyVectorization(pclClouds);
+	auto markings = CloudProcess::apply_roadmarking_vectorization(pclClouds);
 	markings->setName("roadmarking");
 	inputCloud->addChild(markings);
 

@@ -174,7 +174,7 @@ void ThresholdHistogramWidget::computeIntensityRange() {
 		minIntensity = std::numeric_limits<float>::max();
 		maxIntensity = std::numeric_limits<float>::lowest();
 
-		int sfIdx = PointCloudIO::getIntensityIdx(pointCloud);
+		int sfIdx = PointCloudIO::get_intensity_idx(pointCloud);
 
 		auto sf = pointCloud->getScalarField(sfIdx);
 
@@ -193,7 +193,7 @@ void ThresholdHistogramWidget::computeIntensityRange() {
 void ThresholdHistogramWidget::updateHistogramData()
 {
 	histogram.resize(256, 0); // 初始化直方图数据
-	int sfIdx = PointCloudIO::getIntensityIdx(pointCloud);
+	int sfIdx = PointCloudIO::get_intensity_idx(pointCloud);
 	auto sf = pointCloud->getScalarField(sfIdx);
 	if (!sf)return;
 	if (pointCloud)
@@ -219,7 +219,7 @@ void ThresholdHistogramWidget::onConfirmButtonClicked()
 	}
 
 	ccPointCloud* cloud = new ccPointCloud;
-	CloudProcess::filterPointCloudByIntensity(pointCloud,
+	CloudProcess::filter_cloud_by_intensity(pointCloud,
 		lowerThreshold / 256 * (maxIntensity - minIntensity) + minIntensity,
 		upperThreshold / 256 * (maxIntensity - minIntensity) + minIntensity,
 		cloud);

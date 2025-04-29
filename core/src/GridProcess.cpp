@@ -34,7 +34,7 @@ using namespace roadmarking;
 GridProcess::GridProcess(float resolution) :
 	gridSize(resolution) {}
 
-void GridProcess::performOrthogonalGridMapping(ccCloudPtr roadCloud)
+void GridProcess::perform_orthogonal_grid_mapping(ccCloudPtr roadCloud)
 {
 	roadCloud->getBoundingBox(minCorner, maxCorner);
 	// 拓展边界,5个格子（避免搜索点云边界时误判）
@@ -60,7 +60,7 @@ void GridProcess::performOrthogonalGridMapping(ccCloudPtr roadCloud)
 	Grid totalWeight(numRows, std::vector<float>(numCols, 0.0f));  // 权重累加器
 
 	// 获取强度字段
-	const int intensitySFIndex = PointCloudIO::getIntensityIdx(roadCloud);;
+	const int intensitySFIndex = PointCloudIO::get_intensity_idx(roadCloud);;
 	ccScalarField* intensitySF = intensitySFIndex >= 0 ?
 		dynamic_cast<ccScalarField*>(roadCloud->getScalarField(intensitySFIndex)) : nullptr;
 
@@ -152,7 +152,7 @@ void GridProcess::performOrthogonalGridMapping(ccCloudPtr roadCloud)
 	}
 }
 
-void GridProcess::performOrthogonalGridMapping(PCLCloudXYZIPtr roadCloud)
+void GridProcess::perform_orthogonal_grid_mapping(PCLCloudXYZIPtr roadCloud)
 {
 	// 获取点云的包围盒
 	pcl::PointXYZI minPt, maxPt;
@@ -260,7 +260,7 @@ void GridProcess::performOrthogonalGridMapping(PCLCloudXYZIPtr roadCloud)
 	}
 }
 
-void GridProcess::restoreFromGridToPointCloud(PCLCloudPtr markingCloud)
+void GridProcess::restore_from_grid_to_cloud(PCLCloudPtr markingCloud)
 {
 	int numRows = IGrid.size();
 	int numCols = IGrid.front().size();
@@ -286,7 +286,7 @@ void GridProcess::restoreFromGridToPointCloud(PCLCloudPtr markingCloud)
 	}
 }
 
-void GridProcess::restoreFromGridToPointCloud(ccCloudPtr markingCloud)
+void GridProcess::restore_from_grid_to_cloud(ccCloudPtr markingCloud)
 {
 	int numRows = IGrid.size();
 	int numCols = IGrid.front().size();
@@ -310,7 +310,7 @@ void GridProcess::restoreFromGridToPointCloud(ccCloudPtr markingCloud)
 	}
 }
 
-void GridProcess::restoreFromGridToPointCloud(PCLCloudXYZIPtr markingCloud)
+void GridProcess::restore_from_grid_to_cloud(PCLCloudXYZIPtr markingCloud)
 {
 	int numRows = IGrid.size();
 	int numCols = IGrid.front().size();
@@ -337,7 +337,7 @@ void GridProcess::restoreFromGridToPointCloud(PCLCloudXYZIPtr markingCloud)
 	}
 }
 
-void GridProcess::divByDoubleAdaptiveIntensityThreshold()
+void GridProcess::div_by_adaptive_intensity_threshold()
 {
 	if (!IGrid.size() || !IGrid[0].size())return;
 
@@ -349,7 +349,7 @@ void GridProcess::divByDoubleAdaptiveIntensityThreshold()
 	normalize(grid);
 
 	// 2. 计算Otsu阈值
-	const int otsuThreshold = GridProcess::otsuThreshold(grid);
+	const int otsuThreshold = GridProcess::get_otsu_threshold(grid);
 	if (otsuThreshold < 0) return; // 无效阈值处理
 
 	const float globalThreshold = otsuThreshold;
@@ -419,7 +419,7 @@ void GridProcess::divByDoubleAdaptiveIntensityThreshold()
 
 		is_continue = true;
 		normalize(vis_intensity);
-		const int otsu_threshold = GridProcess::otsuThreshold(vis_intensity);
+		const int otsu_threshold = GridProcess::get_otsu_threshold(vis_intensity);
 
 		for (int i = 0; i < vis_pos.size(); i++)
 		{
@@ -454,7 +454,7 @@ void GridProcess::divByDoubleAdaptiveIntensityThreshold()
 	}
 }
 
-void GridProcess::calculateMean(const std::vector<float>& grid, float& mean)
+void GridProcess::calculate_mean(const std::vector<float>& grid, float& mean)
 {
 	float sum = 0.0f;
 	int count = 0;
@@ -467,7 +467,7 @@ void GridProcess::calculateMean(const std::vector<float>& grid, float& mean)
 	mean = (count > 0) ? sum / count : NAN; // 无有效数据时返回NaN
 }
 
-void GridProcess::calculateMean(const Grid& grid, float& mean)
+void GridProcess::calculate_mean(const Grid& grid, float& mean)
 {
 	std::vector<float> line;
 	for (const auto& row : grid)
@@ -477,10 +477,10 @@ void GridProcess::calculateMean(const Grid& grid, float& mean)
 			line.push_back(value);
 		}
 	}
-	calculateMean(line, mean);
+	calculate_mean(line, mean);
 }
 
-int GridProcess::otsuThreshold(const Grid& gridI)
+int GridProcess::get_otsu_threshold(const Grid& gridI)
 {
 	std::vector<float> line;
 	for (const auto& row : gridI)
@@ -491,10 +491,10 @@ int GridProcess::otsuThreshold(const Grid& gridI)
 			line.push_back(value);
 		}
 	}
-	return otsuThreshold(line);
+	return get_otsu_threshold(line);
 }
 
-int GridProcess::otsuThreshold(const std::vector<float>& gridI)
+int GridProcess::get_otsu_threshold(const std::vector<float>& gridI)
 {
 	const int L = 256;  // 灰度级数
 	std::vector<int> histogram(L, 0);
@@ -629,17 +629,17 @@ void GridProcess::normalize(std::vector<float>& line)
 	}
 }
 
-void GridProcess::processGridToPolylineCloud(ccHObject* polylineContainer)
+void GridProcess::process_grid_to_polylines(ccHObject* polylineContainer)
 {
-	divByDoubleAdaptiveIntensityThreshold();
+	div_by_adaptive_intensity_threshold();
 	Lines extractedLines;
-	findBoundary(extractedLines);
+	find_boundary(extractedLines);
 
 	for (auto& line : extractedLines)
 	{
-		fitLines(line);
+		fit_lines(line);
 		// 存入 CloudCompare 折线
-		ccPolyline* polyline = createPolylineFromLine(line);
+		ccPolyline* polyline = create_polyline_from_line(line);
 		if (polyline)
 		{
 			polylineContainer->addChild(polyline);
@@ -647,7 +647,7 @@ void GridProcess::processGridToPolylineCloud(ccHObject* polylineContainer)
 	}
 }
 
-ccPolyline* GridProcess::createPolylineFromLine(Line line)
+ccPolyline* GridProcess::create_polyline_from_line(Line line)
 {
 	ccPointCloud* cloud = new ccPointCloud("Polyline Points");
 	if (!cloud || line.empty()) return nullptr;
@@ -686,7 +686,7 @@ ccPolyline* GridProcess::createPolylineFromLine(Line line)
 	return polyline;
 }
 
-void GridProcess::findBoundary(Lines& boundaries)
+void GridProcess::find_boundary(Lines& boundaries)
 {
 	if (IGrid.empty() || IGrid[0].empty()) return;
 
@@ -765,7 +765,7 @@ void GridProcess::findBoundary(Lines& boundaries)
 	}
 }
 
-void GridProcess::restoreToPolyCloud(const Lines& boundaries, const Grid& ZGrid, PCLCloudPtr markingCloud)
+void GridProcess::restore_2D_boundary_to_3D_cloud(const Lines& boundaries, const Grid& ZGrid, PCLCloudPtr markingCloud)
 {
 	markingCloud->clear();
 	for (const auto& boundary : boundaries)
@@ -781,7 +781,7 @@ void GridProcess::restoreToPolyCloud(const Lines& boundaries, const Grid& ZGrid,
 	}
 }
 
-double GridProcess::pointToSegmentDistance(const Point& p, const Point& p1, const Point& p2)
+double GridProcess::get_distance_from_point_to_segment(const Point& p, const Point& p1, const Point& p2)
 {
 	double dx = p2.x - p1.x, dy = p2.y - p1.y;
 	if (dx == 0 && dy == 0) return hypot(p.x - p1.x, p.y - p1.y);
@@ -792,7 +792,7 @@ double GridProcess::pointToSegmentDistance(const Point& p, const Point& p1, cons
 	return hypot(p.x - projX, p.y - projY);
 }
 
-void GridProcess::douglasPeucker(Line& points, double epsilon) {
+void GridProcess::Douglas_Peucker(Line& points, double epsilon) {
 	if (points.size() < 3) return;
 
 	// 处理闭合边界
@@ -802,7 +802,7 @@ void GridProcess::douglasPeucker(Line& points, double epsilon) {
 	double maxDist = 0.0;
 	int index = 0;
 	for (size_t i = 1; i < points.size() - 1; ++i) {
-		double dist = pointToSegmentDistance(points[i], points.front(), points.back());
+		double dist = get_distance_from_point_to_segment(points[i], points.front(), points.back());
 		if (dist > maxDist) {
 			maxDist = dist;
 			index = i;
@@ -812,8 +812,8 @@ void GridProcess::douglasPeucker(Line& points, double epsilon) {
 	if (maxDist > epsilon) {
 		Line left(points.begin(), points.begin() + index + 1);
 		Line right(points.begin() + index, points.end());
-		douglasPeucker(left, epsilon);
-		douglasPeucker(right, epsilon);
+		Douglas_Peucker(left, epsilon);
+		Douglas_Peucker(right, epsilon);
 
 		points.clear();
 		points.insert(points.end(), left.begin(), left.end());
@@ -827,7 +827,7 @@ void GridProcess::douglasPeucker(Line& points, double epsilon) {
 	if (isClosed) points.push_back(points.front());
 }
 
-void GridProcess::fitLines(Line& points)
+void GridProcess::fit_lines(Line& points)
 {
 	if (points.size() < 2) return;
 	int midIndex = points.size() / 2;
@@ -835,8 +835,8 @@ void GridProcess::fitLines(Line& points)
 	Line firstHalf(points.begin(), points.begin() + midIndex + 1);
 	Line secondHalf(points.begin() + midIndex, points.end());
 
-	douglasPeucker(firstHalf, 0.2 / gridSize);
-	douglasPeucker(secondHalf, 0.2 / gridSize);
+	Douglas_Peucker(firstHalf, 0.2 / gridSize);
+	Douglas_Peucker(secondHalf, 0.2 / gridSize);
 
 	points.clear();
 	points.insert(points.end(), firstHalf.begin(), firstHalf.end());
@@ -848,7 +848,7 @@ void GridProcess::fitLines(Line& points)
 	}
 }
 
-void GridProcess::export2DImage(const Grid& IGrid, const QString& filename)
+void GridProcess::export_2D_image(const Grid& IGrid, const QString& filename)
 {
 	// 创建一个 OpenCV 图像对象
 	cv::Mat image(IGrid.size(), IGrid[0].size(), CV_32F);

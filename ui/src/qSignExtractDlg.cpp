@@ -257,7 +257,7 @@ bool qSignExtractDlg::setCloud(std::vector<ccHObject*>cloud)
 
 void qSignExtractDlg::onAutoExtract()
 {
-	RoadMarkingExtract::automaticExtraction(PointCloudIO::convertToCCCloud(p_select_cloud), m_app);
+	RoadMarkingExtract::automaticExtraction(PointCloudIO::convert_to_ccCloudPtr(p_select_cloud), m_app);
 	m_objectTree->refresh();
 }
 
@@ -266,14 +266,13 @@ void qSignExtractDlg::onBoxSelectExtract()
 	m_foregroundPolylineEditor->startDraw();
 	m_foregroundPolylineEditor->setCallbackfunc([=]
 		{
-
 			std::vector<CCVector3d> polyline;
 			m_foregroundPolylineEditor->getPoints(polyline);
 			std::vector <ccPointCloud*> clouds;
 			m_objectTree->getAllPointClouds(clouds);
 
 			ccPointCloud* cloud = new ccPointCloud;
-			CloudProcess::cropPointCloudWithFineSelection(clouds, polyline, cloud);
+			CloudProcess::crop_cloud_with_polygon(clouds, polyline, cloud);
 
 			cloud->setName("cloud_cropped");
 			m_glWindow->addToOwnDB(cloud);
@@ -282,7 +281,7 @@ void qSignExtractDlg::onBoxSelectExtract()
 			if (p_select_cloud)p_select_cloud->setSelected(false);
 			p_select_cloud = cloud;
 
-			RoadMarkingExtract::automaticExtraction(PointCloudIO::convertToCCCloud(p_select_cloud), m_app);
+			RoadMarkingExtract::automaticExtraction(PointCloudIO::convert_to_ccCloudPtr(p_select_cloud), m_app);
 			m_objectTree->refresh();
 		});
 	m_objectTree->refresh();
@@ -294,10 +293,83 @@ void qSignExtractDlg::onPointGrowExtract()
 	m_foregroundPolylineEditor->setDraw(2, false);
 	m_foregroundPolylineEditor->setCallbackfunc([&]
 		{
+			SettingsDialog settingsDialog;
+			settingsDialog.setDescription("参数：\n"
+				"调试模式：是否开启调试显示（将线显示在窗口上）\n"
+				"矩形宽度(m)：线生长的宽度\n"
+				"生长步长(m)：每次扩展的长度\n"
+				"最小点数：每段线段需要包含的最少点数\n"
+				"最大弯折角度(度)：线段间允许的最大弯折角度\n"
+				"最大跳跃次数：尝试跳跃的最大次数（用于处理断开的线）");
+
+			// 布尔值
+			settingsDialog.registerComponent<bool>("开启调试显示", "debugEnabled", false);
+
+			// 浮点值
+			settingsDialog.registerComponent<float>("矩形宽度", "W", 0.4);
+			settingsDialog.registerComponent<float>("生长步长", "L", 2.0);
+			settingsDialog.registerComponent<float>("最大弯折角度(度)", "theta_max_degrees", 45.0);
+
+			// 整数值
+			settingsDialog.registerComponent<int>("最小点数", "Nmin", 50);
+			settingsDialog.registerComponent<int>("最大跳跃次数", "Kmax", 10);
+
+			if (settingsDialog.exec() != QDialog::Accepted)
+				return;
+
+			QMap<QString, QVariant> parameters = settingsDialog.getParameters();
+
+			// 参数提取
+			bool debugEnabled = parameters["debugEnabled"].toBool();
+			double W = parameters["W"].toFloat();
+			double L = parameters["L"].toFloat();
+			int Nmin = parameters["Nmin"].toUInt();
+			double theta_max = parameters["theta_max_degrees"].toFloat() * M_PI / 180.0; // 角度转弧度
+			int Kmax = parameters["Kmax"].toUInt();
+
+
+
 			std::vector<CCVector3d> polyline;
 			m_foregroundPolylineEditor->getPoints(polyline);
 
+			if (!p_select_cloud)return;
 
+			CCVector3 p0, v0;
+			p0.x = polyline[0].x;
+			p0.y = polyline[0].y;
+			//p0.z = polyline[0].z;
+
+			v0.x = polyline[1].x - p0.x;
+			v0.y = polyline[1].y - p0.y;
+			//v0.z = polyline[1].z - p0.z;
+			ccPointCloud* cloud= new ccPointCloud;
+			std::vector<CCVector3>line;
+			CloudProcess::grow_line_from_seed(static_cast<ccPointCloud*>(p_select_cloud), p0, v0, cloud, line,
+				debugEnabled?m_glWindow:nullptr,W, L, Nmin, theta_max, Kmax);
+
+			ccPointCloud* ccCloud = new ccPointCloud;
+			// 创建ccPolyline对象
+			ccPolyline* polylineObj = new ccPolyline(ccCloud);
+
+			// 将line中的点添加到polylineObj中
+			for (const auto& point : line)
+			{
+				ccCloud->addPoint(CCVector3(point.x, point.y, point.z)); // 添加点
+				polylineObj->addPointIndex(ccCloud->size() - 1);
+			}
+
+			polylineObj->setName("Extracted Polyline");
+			polylineObj->setColor(ccColor::yellowRGB);
+			polylineObj->showColors(true);
+			ccHObject* selectedCloud = static_cast<ccHObject*>(p_select_cloud);
+			selectedCloud->addChild(polylineObj);
+
+			cloud->setName("Extracted Cloud");
+			cloud->setColor(ccColor::red);
+			cloud->showColors(true);
+			selectedCloud->addChild(cloud);
+
+			m_objectTree->refresh();
 		});
 	m_objectTree->refresh();
 }
@@ -328,7 +400,7 @@ void qSignExtractDlg::onBoxClip()
 			m_objectTree->getAllPointClouds(clouds);
 
 			ccPointCloud* cloud = new ccPointCloud;
-			CloudProcess::cropPointCloudWithFineSelection(clouds, polyline, cloud);
+			CloudProcess::crop_cloud_with_polygon(clouds, polyline, cloud);
 
 			cloud->setName("cloud_cropped");
 			m_glWindow->addToOwnDB(cloud);
@@ -426,6 +498,7 @@ ForegroundPolylineEditor::ForegroundPolylineEditor(ccGLWindowInterface* glWindow
 {
 	m_foregroundPolyline->addChild(m_pointCloud);
 	m_foregroundPolyline->setColor(ccColor::green);
+	m_foregroundPolyline->showColors(true);
 	m_foregroundPolyline->set2DMode(true);
 	m_foregroundPolyline->setForeground(true);
 	m_foregroundPolyline->showVertices(true);
@@ -729,7 +802,6 @@ void CloudObjectTreeWidget::initialize(ccGLWindowInterface* win, ccMainAppInterf
 					m_glWindow->addToOwnDB(object);
 				}
 			}
-			
 		}
 	}
 	refresh();
@@ -836,24 +908,42 @@ void CloudObjectTreeWidget::contextMenuEvent(QContextMenuEvent* event)
 	QAction* delAct = new QAction("删除所选对象", &menu);
 
 	connect(delAct, &QAction::triggered, this, [=]()
-	{
-		const QList<QTreeWidgetItem*> selItems = selectedItems();
-		if (!m_glWindow || selItems.isEmpty())
-			return;
-
-		for (auto* item : selItems)
 		{
-			auto obj = static_cast<ccHObject*>(item->data(0, Qt::UserRole).value<void*>());
-			if (!obj || obj == root) // 根节点不能被删除  
-				continue;
-			if (*pp_select_cloud == obj)
+			const QList<QTreeWidgetItem*> selItems = selectedItems();
+			if (!m_glWindow || selItems.isEmpty())
+				return;
+
+			QSet<ccHObject*> delSet;
+			for (auto* item : selItems)
 			{
-				*pp_select_cloud = nullptr;
+				auto obj = static_cast<ccHObject*>(item->data(0, Qt::UserRole).value<void*>());
+				if (obj && obj != root)
+					delSet.insert(obj);
 			}
-			m_app->removeFromDB(obj);
-		}
-		refresh();
-	});
+
+			for (auto* obj : delSet)
+			{
+				bool skip = false;
+				for (ccHObject* p = obj->getParent(); p; p = p->getParent())
+				{
+					if (delSet.contains(p))
+					{
+						skip = true;
+						break;
+					}
+				}
+				if (skip)
+					continue;
+
+				if (*pp_select_cloud == obj)
+					*pp_select_cloud = nullptr;
+
+				m_app->removeFromDB(obj);
+			}
+
+			refresh();
+		});
+
 
 	menu.addAction(delAct);
 
@@ -869,13 +959,11 @@ void CloudObjectTreeWidget::getAllPointClouds(std::vector<ccPointCloud*>& pointC
 	if (!dbRoot || dbRoot->getChildrenNumber() == 0)
 		return;
 
-	// 递归遍历并查找所有的点云对象
 	for (int i = 0; i < dbRoot->getChildrenNumber(); ++i)
 	{
 		ccHObject* child = dbRoot->getChild(i);
 		if (child)
 		{
-			// 继续递归查找子对象
 			getAllPointCloudsRecursive(child, pointClouds);
 		}
 	}
@@ -883,20 +971,17 @@ void CloudObjectTreeWidget::getAllPointClouds(std::vector<ccPointCloud*>& pointC
 
 void CloudObjectTreeWidget::getAllPointCloudsRecursive(ccHObject* object, std::vector<ccPointCloud*>& pointClouds)
 {
-	// 检查该对象是否为ccPointCloud类型
 	if (ccPointCloud* cloud = dynamic_cast<ccPointCloud*>(object))
 	{
 		if (cloud->isVisible())
-			pointClouds.push_back(cloud);  // 将该点云对象添加到结果向量中
+			pointClouds.push_back(cloud);
 	}
 
-	// 递归查找子对象
 	for (int i = 0; i < object->getChildrenNumber(); ++i)
 	{
 		ccHObject* child = object->getChild(i);
 		if (child)
 		{
-			// 继续递归查找子对象
 			getAllPointCloudsRecursive(child, pointClouds);
 		}
 	}
@@ -909,7 +994,6 @@ void CloudObjectTreeWidget::relase()
 		if (!object)
 			return;
 
-		// 恢复状态
 		object->setVisible(true);
 		object->setSelected(false);
 

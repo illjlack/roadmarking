@@ -128,7 +128,8 @@ public:
 		return cleaned_cloud;
 	}
 
-	void calculatePCA() {
+	void calculatePCA()
+{
 		if (!raw_point_cloud || raw_point_cloud->empty()) {
 			std::cerr << "Point cloud is empty or not valid." << std::endl;
 			return;
@@ -198,7 +199,7 @@ void RoadMarkingClassifier::ClassifyRoadMarkings(const std::vector<PCLCloudPtr>&
 	std::vector<Model> models = Model::loadFromJson(model_path);
 	model_match(models, clouds, roadmarkings);
 
-	MarkingVectorization(models, roadmarkings);
+	vectorize_roadmarking(models, roadmarkings);
 }
 
 void test_CombineSideLines(RoadMarkingClassifier& obj,
@@ -224,7 +225,7 @@ void test_CombineSideLines(RoadMarkingClassifier& obj,
 	(obj.*func_ptr_cast)(roadmarkings, combine_length, combine_sideline_markings);
 };
 
-void RoadMarkingClassifier::MarkingVectorization(std::vector<Model>& models, RoadMarkings& roadmarkings)
+void RoadMarkingClassifier::vectorize_roadmarking(std::vector<Model>& models, RoadMarkings& roadmarkings)
 {
 	for (auto& roadmarking : roadmarkings)
 	{
@@ -265,7 +266,7 @@ void RoadMarkingClassifier::MarkingVectorization(std::vector<Model>& models, Roa
 
 
 	RoadMarkings combine_sideline_markings;
-	CombineSideLines(roadmarkings, 20, combine_sideline_markings);
+	combine_side_lines(roadmarkings, 20, combine_sideline_markings);
 
 	RoadMarkings result;
 	for (auto& line : roadmarkings)
@@ -501,7 +502,7 @@ Eigen::Matrix4f RodriguesMatrixTranslation(Eigen::Vector3f n, double angle)
 	return rotation_matrix;
 }
 
-void RoadMarkingClassifier::alignWithPCA(const PCLCloudPtr& ModelCloud,
+void RoadMarkingClassifier::align_with_PCA(const PCLCloudPtr& ModelCloud,
 	const PCLCloudPtr& SceneCloud,
 	Eigen::Matrix4f& transformation)
 {
@@ -556,9 +557,9 @@ float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloud
 {
 	// 1. 使用PCA进行初步对齐
 	Eigen::Matrix4f initial_transformation;
-	alignWithPCA(model.raw_point_cloud, sceneCloud, initial_transformation);
+	align_with_PCA(model.raw_point_cloud, sceneCloud, initial_transformation);
 
-	PCLCloudPtr outline_scene_cloud = getHullCloud(sceneCloud);
+	PCLCloudPtr outline_scene_cloud = get_hull_cloud(sceneCloud);
 
 	// 2. 使用ICP进行精细匹配
 	Eigen::Matrix4f final_transformation;
@@ -602,7 +603,7 @@ float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloud
 	return fitness_score;
 }
 
-PCLCloudPtr RoadMarkingClassifier::getHullCloud(PCLCloudPtr cloud)
+PCLCloudPtr RoadMarkingClassifier::get_hull_cloud(PCLCloudPtr cloud)
 {
 	double alpha = 0.05;
 	PCLCloudPtr hullCloud(new PCLCloud);
@@ -621,7 +622,7 @@ PCLCloudPtr RoadMarkingClassifier::getHullCloud(PCLCloudPtr cloud)
 	return hullCloud;
 }
 
-void RoadMarkingClassifier::alignPointCloudToXAxisInPlace(const PCLCloudPtr& cloud, Eigen::Matrix4f& transformation)
+void RoadMarkingClassifier::align_cloud_to_x_axis(const PCLCloudPtr& cloud, Eigen::Matrix4f& transformation)
 {
 	if (!cloud || cloud->empty())
 	{
@@ -673,7 +674,7 @@ bool RoadMarkingClassifier::is_line_cloud_and_get_direction(PCLCloudPtr cloud, R
 {
 	// 1. 计算原地旋转变换，使点云的主要方向对齐到 X 轴
 	Eigen::Matrix4f T;
-	alignPointCloudToXAxisInPlace(cloud, T);
+	align_cloud_to_x_axis(cloud, T);
 
 	// 2. 将点云旋转到主成分坐标系（对齐到 X 轴）
 	PCLCloudPtr rotated_cloud(new PCLCloud);
@@ -737,7 +738,7 @@ bool RoadMarkingClassifier::is_line_cloud_and_get_direction(PCLCloudPtr cloud, R
 }
 
 // 主函数：将符合条件的侧线段进行组合
-void RoadMarkingClassifier::CombineSideLines(const RoadMarkings& roadmarkings, double combine_length, RoadMarkings& combine_sideline_markings)
+void RoadMarkingClassifier::combine_side_lines(const RoadMarkings& roadmarkings, double combine_length, RoadMarkings& combine_sideline_markings)
 {
 	// 存储所有侧线段的起始和结束点
 	vector<pair<pcl::PointXYZ, pcl::PointXYZ>> sidelines;

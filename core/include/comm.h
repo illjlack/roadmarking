@@ -352,7 +352,7 @@ public:
 #include <QDebug>
 #include <QIntValidator>
 #include <QDoubleValidator>
-
+#include <QCheckBox>
 class SettingsDialog : public QDialog {
 	Q_OBJECT
 
@@ -362,7 +362,8 @@ public:
 		StringList,
 		Int,
 		Double,
-		Float
+		Float,
+		Bool
 	};
 
 	inline explicit SettingsDialog(QWidget* parent = nullptr)
@@ -421,6 +422,14 @@ public:
 			widget = lineEdit;
 			type = ComponentType::Double;
 		}
+		else if constexpr (std::is_same<T, bool>::value) {
+			// For boolean values, use a QCheckBox
+			QCheckBox* checkBox = new QCheckBox(this);
+			checkBox->setChecked(defaultValue);  // Set default checked state
+			widget = checkBox;
+			type = ComponentType::Bool;
+		}
+
 
 		if (widget) {
 			layout->addRow(new QLabel(label, this), widget);
@@ -463,6 +472,10 @@ public:
 					}
 					}
 				}
+			}
+			else if (auto checkBox = dynamic_cast<QCheckBox*>(component)) {
+				// For boolean values, get the checked state of the checkbox
+				result[it.key()] = checkBox->isChecked();
 			}
 		}
 		return result;

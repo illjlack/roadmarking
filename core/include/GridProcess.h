@@ -23,34 +23,33 @@ namespace roadmarking
 	public:
 		GridProcess(float resolution = 0.03);
 
-		void performOrthogonalGridMapping(ccCloudPtr roadCloud);
-		void performOrthogonalGridMapping(PCLCloudXYZIPtr roadCloud);
-		void restoreFromGridToPointCloud(PCLCloudPtr markingCloud);
-		void restoreFromGridToPointCloud(ccCloudPtr markingCloud);
-		void restoreFromGridToPointCloud(PCLCloudXYZIPtr markingCloud);
-		void divByDoubleAdaptiveIntensityThreshold();
+		void perform_orthogonal_grid_mapping(ccCloudPtr roadCloud);
+		void perform_orthogonal_grid_mapping(PCLCloudXYZIPtr roadCloud);
+		void restore_from_grid_to_cloud(PCLCloudPtr markingCloud);
+		void restore_from_grid_to_cloud(ccCloudPtr markingCloud);
+		void restore_from_grid_to_cloud(PCLCloudXYZIPtr markingCloud);
+		void div_by_adaptive_intensity_threshold();
 
-		void calculateMean(const std::vector<float>& grid, float& mean);
 
-		void processGridToPolylineCloud(ccHObject* polylineContainer);
+		void process_grid_to_polylines(ccHObject* polylineContainer);
 
-		void export2DImage(const Grid& intensityGrid, const QString& filename);
+		void export_2D_image(const Grid& intensityGrid, const QString& filename);
 
 	private:
-		int otsuThreshold(const Grid& gridI);
-		int otsuThreshold(const std::vector<float>& gridI);
-
-		void calculateMean(const Grid& grid, float& mean);
+		int get_otsu_threshold(const Grid& gridI);
+		int get_otsu_threshold(const std::vector<float>& gridI);
+		void calculate_mean(const std::vector<float>& grid, float& mean);
+		void calculate_mean(const Grid& grid, float& mean);
 		void normalize(Grid& grid);
 		void normalize(std::vector<float>& line);
-		void findBoundary(Lines& boundaries);
-		void restoreToPolyCloud(const Lines& boundaries, const Grid& ZGrid, PCLCloudPtr markingCloud);
-		void fitLines(Line& points);
-		void douglasPeucker(Line& points, double epsilon);
+		void find_boundary(Lines& boundaries);
+		void restore_2D_boundary_to_3D_cloud(const Lines& boundaries, const Grid& ZGrid, PCLCloudPtr markingCloud);
+		void fit_lines(Line& points);
+		void Douglas_Peucker(Line& points, double epsilon);
 
-		double pointToSegmentDistance(const Point& p, const Point& p1, const Point& p2);
+		double get_distance_from_point_to_segment(const Point& p, const Point& p1, const Point& p2);
 
-		ccPolyline* createPolylineFromLine(Line line);
+		ccPolyline* create_polyline_from_line(Line line);
 
 		float gridSize = 0.03;
 		CCVector3 minCorner, maxCorner;
