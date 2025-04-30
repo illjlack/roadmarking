@@ -35,5 +35,7 @@ namespace roadmarking
 
 		static int get_intensity_idx(ccCloudPtr cloud);
 		static int get_intensity_idx(ccPointCloud* cloud);
+
+		static ccPointCloud* get_ground_cloud(ccPointCloud* cloud);
 	};
 }

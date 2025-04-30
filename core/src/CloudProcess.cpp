@@ -954,7 +954,7 @@ void getPointsInBox(ccPointCloud* cloud,
 
 	CCCoreLib::DgmOctree::BoxNeighbourhood boxParams;
 	boxParams.center = C;  // 中心点
-	boxParams.dimensions = { L , W, /*INFINITY*/ L};  // 长宽高
+	boxParams.dimensions = { L , W, /*INFINITY*/ 100};  // 长宽高
 	boxParams.axes = new CCVector3[3];
 	{
 		boxParams.axes[0] = { dir.x, dir.y, 0 };
@@ -963,7 +963,7 @@ void getPointsInBox(ccPointCloud* cloud,
 		boxParams.axes[1].normalize();
 		boxParams.axes[2] = {0,0,1};
 	}
-	boxParams.level = 0;
+	boxParams.level = cloud->getOctree()->findBestLevelForAGivenNeighbourhoodSizeExtraction(std::min(L,W));
 	cloud->getOctree()->getPointsInBoxNeighbourhood(boxParams);
 
 	for (auto p : boxParams.neighbours)
@@ -1026,12 +1026,30 @@ void CloudProcess::grow_line_from_seed(ccPointCloud* P,
 	unsigned jumpCount = 0;
 
 
-	ccCloudPtr ground = CloudProcess::apply_csf_ground_extraction(PointCloudIO::convert_to_ccCloudPtr(P));
+	ccPointCloud* ground = PointCloudIO::get_ground_cloud(P);
 	// 初步估计高程
-	if (ground->size())curr_pt.z = ground->getPoint(0)->z;
+	if (ground->size())
+	{
+		curr_pt.z = ground->getPoint(0)->z;
+		std::vector<CCVector3> points;
+		getPointsInBox(ground, curr_pt, curr_dir, L, W, points);
+		if(points.size())curr_pt.z = points[0].z;
+		result.push_back(curr_pt);
+	}
+
+
 
 	// debug计数
 	int cnt = 0;
+
+	ccHObject* debug = nullptr;
+	if (m_glWindow)
+	{
+		debug = new ccHObject;
+		debug->setName("debug");
+		debug->setVisible(true);
+		m_glWindow->addToOwnDB(debug);
+	}
 
 	while (true)
 	{
@@ -1041,8 +1059,8 @@ void CloudProcess::grow_line_from_seed(ccPointCloud* P,
 		CCVector3 next_pt = curr_pt + curr_dir * L;
 		std::vector<CCVector3> points;
 
-		getPointsInBox(ground.get(), (next_pt+curr_pt)/2, curr_dir, L, W, points);
-		if(m_glWindow){
+		getPointsInBox(ground, (next_pt+curr_pt)/2, curr_dir, L, W, points);
+		if(debug){
 			CCVector3 dv(-curr_dir.y, curr_dir.x, 0);
 			dv.normalize();
 			ccPointCloud* cloud = new ccPointCloud;
@@ -1059,8 +1077,7 @@ void CloudProcess::grow_line_from_seed(ccPointCloud* P,
 			poly->addPointIndex(3);
 			poly->addPointIndex(0);
 			poly->setName(QString("debug_aabb_%1 _cloud_size:%2  _axis:%3,%4,%5").arg(cnt).arg(points.size()).arg(curr_dir[0]).arg(curr_dir[1]).arg(curr_dir[2]));
-
-			m_glWindow->addToOwnDB(poly);
+			debug->addChild(poly);
 		}
 
 		for (auto point : points)

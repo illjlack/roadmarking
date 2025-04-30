@@ -1,5 +1,6 @@
 #include "PointCloudIO.h"
 #include "comm.h"
+#include "CloudProcess.h"
 
 using namespace roadmarking;
 
@@ -187,3 +188,17 @@ int PointCloudIO::get_intensity_idx(ccPointCloud* cloud)
 	return sfIdx;
 }
 
+
+
+ccPointCloud* PointCloudIO::get_ground_cloud(ccPointCloud* cloud)
+{
+	QString name = cloud->getName() + "_ground_part";
+	for (int i = 0; i < cloud->getChildrenNumber(); i++)
+	{
+		if(cloud->getChild(i)->getName() == name)return static_cast<ccPointCloud*>(cloud->getChild(i));
+	}
+	ccCloudPtr ground = CloudProcess::apply_csf_ground_extraction(PointCloudIO::convert_to_ccCloudPtr(cloud));
+	cloud->addChild(ground.release());
+	ground->setName(name);
+	return ground.get();
+}

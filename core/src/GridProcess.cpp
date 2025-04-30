@@ -596,7 +596,7 @@ void GridProcess::normalize(std::vector<float>& line)
 		std::sort(validData.begin(), validData.end());
 
 		// 计算Q1和Q3
-		int N = validData.size();
+		int N = validData.size() - 1;
 		int Index = N - N / 30000;
 		float Q1 = validData[Index];
 

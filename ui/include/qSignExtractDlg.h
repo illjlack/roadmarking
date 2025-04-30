@@ -161,10 +161,16 @@ public:
 	void initialize(ccGLWindowInterface* win, ccMainAppInterface* app, ccHObject** select_cloud, const std::vector<ccHObject*>& objects);
 
 	void addCloud(ccPointCloud* cloud, ccHObject* parent = nullptr);  // 添加点云
-	void refresh();  // 刷新目录树
+
 	void relase();	 // 释放点云到原窗口
 
 	void getAllPointClouds(std::vector<ccPointCloud*>& pointClouds);  // 获取所有点云
+
+signals:
+	void async_refresh();
+
+public slots:
+	void refresh();
 
 protected:
 	void contextMenuEvent(QContextMenuEvent* event) override;
@@ -180,4 +186,6 @@ private:
 	ccGLWindowInterface* m_glWindow = nullptr;  // OpenGL 窗口接口
 
 	ccGenericGLDisplay* originalDisplay;  // 原始显示对象
+
+
 };

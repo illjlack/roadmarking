@@ -741,8 +741,10 @@ CloudObjectTreeWidget::CloudObjectTreeWidget(QWidget* parent)
 	setSelectionMode(QAbstractItemView::ExtendedSelection);
 	setContextMenuPolicy(Qt::DefaultContextMenu);
 
+	connect(this, &CloudObjectTreeWidget::async_refresh, this, &CloudObjectTreeWidget::refresh, Qt::QueuedConnection);
+
 	// 复选框设置可见性
-	connect(this, &QTreeWidget::itemChanged, this, [=](QTreeWidgetItem * item, int column)
+	connect(this, &QTreeWidget::itemChanged, this, [&](QTreeWidgetItem * item, int column)
 	{
 		if (!item || column != 0)
 			return;
@@ -757,15 +759,30 @@ CloudObjectTreeWidget::CloudObjectTreeWidget(QWidget* parent)
 			obj->setSelected(false);
 			*pp_select_cloud = nullptr;
 		}
-		obj->setVisible(visible);
+
+		std::function<void(ccHObject*)> dfs = [&](ccHObject* object)
+		{
+			object->setVisible(visible);
+			for (int i = 0; i < object->getChildrenNumber(); ++i)
+			{
+				ccHObject* child = object->getChild(i);
+				if (child)
+				{
+					dfs(child);
+				}
+			}
+		};
+		dfs(obj);
+		emit async_refresh();
 
 		if (m_glWindow)
 			m_glWindow->redraw();
 	});
 
 	// 点击设置选中点云
-	connect(this, &QTreeWidget::itemClicked, this, [=](QTreeWidgetItem* item, int column)
+	connect(this, &QTreeWidget::itemClicked, this, [&](QTreeWidgetItem* item, int column)
 	{
+		if (!item)return;
 		auto obj = static_cast<ccHObject*>(item->data(0, Qt::UserRole).value<void*>());
 		if (!obj || !obj->isVisible()) 
 			return;
@@ -851,6 +868,8 @@ void CloudObjectTreeWidget::addCloud(ccPointCloud* cloud, ccHObject* parent)
 
 void CloudObjectTreeWidget::refresh()
 {
+	blockSignals(true);
+
 	clear();
 
 	if (!m_glWindow)
@@ -866,6 +885,9 @@ void CloudObjectTreeWidget::refresh()
 		loadTreeItem(dbRoot->getChild(i), nullptr);
 	}
 	expandAll();  // 展开所有项
+
+	// 恢复信号处理
+	blockSignals(false);
 }
 
 void CloudObjectTreeWidget::loadTreeItem(ccHObject* object, QTreeWidgetItem* parentItem)
@@ -938,7 +960,7 @@ void CloudObjectTreeWidget::contextMenuEvent(QContextMenuEvent* event)
 				if (*pp_select_cloud == obj)
 					*pp_select_cloud = nullptr;
 
-				m_app->removeFromDB(obj);
+				m_glWindow->removeFromOwnDB(obj);
 			}
 
 			refresh();
