@@ -25,6 +25,8 @@
 #include <QMessageBox>
 #include <pcl/filters/radius_outlier_removal.h>
 #include <pcl/filters/crop_hull.h>
+#include "ccProgressDialog.h"      // CloudCompare 的 Qt 进度对话框封装
+#include <GenericProgressCallback.h>  // CCLib 通用回调接口
 
 using namespace roadmarking;
 
@@ -797,6 +799,53 @@ void CloudProcess::filter_cloud_by_intensity(
 		cloud_filtered->getDisplay()->redraw(false, true);
 }
 
+void CloudProcess::filter_cloud_by_z(
+	ccPointCloud* inCloud,   // 输入点云列表
+	double lowerThreshold,                      // 强度下限
+	double upperThreshold,                      // 强度上限
+	ccPointCloud* cloud_filtered                // 输出：阈值过滤后的点云
+)
+{
+	if (!inCloud || !cloud_filtered)
+		return;
+
+	// 为输出点云创建一个“intensity”标量场
+	cloud_filtered->addScalarField("intensity");
+	int outSfIdx = cloud_filtered->getScalarFieldIndexByName("intensity");
+	auto sfOut = cloud_filtered->getScalarField(outSfIdx);
+
+	// 找到输入点云的“intensity”标量场索引
+	int inSfIdx = PointCloudIO::get_intensity_idx(inCloud);
+	if (inSfIdx < 0)return;
+
+	auto sfIn = inCloud->getScalarField(inSfIdx);
+	if (!sfIn)return;
+
+	for (size_t i = 0; i < inCloud->size(); ++i)
+	{
+		const CCVector3* P = inCloud->getPoint(i);
+		double intensity = sfIn->getValue(i);
+
+		if (P->z >= lowerThreshold && P->z <= upperThreshold)
+		{
+			// 符合条件：添加到输出点云，并同步强度值
+			cloud_filtered->addPoint(*P);
+			sfOut->addElement(intensity);
+		}
+	}
+
+	// 重新计算输出标量场的最小/最大，用于后续显示
+	sfOut->computeMinAndMax();
+
+	// 设置当前显示标量场并应用默认显示
+	cloud_filtered->setCurrentDisplayedScalarField(outSfIdx);
+	CloudProcess::apply_default_intensity_and_visible(cloud_filtered);
+
+	// 请求重绘（如果有可视化窗口）
+	if (cloud_filtered->getDisplay())
+		cloud_filtered->getDisplay()->redraw(false, true);
+}
+
 
 // 简单版：用AABB盒子筛选点
 void getPointsInBox(ccPointCloud* cloud, const ccBBox& aabb, std::vector<unsigned>& indices)
@@ -949,7 +998,17 @@ void getPointsInBox(ccPointCloud* cloud,
 
 	if (!cloud->getOctree())
 	{
-		cloud->computeOctree();
+		ccProgressDialog progressDlg(false);
+		progressDlg.setWindowTitle("构建八叉树");
+		progressDlg.setAutoClose(true);
+		if (!cloud->computeOctree(&progressDlg))
+		{
+			// 构建失败
+			QMessageBox::critical(nullptr,
+				QStringLiteral("错误"),
+				QStringLiteral("八叉树构建失败！"));
+			return;
+		}
 	}
 
 	CCCoreLib::DgmOctree::BoxNeighbourhood boxParams;
@@ -1013,6 +1072,7 @@ void CloudProcess::grow_line_from_seed(ccPointCloud* P,
 	ccPointCloud* select_points,
 	std::vector<CCVector3>& result,
 	ccGLWindowInterface* m_glWindow, // debug
+	bool isGetGround,
 	double W,
 	double L,
 	unsigned Nmin,
@@ -1026,7 +1086,7 @@ void CloudProcess::grow_line_from_seed(ccPointCloud* P,
 	unsigned jumpCount = 0;
 
 
-	ccPointCloud* ground = PointCloudIO::get_ground_cloud(P);
+	ccPointCloud* ground = isGetGround?PointCloudIO::get_ground_cloud(P):P;
 	// 初步估计高程
 	if (ground->size())
 	{
@@ -1103,7 +1163,7 @@ void CloudProcess::grow_line_from_seed(ccPointCloud* P,
 				continue;
 			}
 
-			if (fabs(axis_n.z) > fabs(axis_n.x + axis_n.y)*10)
+			if (fabs(axis_n.z) > (fabs(axis_n.x) + fabs(axis_n.y))*10)
 			{
 				// xy方向特征太小了
 				break;
@@ -1114,8 +1174,20 @@ void CloudProcess::grow_line_from_seed(ccPointCloud* P,
 				axis_n = -axis_n;
 			}
 
-			curr_pt = CCVector3(centroid[0], centroid[1], centroid[2]);
+			
 			axis_n.normalize();
+
+			float cosAngle = curr_dir.dot(axis_n);
+			cosAngle = std::clamp(cosAngle, -1.0f, 1.0f);
+			float angleRad = std::acos(cosAngle);
+			//float angleDeg = angleRad * 180.0f / static_cast<float>(M_PI);
+			if (angleRad > theta_max) //角度限制
+			{
+				continue;
+			}
+
+
+			curr_pt = CCVector3(centroid[0], centroid[1], centroid[2]);
 			curr_dir += axis_n;  // 主方向
 			axis[2] = 0;
 			curr_dir.normalize();

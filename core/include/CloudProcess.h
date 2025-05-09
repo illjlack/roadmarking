@@ -57,6 +57,8 @@ namespace roadmarking
 
 		static void filter_cloud_by_intensity(ccPointCloud* inCloud, double lowerThreshold, double upperThreshold, ccPointCloud* cloud_filtered);
 
+		static void filter_cloud_by_z(ccPointCloud* inCloud, double lowerThreshold, double upperThreshold, ccPointCloud* cloud_filtered);
+
 
 		static void grow_line_from_seed(
 			ccPointCloud* P,                  // 点云对象
@@ -65,6 +67,7 @@ namespace roadmarking
 			ccPointCloud* select_points,      // 被选择中的部分点云
 			std::vector<CCVector3>& result,    // 被选中部分的线
 			ccGLWindowInterface* m_glWindow,  // 用于调试显示
+			bool isGetGround,
 			double W = 0.2,                   // 矩形宽度，默认 0.2 米
 			double L = 2,                     // 每次生长步长，默认 2 米
 			unsigned Nmin = 50,               // 最小点数，默认至少 50 个点

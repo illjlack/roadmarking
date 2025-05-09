@@ -139,7 +139,8 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 			buttonGroup->addButton(btn);
 		};
 
-		addCheckableButton("选择强度过滤点云", [this]() { onFilteCloud(); });
+		addCheckableButton("选择强度阈值过滤点云", [this]() { onFilteCloudByIntensity(); });
+		addCheckableButton("选择高程阈值过滤点云", [this]() { onFilteCloudByZ(); });
 		addCheckableButton("全自动提取", [this]() { onAutoExtract(); });
 		addCheckableButton("框选提取", [this]() { onBoxSelectExtract(); });
 		addCheckableButton("点选生长提取", [this]() { onPointGrowExtract(); });
@@ -220,6 +221,9 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::mouseMoved, this, &qSignExtractDlg::onMouseMoved);
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::buttonReleased, this, &qSignExtractDlg::onButtonReleased);
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::mouseWheelRotated, this, &qSignExtractDlg::onMouseWheelRotated);
+	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::leftButtonDoubleClicked, this, &qSignExtractDlg::onLeftButtonDoubleClicked);
+	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::rightButtonDoubleClicked, this, &qSignExtractDlg::onRightButtonDoubleClicked);
+
 }
 qSignExtractDlg::~qSignExtractDlg()
 {
@@ -284,7 +288,6 @@ void qSignExtractDlg::onBoxSelectExtract()
 			RoadMarkingExtract::automaticExtraction(PointCloudIO::convert_to_ccCloudPtr(p_select_cloud), m_app);
 			m_objectTree->refresh();
 		});
-	m_objectTree->refresh();
 }
 
 void qSignExtractDlg::onPointGrowExtract()
@@ -296,6 +299,8 @@ void qSignExtractDlg::onPointGrowExtract()
 			SettingsDialog settingsDialog;
 			settingsDialog.setDescription("参数：\n"
 				"调试模式：是否开启调试显示（将线显示在窗口上）\n"
+				"是否进行额外的csf提取地面：\n"
+				"是否允许相交：(线往前延伸时，是否判断局部点云为线段，允许相交则不判断，不允许则判断)\n"
 				"矩形宽度(m)：线生长的宽度\n"
 				"生长步长(m)：每次扩展的长度\n"
 				"最小点数：每段线段需要包含的最少点数\n"
@@ -304,6 +309,7 @@ void qSignExtractDlg::onPointGrowExtract()
 
 			// 布尔值
 			settingsDialog.registerComponent<bool>("开启调试显示", "debugEnabled", false);
+			settingsDialog.registerComponent<bool>("开启提取地面", "isGetGround", false);
 
 			// 浮点值
 			settingsDialog.registerComponent<float>("矩形宽度", "W", 0.4);
@@ -321,6 +327,7 @@ void qSignExtractDlg::onPointGrowExtract()
 
 			// 参数提取
 			bool debugEnabled = parameters["debugEnabled"].toBool();
+			bool isGetGround = parameters["isGetGround"].toBool();
 			double W = parameters["W"].toFloat();
 			double L = parameters["L"].toFloat();
 			int Nmin = parameters["Nmin"].toUInt();
@@ -332,7 +339,7 @@ void qSignExtractDlg::onPointGrowExtract()
 			std::vector<CCVector3d> polyline;
 			m_foregroundPolylineEditor->getPoints(polyline);
 
-			if (!p_select_cloud)return;
+			if (!p_select_cloud || !dynamic_cast<ccPointCloud*>(p_select_cloud))return;
 
 			CCVector3 p0, v0;
 			p0.x = polyline[0].x;
@@ -344,8 +351,9 @@ void qSignExtractDlg::onPointGrowExtract()
 			//v0.z = polyline[1].z - p0.z;
 			ccPointCloud* cloud= new ccPointCloud;
 			std::vector<CCVector3>line;
+
 			CloudProcess::grow_line_from_seed(static_cast<ccPointCloud*>(p_select_cloud), p0, v0, cloud, line,
-				debugEnabled?m_glWindow:nullptr,W, L, Nmin, theta_max, Kmax);
+				debugEnabled?m_glWindow:nullptr, isGetGround,W, L, Nmin, theta_max, Kmax);
 
 			ccPointCloud* ccCloud = new ccPointCloud;
 			// 创建ccPolyline对象
@@ -371,10 +379,9 @@ void qSignExtractDlg::onPointGrowExtract()
 
 			m_objectTree->refresh();
 		});
-	m_objectTree->refresh();
 }
 
-void qSignExtractDlg::onFilteCloud()
+void qSignExtractDlg::onFilteCloudByIntensity()
 {
 	if (!p_select_cloud || !dynamic_cast<ccPointCloud*>(p_select_cloud))
 	{
@@ -384,7 +391,21 @@ void qSignExtractDlg::onFilteCloud()
 
 	ccPointCloud* cloud = dynamic_cast<ccPointCloud*>(p_select_cloud);
 
-	showThresholdHistogram(cloud);
+	showThresholdHistogram(cloud, true);
+	m_objectTree->refresh();
+}
+
+void qSignExtractDlg::onFilteCloudByZ()
+{
+	if (!p_select_cloud || !dynamic_cast<ccPointCloud*>(p_select_cloud))
+	{
+		ccLog::Error("未选择点云");
+		return;
+	}
+
+	ccPointCloud* cloud = dynamic_cast<ccPointCloud*>(p_select_cloud);
+
+	showThresholdHistogram(cloud, false, true , 0, 200);
 	m_objectTree->refresh();
 }
 
@@ -403,17 +424,16 @@ void qSignExtractDlg::onBoxClip()
 			CloudProcess::crop_cloud_with_polygon(clouds, polyline, cloud);
 
 			cloud->setName("cloud_cropped");
-			m_glWindow->addToOwnDB(cloud);
-			m_objectTree->refresh();
-
+			addCloudToDB(cloud);
+			m_objectTree->async_refresh();
 		});
-	m_objectTree->refresh();
 }
 
 void qSignExtractDlg::addCloudToDB(ccPointCloud* cloud)
 {
 	m_glWindow->addToOwnDB(cloud);
-	m_objectTree->refresh();
+	if (p_select_cloud)p_select_cloud->setVisible(false);
+	onEntitySelectionChanged(cloud);
 }
 
 
@@ -433,6 +453,24 @@ void qSignExtractDlg::onLeftButtonClicked(int x, int y)
 	if (m_selectionMode == DRAW_SELECTION)
 	{
 		m_foregroundPolylineEditor->onLeftButtonClicked(x, y);
+	}
+	m_glWindow->redraw();
+}
+
+void qSignExtractDlg::onLeftButtonDoubleClicked(int x, int y)
+{
+	if (m_selectionMode == DRAW_SELECTION)
+	{
+		m_foregroundPolylineEditor->onDoubleLeftButtonClicked(x, y);
+	}
+	m_glWindow->redraw();
+}
+
+void qSignExtractDlg::onRightButtonDoubleClicked(int x, int y)
+{
+	if (m_selectionMode == DRAW_SELECTION)
+	{
+		m_foregroundPolylineEditor->onDoubleRightButtonClicked(x, y);
 	}
 	m_glWindow->redraw();
 }
@@ -470,6 +508,7 @@ void qSignExtractDlg::onEntitySelectionChanged(ccHObject* entity)
 	entity->setSelected(true);
 	p_select_cloud = entity;
 	m_glWindow->redraw();
+	if (m_objectTree)m_objectTree->async_refresh();
 }
 
 // 应该是很多键被主程序当作快捷键拦截了，只有部分键有效
@@ -481,9 +520,9 @@ void qSignExtractDlg::keyPressEvent(QKeyEvent* event)
 	}
 }
 
-void qSignExtractDlg::showThresholdHistogram(ccPointCloud* pointCloud, bool is_has_threshold, float lowerThreshold, float upperThreshold)
+void qSignExtractDlg::showThresholdHistogram(ccPointCloud* pointCloud, bool isfilterIntensity,bool is_has_threshold, float lowerThreshold, float upperThreshold)
 {
-	histogramWidget->setPointCloud(pointCloud); // 设置点云数据
+	histogramWidget->setPointCloud(pointCloud, isfilterIntensity); // 设置点云数据
 
 	histogramWidget->setUpperAndLowerThreshold(is_has_threshold, lowerThreshold, upperThreshold); // 设置阈值
 
@@ -564,11 +603,11 @@ void ForegroundPolylineEditor::startDraw()
 void ForegroundPolylineEditor::finishDraw(bool doAction)
 {
 	isFreezeUI = true;
-	if (isClosed)closeLine();
+
+	if (isClosed)m_3DPoints.push_back(m_3DPoints[0]);
 
 	if (doAction && m_callback)
 	{
-		// 执行任务期间显示闭合曲线
 		m_callback();
 	}
 	m_glWindow->setInteractionMode(interaction_flags_backup);
@@ -593,18 +632,6 @@ void ForegroundPolylineEditor:: setCallbackfunc(std::function<void()> callback)
 	m_callback = callback;
 }
 
-void ForegroundPolylineEditor::closeLine()
-{
-	if (m_pointCloud->size())
-	{
-		CCVector3* lastPoint = const_cast<CCVector3*>(m_pointCloud->getPointPersistentPtr(m_foregroundPolyline->size() - 1));
-		*lastPoint = *m_pointCloud->getPoint(0);
-		m_3DPoints.push_back(m_3DPoints[0]);
-		m_glWindow->redraw();
-		QApplication::processEvents();
-	}
-}
-
 void ForegroundPolylineEditor::onLeftButtonClicked(int x, int y)
 {
 	if (isFreezeUI)return;
@@ -614,12 +641,13 @@ void ForegroundPolylineEditor::onLeftButtonClicked(int x, int y)
 	if (!m_pointCloud->size())
 	{
 		m_pointCloud->addPoint(newPoint);
-		m_foregroundPolyline->addPointIndex(static_cast<unsigned>(m_pointCloud->size() - 1));
+		m_foregroundPolyline->addPointIndex(static_cast<unsigned>(m_pointCloud->size() - 1)); // 临时
+		m_foregroundPolyline->addPointIndex(0); // 闭合
 	}
 
 	// 上一个点固定
 	{
-		CCVector3* lastPoint = const_cast<CCVector3*>(m_pointCloud->getPointPersistentPtr(m_foregroundPolyline->size() - 1));
+		CCVector3* lastPoint = const_cast<CCVector3*>(m_pointCloud->getPointPersistentPtr(m_foregroundPolyline->size() - 2));
 		*lastPoint = newPoint;
 		ccGLCameraParameters camera;
 		m_glWindow->getGLCameraParameters(camera);
@@ -640,7 +668,10 @@ void ForegroundPolylineEditor::onLeftButtonClicked(int x, int y)
 	}
 
 	m_pointCloud->addPoint(newPoint);
+	m_foregroundPolyline->removePointGlobalIndex(m_foregroundPolyline->size() - 1);
 	m_foregroundPolyline->addPointIndex(static_cast<unsigned>(m_pointCloud->size() - 1));
+	if(isClosed)m_foregroundPolyline->addPointIndex(0);
+	else m_foregroundPolyline->addPointIndex(static_cast<unsigned>(m_pointCloud->size() - 1));
 	m_glWindow->redraw(true, false);
 }
 
@@ -660,8 +691,20 @@ void ForegroundPolylineEditor::onMouseMoved(int x, int y, Qt::MouseButtons butto
 	QPointF pos2D = m_glWindow->toCenteredGLCoordinates(x, y);
 	CCVector3 newPoint(static_cast<PointCoordinateType>(pos2D.x()), static_cast<PointCoordinateType>(pos2D.y()), 0);
 
-	CCVector3* lastPoint = const_cast<CCVector3*>(m_pointCloud->getPointPersistentPtr(m_foregroundPolyline->size() - 1));
+	CCVector3* lastPoint = const_cast<CCVector3*>(m_pointCloud->getPointPersistentPtr(m_foregroundPolyline->size() - 2));
 	*lastPoint = newPoint;
+}
+
+void ForegroundPolylineEditor::onDoubleLeftButtonClicked(int x, int y)
+{
+	if (isFreezeUI) return;
+	finishDraw(true);
+}
+
+void ForegroundPolylineEditor::onDoubleRightButtonClicked(int x, int y)
+{
+	if (isFreezeUI) return;
+	finishDraw(false);
 }
 
 void ForegroundPolylineEditor::onMouseWheelRotated(int delta)
@@ -872,6 +915,8 @@ void CloudObjectTreeWidget::refresh()
 
 	clear();
 
+	setSelectionMode(QAbstractItemView::SingleSelection);
+
 	if (!m_glWindow)
 		return;
 
@@ -891,7 +936,7 @@ void CloudObjectTreeWidget::refresh()
 }
 
 void CloudObjectTreeWidget::loadTreeItem(ccHObject* object, QTreeWidgetItem* parentItem)
-{	
+{
 	// 创建树项
 	QTreeWidgetItem* item = new QTreeWidgetItem(parentItem);
 	item->setText(0, object->getName());  // 设置项的文本为对象的名称
@@ -900,7 +945,6 @@ void CloudObjectTreeWidget::loadTreeItem(ccHObject* object, QTreeWidgetItem* par
 
 	// 设置项标志，使其支持用户勾选
 	item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-
 	// 如果有父项，就将当前项作为父项的子项添加
 	if (parentItem)
 	{
@@ -910,6 +954,7 @@ void CloudObjectTreeWidget::loadTreeItem(ccHObject* object, QTreeWidgetItem* par
 	{
 		addTopLevelItem(item);  // 如果没有父项，作为根项添加
 	}
+	item->setSelected(object->isSelected());
 
 	// 递归加载子项
 	for (int i = 0; i < object->getChildrenNumber(); ++i)

@@ -63,11 +63,14 @@ private slots:
 	void onBoxSelectExtract();   // 框选提取
 	void onPointGrowExtract();   // 点生长提取
 	void onBoxClip();            // 框选截取
-	void onFilteCloud();         // 过滤点云
+	void onFilteCloudByIntensity();         // 过滤点云
+	void onFilteCloudByZ();
 
 	void onItemPicked(ccHObject* entity, unsigned itemIdx, int x, int y, const CCVector3&, const CCVector3d&);
 	void onItemPickedFast(ccHObject* entity, int subEntityID, int x, int y);
 	void onLeftButtonClicked(int x, int y);
+	void onLeftButtonDoubleClicked(int x, int y);
+	void onRightButtonDoubleClicked(int x, int y);
 	void onMouseMoved(int x, int y, Qt::MouseButtons button);
 	void onButtonReleased();
 	void onEntitySelectionChanged(ccHObject* entity);
@@ -76,7 +79,7 @@ private slots:
 	void addCloudToDB(ccPointCloud* cloud);
 
 private:
-	void showThresholdHistogram(ccPointCloud* pointCloud, bool is_has_threshold = true, float lowerThreshold = 50, float upperThreshold = 200);
+	void showThresholdHistogram(ccPointCloud* pointCloud, bool isfilterIntensity, bool is_has_threshold = true, float lowerThreshold = 50, float upperThreshold = 200);
 
 	bool m_selecting = false;          // 是否正在选择
 	ccHObject* p_select_cloud = nullptr; // 选择的点云对象
@@ -109,6 +112,8 @@ public:
 
 	void onLeftButtonClicked(int x, int y);
 	void onMouseMoved(int x, int y, Qt::MouseButtons button);
+	void onDoubleLeftButtonClicked(int x, int y);
+	void onDoubleRightButtonClicked(int x, int y);
 	void onMouseWheelRotated(int delta);
 
 	void onKeyPressEvent(QKeyEvent* event);
