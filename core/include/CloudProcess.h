@@ -74,5 +74,9 @@ namespace roadmarking
 			double theta_max = 45.0 * M_PI / 180.0, // 最大弯折角度，默认 45 度，单位是弧度
 			unsigned Kmax = 10                // 最大跳跃次数，默认 10 次
 		);
+
+	private:
+		static ccPointCloud* rotate_cloud(ccPointCloud* P, const CCVector3& now_v, const CCVector3& new_v);
+		static PCLCloudPtr rotate_cloud(PCLCloudPtr pclCloud, const Eigen::Vector3f& now_v, const Eigen::Vector3f& new_v);
 	};
 }

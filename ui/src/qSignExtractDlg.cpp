@@ -915,8 +915,6 @@ void CloudObjectTreeWidget::refresh()
 
 	clear();
 
-	setSelectionMode(QAbstractItemView::SingleSelection);
-
 	if (!m_glWindow)
 		return;
 
@@ -1005,7 +1003,8 @@ void CloudObjectTreeWidget::contextMenuEvent(QContextMenuEvent* event)
 				if (*pp_select_cloud == obj)
 					*pp_select_cloud = nullptr;
 
-				m_glWindow->removeFromOwnDB(obj);
+				if (obj->getParent())obj->getParent()->removeChild(obj);
+				else m_glWindow->removeFromOwnDB(obj);
 			}
 
 			refresh();

@@ -27,6 +27,10 @@
 #include <pcl/filters/crop_hull.h>
 #include "ccProgressDialog.h"      // CloudCompare 的 Qt 进度对话框封装
 #include <GenericProgressCallback.h>  // CCLib 通用回调接口
+#include <pcl/filters/extract_indices.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
 
 using namespace roadmarking;
 
@@ -1031,14 +1035,13 @@ void getPointsInBox(ccPointCloud* cloud,
 	}
 }
 
-ccPointCloud* rotate_cloud(ccPointCloud* P, const CCVector3& now_v, const CCVector3& new_v)
+PCLCloudPtr CloudProcess::rotate_cloud(PCLCloudPtr pclCloud, const Eigen::Vector3f& now_v, const Eigen::Vector3f& new_v)
 {
-	Eigen::Vector3f _now_v = { now_v.x, now_v.y, now_v.z };
-	Eigen::Vector3f _new_v = { new_v.x, new_v.y, new_v.z };
 	// 旋转角度
-	double theta = acos(_now_v.dot(_new_v) / (_now_v.norm() * _now_v.norm()));
-	// 旋转轴：_now_v和_new_v轴的叉积
-	Eigen::Vector3f axis = _now_v.cross(_new_v);
+	double theta = acos(now_v.dot(new_v) / (now_v.norm() * new_v.norm()));
+
+	// 旋转轴：now_v和new_v轴的叉积
+	Eigen::Vector3f axis = now_v.cross(new_v);
 	axis.normalize();
 
 	// 使用 Eigen 计算旋转矩阵
@@ -1046,22 +1049,59 @@ ccPointCloud* rotate_cloud(ccPointCloud* P, const CCVector3& now_v, const CCVect
 	Eigen::Matrix3f rotationMatrix = rotation.toRotationMatrix();
 	Eigen::Matrix4f rotationMatrix4 = Eigen::Matrix4f::Identity();
 	rotationMatrix4.block<3, 3>(0, 0) = rotationMatrix;
-	PCLCloudPtr pclCloud = PointCloudIO::convert_to_PCLCloudPtr(P);
+
+	// Apply rotation to PCL cloud
 	PCLCloudPtr cloud(new PCLCloud);
 	pcl::transformPointCloud(*pclCloud, *cloud, rotationMatrix4);
 
-
-	/*
-	auto inverse_rotated = [&](CCVector3 vec)
-	{
-		Eigen::Vector3f eigenVec(vec.x, vec.y, vec.z);
-		Eigen::Vector3f restoredVec = rotationMatrix.transpose() * eigenVec;
-		return CCVector3(restoredVec.x(), restoredVec.y(), restoredVec.z());
-	};
-	*/
-	return PointCloudIO::convert_to_ccCloudPtr(cloud).release();
+	return cloud;
 }
 
+
+ccPointCloud* CloudProcess::rotate_cloud(ccPointCloud* P, const CCVector3& now_v, const CCVector3& new_v)
+{
+	// 将 ccPointCloud 转换为 PCLCloudPtr
+	PCLCloudPtr pclCloud = PointCloudIO::convert_to_PCLCloudPtr(P);
+
+	// 调用第二个版本的 rotate_cloud，传入 PCLCloudPtr 类型的云点数据和旋转向量
+	PCLCloudPtr rotatedCloud = rotate_cloud(pclCloud, Eigen::Vector3f(now_v.x, now_v.y, now_v.z), Eigen::Vector3f(new_v.x, new_v.y, new_v.z));
+
+	// 将旋转后的 PCLCloudPtr 转换回 ccPointCloud
+	return PointCloudIO::convert_to_ccCloudPtr(rotatedCloud).release();
+}
+
+void fitLineAndErode(PCLCloudPtr cloud, float distance_threshold, PCLCloudPtr cloud_filtered)
+{
+	// 创建一个SAC分割对象，用来从点云中提取直线
+	pcl::SACSegmentation<pcl::PointXYZ> seg;
+	pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+	pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+
+	// 设置模型类型和方法类型
+	seg.setMethodType(pcl::SAC_RANSAC);
+	seg.setOptimizeCoefficients(true);
+
+	// 设置分割条件：直线模型
+	seg.setModelType(pcl::SACMODEL_LINE);
+	seg.setDistanceThreshold(distance_threshold); // 设置距离阈值，去除离线段较远的点
+
+	// 执行分割，得到直线模型
+	seg.setInputCloud(cloud);
+	seg.segment(*inliers, *coefficients);
+
+	// 如果没有找到符合条件的内点，退出函数
+	if (inliers->indices.size() == 0)
+	{
+		return;
+	}
+
+	// 提取与直线模型相关的点
+	pcl::ExtractIndices<pcl::PointXYZ> extract;
+	extract.setInputCloud(cloud);
+	extract.setIndices(inliers);
+	extract.setNegative(false); // 保留点云中的直线部分
+	extract.filter(*cloud_filtered);
+}
 
 /*
 延伸直线、跨越断裂
@@ -1116,10 +1156,49 @@ void CloudProcess::grow_line_from_seed(ccPointCloud* P,
 		curr_dir.normalize();
 		cnt++;
 
+		float len = L;
+
 		CCVector3 next_pt = curr_pt + curr_dir * L;
 		std::vector<CCVector3> points;
+		for (;; len += L)
+		{
+			next_pt = curr_pt + curr_dir * len;
 
-		getPointsInBox(ground, (next_pt+curr_pt)/2, curr_dir, L, W, points);
+			std::vector<CCVector3> new_points;
+			getPointsInBox(ground, (next_pt + curr_pt) / 2, curr_dir, len , W, new_points);
+
+			if (new_points.size() > points.size() + Nmin)
+			{
+				
+				// 偏移让质心居中（现在里面应该是一条线段的点云，进行侵蚀操作）
+				PCLCloudPtr pclCloud(new PCLCloud);
+				for (auto& p : new_points)pclCloud->push_back({ p.x, p.y, p.z });
+				PCLCloudPtr cloud_filtered(new PCLCloud);
+				fitLineAndErode(pclCloud, 0.1, cloud_filtered);
+				new_points.clear();
+				for (auto p : *cloud_filtered)
+				{
+					new_points.push_back({p.x,p.y,p.z});
+				}
+				new_points.swap(points);
+				CCVector3 points_centroid(0, 0, 0);
+				for (const auto& pt : points)
+				{
+					points_centroid += pt;
+				}
+				points_centroid /= points.size();
+
+				CCVector3 centroid = (curr_pt + next_pt) / 2;
+				CCVector3 offset = points_centroid - centroid;
+				curr_pt += offset;
+				next_pt += offset;
+			}
+			else
+			{
+				break;
+			}
+		}
+		
 		if(debug){
 			CCVector3 dv(-curr_dir.y, curr_dir.x, 0);
 			dv.normalize();
@@ -1145,23 +1224,41 @@ void CloudProcess::grow_line_from_seed(ccPointCloud* P,
 			select_points->addPoint(point);
 		}
 
+		int last_num = 1;
+
 		// 如果找到足够的点，继续延伸
 		if (points.size() >= Nmin)
 		{
 			Eigen::Vector4f centroid;
 			Eigen::Vector3f axis;
 			getPointsCentroidAndAxis(points, centroid, axis);
+			axis.normalize();
+
 			CCVector3 axis_n = { axis[0], axis[1], axis[2] };
 
-			float centroidDisplacement = (CCVector3(centroid[0], centroid[1], centroid[2]) - (next_pt + curr_pt) / 2).norm();
-
-			if (centroidDisplacement > L/4)
+			// 判断框内是否是线段
+			// 旋转判断包围盒是否为长宽分明（1/2以上）的矩形
 			{
-				//质心太偏了，丢弃这部分
-				curr_pt = next_pt;
-				result.push_back(curr_pt);
-				continue;
+				PCLCloudPtr pclCloud(new PCLCloud);
+				for (auto& p : points)pclCloud->push_back({p.x, p.y, p.z});
+				PCLCloudPtr rot_cloud = rotate_cloud(pclCloud, axis, {1,0,0}); // 长与x轴对齐
+
+				pcl::PointXYZ min_pt, max_pt;
+				pcl::getMinMax3D(*rot_cloud, min_pt, max_pt);
+
+				float length = max_pt.x - min_pt.x; // 长
+				float width = max_pt.y - min_pt.y;	// 宽
+
+				// 判断长宽比是否大于等于 1/2
+				if (width*2 > length)
+				{
+					jumpCount++;
+					curr_pt = next_pt;
+					// 丢弃这个片段
+					continue;
+				}
 			}
+
 
 			if (fabs(axis_n.z) > (fabs(axis_n.x) + fabs(axis_n.y))*10)
 			{
@@ -1174,7 +1271,6 @@ void CloudProcess::grow_line_from_seed(ccPointCloud* P,
 				axis_n = -axis_n;
 			}
 
-			
 			axis_n.normalize();
 
 			float cosAngle = curr_dir.dot(axis_n);
@@ -1183,12 +1279,15 @@ void CloudProcess::grow_line_from_seed(ccPointCloud* P,
 			//float angleDeg = angleRad * 180.0f / static_cast<float>(M_PI);
 			if (angleRad > theta_max) //角度限制
 			{
+				jumpCount++;
+				curr_pt = next_pt;
 				continue;
 			}
 
 
-			curr_pt = CCVector3(centroid[0], centroid[1], centroid[2]);
-			curr_dir += axis_n;  // 主方向
+			curr_pt = next_pt;
+			curr_dir = curr_dir*last_num + axis_n* points.size();  // 用点的数量做权值
+			last_num = points.size();
 			axis[2] = 0;
 			curr_dir.normalize();
 			result.push_back(curr_pt);  // 将新点加入结果
@@ -1233,247 +1332,3 @@ plan1：寻找末端方向有问题，且不够鲁棒（比如出现割裂，与
 plan2：对于是否能按预期中的适应线的转弯有疑问（局部的弯曲过大，矩形中的点少判断不了方向）。
 
 */
-static std::vector<CCVector3> growCloudFromSeed(
-	ccPointCloud* P,
-	const CCVector3& p0,					// 起始点
-	const CCVector3& v0,					// 方向
-	double W = 0.2,							// 矩形宽度，默认 0.2 米
-	double L = 1.0,							// 每次生长步长，默认 1.0 米
-	unsigned Nmin = 20,						// 最小点数，默认至少20个点
-	double theta_max = 10.0 * M_PI / 180.0, // 最大弯折角度，默认 10度，单位是弧度
-	unsigned Kmax = 3,						// 最大跳跃次数，默认 3 次
-	double epsilon_max = 0.01				// 最大拟合残差，默认 0.01
-)
-{
-	// 初始化结果折线端点序列
-	std::vector<CCVector3> result;
-
-	// 确保点云的八叉树已构建（用于快速邻域查询）
-	if (!P->getOctree())
-	{
-		P->computeOctree();
-	}
-	ccOctree::Shared octree = P->getOctree();
-	if (!octree)
-	{
-		// 如果八叉树构建失败，返回空结果
-		return result;
-	}
-
-	// 当前点和方向初始化
-	CCVector3 curr_pt = p0;
-	CCVector3 curr_dir = v0;
-	curr_dir.normalize(); // 归一化方向向量
-
-	// 将起始点加入结果序列
-	result.push_back(curr_pt);
-
-	// 循环生长步骤
-	while (true)
-	{
-		// 定义搜索矩形区域的中心：当前点前方 L/2 位置
-		CCVector3 rectCenter = curr_pt + curr_dir * (L / 2.0);
-
-		// 计算两个垂直方向（宽度方向）
-		CCVector3 upVec(0, 0, 1);
-		if (fabs(curr_dir.dot(upVec)) > 0.99)
-		{
-			// 如果与竖直方向接近平行，换个参考向量
-			upVec = CCVector3(0, 1, 0);
-		}
-		CCVector3 right = curr_dir.cross(upVec);
-		right.normalize();
-		CCVector3 rectUp = right.cross(curr_dir);
-		rectUp.normalize();
-
-		// 矩形半长和半宽
-		double halfLength = L / 2.0;
-		double halfWidth = W / 2.0;
-
-		// 计算矩形所在平面的4个角点（世界坐标系）
-		CCVector3 corners[4];
-		corners[0] = rectCenter + curr_dir * halfLength + right * halfWidth;
-		corners[1] = rectCenter + curr_dir * halfLength - right * halfWidth;
-		corners[2] = rectCenter - curr_dir * halfLength + right * halfWidth;
-		corners[3] = rectCenter - curr_dir * halfLength - right * halfWidth;
-
-		// 构造轴对齐包围盒 (AABB) 来加速邻域查询
-		ccBBox aabb;
-		aabb.add(corners[0]);
-		aabb.add(corners[1]);
-		aabb.add(corners[2]);
-		aabb.add(corners[3]);
-
-		// 查询八叉树，在包围盒内获取候选点
-		std::vector<unsigned> candIndices;
-		//octree->getPointsInBox(aabb, candIndices);
-		getPointsInBox(P, aabb, candIndices);
-
-		bool stepAccepted = false;
-		CCVector3 new_dir = curr_dir;
-		// 如果邻域点数足够，尝试拟合
-		if (candIndices.size() >= Nmin)
-		{
-			// 计算邻域点集合的质心
-			CCVector3 centroid(0, 0, 0);
-			for (unsigned idx : candIndices)
-			{
-				centroid += *P->getPoint(idx);
-			}
-			centroid /= (double)candIndices.size();
-
-			// 计算协方差矩阵 (3x3) 用于主方向拟合 (PCA)
-			double cov[3][3] = { {0,0,0},{0,0,0},{0,0,0} };
-			for (unsigned idx : candIndices)
-			{
-				CCVector3 diff = *P->getPoint(idx) - centroid;
-				cov[0][0] += diff.x * diff.x;
-				cov[0][1] += diff.x * diff.y;
-				cov[0][2] += diff.x * diff.z;
-				cov[1][1] += diff.y * diff.y;
-				cov[1][2] += diff.y * diff.z;
-				cov[2][2] += diff.z * diff.z;
-			}
-			cov[1][0] = cov[0][1];
-			cov[2][0] = cov[0][2];
-			cov[2][1] = cov[1][2];
-
-			// 功率迭代法近似求最大特征向量 (主方向)
-			new_dir = curr_dir;
-			for (int iter = 0; iter < 5; ++iter)
-			{
-				CCVector3 v(
-					cov[0][0] * new_dir.x + cov[0][1] * new_dir.y + cov[0][2] * new_dir.z,
-					cov[1][0] * new_dir.x + cov[1][1] * new_dir.y + cov[1][2] * new_dir.z,
-					cov[2][0] * new_dir.x + cov[2][1] * new_dir.y + cov[2][2] * new_dir.z
-				);
-				v.normalize();
-				new_dir = v;
-			}
-
-			// 计算拟合残差 (点到拟合直线的平方误差均值)
-			double mse = 0.0;
-			for (unsigned idx : candIndices)
-			{
-				CCVector3 diff = *P->getPoint(idx) - centroid;
-				CCVector3 crossProd = diff.cross(new_dir);
-				double dist2 = crossProd.norm2d(); // 距离的平方
-				mse += dist2;
-			}
-			mse /= candIndices.size();
-
-			double angle = acos(curr_dir.dot(new_dir)); // 方向变化角度
-			// 检查误差阈值和方向阈值
-			if (mse <= epsilon_max && angle <= theta_max)
-			{
-				stepAccepted = true;
-			}
-		}
-
-		if (stepAccepted)
-		{
-			// 接受拟合结果，生成新端点
-			CCVector3 next_pt = curr_pt + new_dir * L;
-			result.push_back(next_pt);
-			curr_pt = next_pt;
-			curr_dir = new_dir;
-			continue;
-		}
-		else
-		{
-			// 不满足条件，执行跳跃延伸
-			bool found = false;
-			CCVector3 search_pt = curr_pt;
-			for (unsigned k = 1; k <= Kmax; ++k)
-			{
-				// 沿当前方向跳跃
-				search_pt = search_pt + curr_dir * L;
-				// 更新矩形中心
-				rectCenter = search_pt + curr_dir * (L / 2.0);
-				// 更新角点和包围盒
-				corners[0] = rectCenter + curr_dir * halfLength + right * halfWidth;
-				corners[1] = rectCenter + curr_dir * halfLength - right * halfWidth;
-				corners[2] = rectCenter - curr_dir * halfLength + right * halfWidth;
-				corners[3] = rectCenter - curr_dir * halfLength - right * halfWidth;
-				ccBBox aabbJump;
-				aabbJump.add(corners[0]);
-				aabbJump.add(corners[1]);
-				aabbJump.add(corners[2]);
-				aabbJump.add(corners[3]);
-
-				candIndices.clear();
-				//octree->getPointsInBox(aabbJump, candIndices);
-				getPointsInBox(P, aabbJump, candIndices);
-
-
-				// 如果找到足够点，尝试拟合
-				if (candIndices.size() >= Nmin)
-				{
-					// 计算质心
-					CCVector3 centroid(0, 0, 0);
-					for (unsigned idx : candIndices)
-						centroid += *P->getPoint(idx);
-					centroid /= (double)candIndices.size();
-					// 计算协方差矩阵
-					double cov2[3][3] = { {0,0,0},{0,0,0},{0,0,0} };
-					for (unsigned idx : candIndices)
-					{
-						CCVector3 diff = *P->getPoint(idx) - centroid;
-						cov2[0][0] += diff.x * diff.x;
-						cov2[0][1] += diff.x * diff.y;
-						cov2[0][2] += diff.x * diff.z;
-						cov2[1][1] += diff.y * diff.y;
-						cov2[1][2] += diff.y * diff.z;
-						cov2[2][2] += diff.z * diff.z;
-					}
-					cov2[1][0] = cov2[0][1];
-					cov2[2][0] = cov2[0][2];
-					cov2[2][1] = cov2[1][2];
-
-					// 求特征向量
-					CCVector3 new_dir2 = curr_dir;
-					for (int iter = 0; iter < 5; ++iter)
-					{
-						CCVector3 v(
-							cov2[0][0] * new_dir2.x + cov2[0][1] * new_dir2.y + cov2[0][2] * new_dir2.z,
-							cov2[1][0] * new_dir2.x + cov2[1][1] * new_dir2.y + cov2[1][2] * new_dir2.z,
-							cov2[2][0] * new_dir2.x + cov2[2][1] * new_dir2.y + cov2[2][2] * new_dir2.z
-						);
-						v.normalize();
-						new_dir2 = v;
-					}
-
-					// 计算残差
-					double mse2 = 0.0;
-					for (unsigned idx : candIndices)
-					{
-						CCVector3 diff = *P->getPoint(idx) - centroid;
-						CCVector3 crossProd = diff.cross(new_dir2);
-						double dist2 = crossProd.norm2d();
-						mse2 += dist2;
-					}
-					mse2 /= candIndices.size();
-
-					double angle2 = acos(curr_dir.dot(new_dir2));
-					if (mse2 <= epsilon_max && angle2 <= theta_max)
-					{
-						// 接受拟合结果
-						CCVector3 next_pt = search_pt + new_dir2 * L;
-						result.push_back(next_pt);
-						curr_pt = next_pt;
-						curr_dir = new_dir2;
-						found = true;
-						break;
-					}
-				}
-			}
-			if (!found)
-			{
-				// 跳跃失败，终止提取
-				break;
-			}
-		}
-	}
-
-	return result;
-}
