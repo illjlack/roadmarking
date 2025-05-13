@@ -79,7 +79,7 @@ private slots:
 	void addCloudToDB(ccPointCloud* cloud);
 
 private:
-	void showThresholdHistogram(ccPointCloud* pointCloud, bool isfilterIntensity, bool is_has_threshold = true, float lowerThreshold = 50, float upperThreshold = 200);
+	void showThresholdHistogram(ccPointCloud* pointCloud, bool isfilterIntensity, bool is_has_threshold = true, float lowerThreshold = 50, float upperThreshold = 250);
 
 	bool m_selecting = false;          // 是否正在选择
 	ccHObject* p_select_cloud = nullptr; // 选择的点云对象

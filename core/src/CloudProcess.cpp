@@ -1029,6 +1029,7 @@ void getPointsInBox(ccPointCloud* cloud,
 	boxParams.level = cloud->getOctree()->findBestLevelForAGivenNeighbourhoodSizeExtraction(std::min(L,W));
 	cloud->getOctree()->getPointsInBoxNeighbourhood(boxParams);
 
+	points.clear();
 	for (auto p : boxParams.neighbours)
 	{
 		points.push_back(*p.point);
@@ -1070,248 +1071,438 @@ ccPointCloud* CloudProcess::rotate_cloud(ccPointCloud* P, const CCVector3& now_v
 	return PointCloudIO::convert_to_ccCloudPtr(rotatedCloud).release();
 }
 
-void fitLineAndErode(PCLCloudPtr cloud, float distance_threshold, PCLCloudPtr cloud_filtered)
+/// <summary>
+/// 使用 RANSAC 方法在输入点云上拟合一条直线，提取距离模型内点的阈值范围内的点云。
+/// 并可选地计算该直线的单位方向向量及沿该方向的两个最远端点。
+/// </summary>
+/// <param name="cloud">输入点云的指针，包含待分割的点数据。</param>
+/// <param name="distance_threshold">距离阈值，点到拟合直线的最大允许距离。</param>
+/// <param name="cloud_filtered">输出点云的指针，提取出的直线内点将存入此点云。</param>
+/// <param name="direction">
+/// 可选。若不为 nullptr，则赋值为拟合直线的单位方向向量；
+/// 传入 nullptr 可跳过方向计算。
+/// </param>
+/// <param name="endpoint_min">
+/// 可选。若不为 nullptr，则赋值为沿方向投影最小的端点坐标；
+/// 传入 nullptr 可跳过此端点计算。
+/// </param>
+/// <param name="endpoint_max">
+/// 可选。若不为 nullptr，则赋值为沿方向投影最大的端点坐标；
+/// 传入 nullptr 可跳过此端点计算。
+/// </param>
+void fitLineAndErode(
+	PCLCloudPtr cloud,
+	float distance_threshold,
+	PCLCloudPtr cloud_filtered,
+	Eigen::Vector3f* direction = nullptr,
+	Eigen::Vector3f* endpoint_min = nullptr,
+	Eigen::Vector3f* endpoint_max = nullptr)
 {
-	// 创建一个SAC分割对象，用来从点云中提取直线
+	// 1. 分割直线模型
 	pcl::SACSegmentation<pcl::PointXYZ> seg;
 	pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
 	pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
 
-	// 设置模型类型和方法类型
-	seg.setMethodType(pcl::SAC_RANSAC);
 	seg.setOptimizeCoefficients(true);
-
-	// 设置分割条件：直线模型
 	seg.setModelType(pcl::SACMODEL_LINE);
-	seg.setDistanceThreshold(distance_threshold); // 设置距离阈值，去除离线段较远的点
-
-	// 执行分割，得到直线模型
+	seg.setMethodType(pcl::SAC_RANSAC);
+	seg.setDistanceThreshold(distance_threshold);
 	seg.setInputCloud(cloud);
 	seg.segment(*inliers, *coefficients);
 
-	// 如果没有找到符合条件的内点，退出函数
-	if (inliers->indices.size() == 0)
-	{
+	if (inliers->indices.empty())
 		return;
-	}
 
-	// 提取与直线模型相关的点
+	// 2. 提取直线内点
 	pcl::ExtractIndices<pcl::PointXYZ> extract;
 	extract.setInputCloud(cloud);
 	extract.setIndices(inliers);
-	extract.setNegative(false); // 保留点云中的直线部分
+	extract.setNegative(false);
 	extract.filter(*cloud_filtered);
+
+	// 如果调用者需要方向或端点，再继续下面的计算
+	if (direction || endpoint_min || endpoint_max)
+	{
+		// 3. 读取直线参数
+		Eigen::Vector3f p0(coefficients->values[0],
+			coefficients->values[1],
+			coefficients->values[2]);
+		Eigen::Vector3f dir(coefficients->values[3],
+			coefficients->values[4],
+			coefficients->values[5]);
+		dir.normalize();
+
+		// 4. 在 cloud_filtered 中找投影 t 的最小/最大值
+		float t_min = std::numeric_limits<float>::max();
+		float t_max = -std::numeric_limits<float>::max();
+		for (const auto& pt : cloud_filtered->points) {
+			Eigen::Vector3f p(pt.x, pt.y, pt.z);
+			float t = (p - p0).dot(dir);
+			t_min = std::min(t_min, t);
+			t_max = std::max(t_max, t);
+		}
+
+		// 5. 根据调用者需求写回结果
+		if (direction) {
+			*direction = dir;
+		}
+		if (endpoint_min) {
+			*endpoint_min = p0 + t_min * dir;
+		}
+		if (endpoint_max) {
+			*endpoint_max = p0 + t_max * dir;
+		}
+	}
 }
 
-/*
-延伸直线、跨越断裂
-*/
-void CloudProcess::grow_line_from_seed(ccPointCloud* P,
+/// <summary>
+/// 在 RANSAC 提取的 inliers 点云上，
+/// 按全局方向 dir 排序后截取末端 tail_ratio 比例的点集，
+/// 对这段点集做 PCA，仅计算局部末端的主方向（延伸方向）。
+/// </summary>
+/// <param name="cloud_filtered">
+/// RANSAC 提取的 inliers 点云（已去除大弯曲与噪声）
+/// </param>
+/// <param name="p0">
+/// RANSAC 拟合直线模型上一点，用于计算投影参数
+/// </param>
+/// <param name="dir">
+/// RANSAC 拟合直线的单位方向向量
+/// </param>
+/// <param name="tail_ratio">
+/// 截取末端点云的比例，(0,1]，例如 0.3 表示保留最后 30% 的点
+/// </param>
+/// <param name="end_dir">
+/// 输出参数：计算得到的局部末端延伸方向（单位向量）
+/// </param>
+/// <summary>
+/// 对 RANSAC 提取的 inliers 点云进行局部 PCA，
+/// 按全局方向 dir 排序后截取末端 tail_ratio 比例的点集，
+/// 计算该段的主方向（延伸方向）。
+/// </summary>
+/// <param name="cloud_filtered">
+///   RANSAC 提取的 inliers 点云
+/// </param>
+/// <param name="dir">
+///   RANSAC 拟合直线的单位方向向量
+/// </param>
+/// <param name="tail_ratio">
+///   截取末端点云的比例 (0,1]
+/// </param>
+/// <param name="end_dir">
+///   输出：局部末端延伸方向（单位向量）
+/// </param>
+void computeEndDirectionPCA(
+	PCLCloudPtr cloud_filtered,
+	const Eigen::Vector3f& dir,
+	float tail_ratio,
+	Eigen::Vector3f& end_dir)
+{
+	struct TP { float t; Eigen::Vector3f p; };
+	std::vector<TP> proj_pts;
+	proj_pts.reserve(cloud_filtered->size());
+
+	// 1. 直接用 p·dir 排序
+	for (auto& pt : cloud_filtered->points) {
+		Eigen::Vector3f p(pt.x, pt.y, pt.z);
+		proj_pts.push_back({ p.dot(dir), p });
+	}
+	std::sort(proj_pts.begin(), proj_pts.end(),
+		[](auto& a, auto& b) { return a.t < b.t; });
+
+	// 2. 截取末端 tail_ratio 部分
+	size_t N = proj_pts.size();
+	size_t start = static_cast<size_t>(N * (1.0f - tail_ratio));
+	if (start >= N) start = 0;
+
+	std::vector<Eigen::Vector3f> tail_pts;
+	tail_pts.reserve(N - start);
+	for (size_t i = start; i < N; ++i)
+		tail_pts.push_back(proj_pts[i].p);
+
+	// 3. 点太少时退回全局方向
+	if (tail_pts.size() < 2) {
+		end_dir = dir;
+		return;
+	}
+
+	// 4. 计算尾段质心
+	Eigen::Vector3f mean = Eigen::Vector3f::Zero();
+	for (auto& p : tail_pts) mean += p;
+	mean /= tail_pts.size();
+
+	// 5. 协方差矩阵
+	Eigen::Matrix3f C = Eigen::Matrix3f::Zero();
+	for (auto& p : tail_pts) {
+		Eigen::Vector3f d = p - mean;
+		C += d * d.transpose();
+	}
+	C /= tail_pts.size();
+
+	// 6. 特征分解，取主方向
+	Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> es(C);
+	end_dir = es.eigenvectors().col(2).normalized();
+
+	if (dir.dot(end_dir) < 0)
+	{
+		end_dir = -end_dir;
+	}
+}
+
+
+void CloudProcess::grow_line_from_seed(
+	ccPointCloud* P,
 	const CCVector3& p0,
 	const CCVector3& v0,
 	ccPointCloud* select_points,
 	std::vector<CCVector3>& result,
-	ccGLWindowInterface* m_glWindow, // debug
-	bool isGetGround,
-	double W,
-	double L,
-	unsigned Nmin,
-	double theta_max,
-	unsigned Kmax)
+	ccGLWindowInterface* m_glWindow,
+	bool                     isGetGround,
+	bool                     doFitLine,       // 新增：是否在每步用 RANSAC 拟合直线
+	bool                     useDynamicRect,  // 新增：是否在生长时动态平移矩形
+	double                   W,
+	double                   L,
+	unsigned                 Nmin,
+	double                   theta_max,
+	unsigned                 Kmax
+)
 {
-	if (!P || !select_points)return;
+	// 1. 输入校验
+	if (!P || !select_points) return;
 
+	// 2. 选择地面或原始点云
+	ccPointCloud* ground = isGetGround ? PointCloudIO::get_ground_cloud(P) : P;
+
+	// 3. 当前点与方向
 	CCVector3 curr_pt = p0;
 	CCVector3 curr_dir = v0;
-	unsigned jumpCount = 0;
+	curr_dir.normalize();
 
-
-	ccPointCloud* ground = isGetGround?PointCloudIO::get_ground_cloud(P):P;
-	// 初步估计高程
-	if (ground->size())
-	{
+	// 4. 初步估计高程
+	if (ground->size()) {
 		curr_pt.z = ground->getPoint(0)->z;
-		std::vector<CCVector3> points;
-		getPointsInBox(ground, curr_pt, curr_dir, L, W, points);
-		if(points.size())curr_pt.z = points[0].z;
-		result.push_back(curr_pt);
+		std::vector<CCVector3> tmp;
+		getPointsInBox(ground, curr_pt, curr_dir, L, W, tmp);
+		if (!tmp.empty()) curr_pt.z = tmp[0].z;
 	}
+	result.push_back(curr_pt);
 
-
-
-	// debug计数
-	int cnt = 0;
-
+	// 5. 调试可视化
 	ccHObject* debug = nullptr;
-	if (m_glWindow)
-	{
-		debug = new ccHObject;
-		debug->setName("debug");
-		debug->setVisible(true);
+	if (m_glWindow) {
+		debug = new ccHObject("debug");
 		m_glWindow->addToOwnDB(debug);
 	}
 
-	while (true)
-	{
-		curr_dir.normalize();
-		cnt++;
+	// 6. 预分配 PCL 容器，循环内重复利用，避免额外构造
+	auto raw = std::make_shared<PCLCloud>();
+	auto filtered = std::make_shared<PCLCloud>();
+	auto cloud = std::make_shared<PCLCloud>();
+	auto inliers = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
 
-		float len = L;
+	unsigned jumpCount = 0;
+	int frameCount = 0;
 
-		CCVector3 next_pt = curr_pt + curr_dir * L;
-		std::vector<CCVector3> points;
-		for (;; len += L)
+	// 7. 主循环：不断延伸直线
+	while (true) {
+		frameCount++;
+
+		// 7.1 寻找最大有效点集
+		double len = L;
+		CCVector3 next_pt;
+		int last_size = 0;
+		std::vector<CCVector3> pts;
+
+		while (true)
 		{
 			next_pt = curr_pt + curr_dir * len;
+			
+			getPointsInBox(ground, (curr_pt + next_pt) * 0.5, curr_dir, len, W, pts);
 
-			std::vector<CCVector3> new_points;
-			getPointsInBox(ground, (next_pt + curr_pt) / 2, curr_dir, len , W, new_points);
-
-			if (new_points.size() > points.size() + Nmin)
+			if (doFitLine)
 			{
-				
-				// 偏移让质心居中（现在里面应该是一条线段的点云，进行侵蚀操作）
-				PCLCloudPtr pclCloud(new PCLCloud);
-				for (auto& p : new_points)pclCloud->push_back({ p.x, p.y, p.z });
-				PCLCloudPtr cloud_filtered(new PCLCloud);
-				fitLineAndErode(pclCloud, 0.1, cloud_filtered);
-				new_points.clear();
-				for (auto p : *cloud_filtered)
-				{
-					new_points.push_back({p.x,p.y,p.z});
-				}
-				new_points.swap(points);
-				CCVector3 points_centroid(0, 0, 0);
-				for (const auto& pt : points)
-				{
-					points_centroid += pt;
-				}
-				points_centroid /= points.size();
+				raw->clear();
+				for (auto& p : pts)
+					raw->push_back(pcl::PointXYZ(p.x, p.y, p.z));
 
-				CCVector3 centroid = (curr_pt + next_pt) / 2;
-				CCVector3 offset = points_centroid - centroid;
-				curr_pt += offset;
-				next_pt += offset;
+				filtered->clear();
+				fitLineAndErode(raw, 0.1f, filtered);
+
+				pts.clear();
+				pts.reserve(filtered->size());
+				for (auto& q : *filtered)
+					pts.emplace_back(q.x, q.y, q.z);
+			}
+			
+			if (pts.size() > Nmin)
+			{
+				// 1. 计算点云质心和矩形中心
+				CCVector3 pts_centroid(0, 0, 0);
+				for (auto& bp : pts) pts_centroid += bp;
+				pts_centroid /= pts.size();
+				CCVector3 rect_center = (curr_pt + next_pt) * 0.5;
+
+				// 2. 计算总偏移向量
+				CCVector3 offset = pts_centroid - rect_center;
+
+				// 3. 只保留与 curr_dir 垂直的分量：perp_offset = offset - (offset·dir_n)·dir_n
+				CCVector3 dir_n = curr_dir;
+				dir_n.normalize();
+				float proj_len = offset.dot(dir_n);              // 平行分量长度
+				CCVector3 parallel = dir_n * proj_len;            // 平行分量
+				CCVector3 perp_offset = offset - parallel;        // 垂直分量
+
+				// 4. 仅沿垂直方向平移框
+				curr_pt += perp_offset;
+				next_pt += perp_offset;
+			}
+
+			if (useDynamicRect && pts.size() >= last_size + Nmin)
+			{
+				last_size = pts.size();
+				len += L;
 			}
 			else
 			{
 				break;
 			}
 		}
-		
-		if(debug){
+
+		// 7.2 点数不足：跳跃或结束
+		if (pts.size() < Nmin) {
+			if (++jumpCount > Kmax) break;
+			
+			if (debug) {
+				CCVector3 dv(-curr_dir.y, curr_dir.x, 0);
+				dv.normalize();
+				ccPointCloud* dbgCloud = new ccPointCloud;
+				dbgCloud->addPoint(curr_pt + dv * W * 0.5);
+				dbgCloud->addPoint(curr_pt - dv * W * 0.5);
+				dbgCloud->addPoint(next_pt - dv * W * 0.5);
+				dbgCloud->addPoint(next_pt + dv * W * 0.5);
+				ccPolyline* poly = new ccPolyline(dbgCloud);
+				for (int i = 0; i < 4; ++i) poly->addPointIndex(i);
+				poly->addPointIndex(0);
+				poly->setName(QString("jumpCount %1 pts:%2").arg(jumpCount).arg(pts.size()));
+				debug->addChild(poly);
+			}
+			curr_pt = next_pt;
+			continue;
+		}
+
+		// 7.3 全局 RANSAC 拟合直线并提取 inliers
+		cloud->clear();
+		for (auto& p : pts)
+			cloud->push_back(pcl::PointXYZ(p.x, p.y, p.z));
+
+		inliers->clear();
+		Eigen::Vector3f eigenDir, epMin, epMax;
+		fitLineAndErode(cloud, 0.1f, inliers, &eigenDir, &epMin, &epMax);
+
+		// 7.4 方向一致性修正
+		if (curr_dir.dot(CCVector3(eigenDir.x(), eigenDir.y(), eigenDir.z())) < 0)
+		{
+			eigenDir = -eigenDir;
+			std::swap(epMax, epMin);
+		}
+
+		// 7.5 局部 PCA 计算末端方向
+		Eigen::Vector3f localDir;
+		Eigen::Vector3f diff = epMax - epMin;
+		float segmentLength = diff.norm();
+		float tailRatio = (segmentLength > 0.5f)
+			? 0.5f/segmentLength
+			: 1.0f;
+		if (inliers->size() < 10) tailRatio = 1.0f;
+
+		computeEndDirectionPCA(inliers, eigenDir, tailRatio, localDir);
+
+		// 7.6 角度约束
+		float angle = std::acos(std::clamp(
+			float(curr_dir.dot(CCVector3(localDir.x(), localDir.y(), localDir.z()))), -1.0f, 1.0f));
+		if (angle > theta_max) {
+			if (++jumpCount > Kmax) break;
+			curr_pt = CCVector3(epMax.x(), epMax.y(), epMax.z());
+			continue;
+		}
+
+		jumpCount = 0;
+
+		// debug可视化
+		if (debug) {
 			CCVector3 dv(-curr_dir.y, curr_dir.x, 0);
 			dv.normalize();
-			ccPointCloud* cloud = new ccPointCloud;
-			cloud->addPoint(curr_pt + dv * W / 2);
-			cloud->addPoint(curr_pt - dv * W / 2);
-			cloud->addPoint(next_pt - dv * W / 2);
-			cloud->addPoint(next_pt + dv * W / 2);
-			ccPolyline* poly = new ccPolyline(cloud);
-			poly->addChild(cloud);
+			ccPointCloud* dbgCloud = new ccPointCloud;
+			dbgCloud->addPoint(curr_pt + dv * W * 0.5);
+			dbgCloud->addPoint(curr_pt - dv * W * 0.5);
+			dbgCloud->addPoint(next_pt - dv * W * 0.5);
+			dbgCloud->addPoint(next_pt + dv * W * 0.5);
+			ccPolyline* poly = new ccPolyline(dbgCloud);
+			for (int i = 0; i < 4; ++i) poly->addPointIndex(i);
+			poly->addPointIndex(0);
+			poly->setName(QString("frame %1 pts:%2").arg(frameCount).arg(pts.size()));
 
-			poly->addPointIndex(0);
-			poly->addPointIndex(1);
-			poly->addPointIndex(2);
-			poly->addPointIndex(3);
-			poly->addPointIndex(0);
-			poly->setName(QString("debug_aabb_%1 _cloud_size:%2  _axis:%3,%4,%5").arg(cnt).arg(points.size()).arg(curr_dir[0]).arg(curr_dir[1]).arg(curr_dir[2]));
+			ccPointCloud* dbgSelectCloud = new ccPointCloud;
+			for (auto& p : pts)
+				dbgSelectCloud->addPoint(p);
+			dbgSelectCloud->setName(QString("frame %1 select cloud").arg(frameCount));
 			debug->addChild(poly);
+			debug->addChild(dbgSelectCloud);
+
+			// 标注末端方向
+			{
+				// arrowLen 为可视化长度，可按需要调节
+				const float arrowLen = static_cast<float>(L);
+				CCVector3 dirCC(localDir.x(), localDir.y(), localDir.z());
+				dirCC.normalize();
+				CCVector3 arrowStart= {epMax.x(), epMax.y(), epMax.z()};
+				ccPointCloud* arrowCloud = new ccPointCloud;
+				arrowCloud->addPoint(arrowStart);
+				arrowCloud->addPoint(arrowStart+ dirCC * arrowLen);
+				ccPolyline* arrowLine = new ccPolyline(arrowCloud);
+				arrowLine->addPointIndex(0);
+				arrowLine->addPointIndex(1);
+				arrowLine->setName(QString("Dir frame %1").arg(frameCount));
+				debug->addChild(arrowLine);
+			}
+
+			// 标注最小端点 epMin
+			{
+				CCVector3 pMin(epMin.x(), epMin.y(), epMin.z());
+				ccPointCloud* epMinCloud = new ccPointCloud;
+				epMinCloud->addPoint(pMin);
+				epMinCloud->setName(QString("epMin frame %1").arg(frameCount));
+				// 设置点的显示大小和颜色（假设 ccPointCloud 支持 setPointSize 和 setTempColor）
+				epMinCloud->setPointSize(5);
+				epMinCloud->setTempColor(ccColor::red);
+				debug->addChild(epMinCloud);
+			}
+
+			// 标注最大端点 epMax
+			{
+				CCVector3 pMax(epMax.x(), epMax.y(), epMax.z());
+				ccPointCloud* epMaxCloud = new ccPointCloud;
+				epMaxCloud->addPoint(pMax);
+				epMaxCloud->setName(QString("epMax frame %1").arg(frameCount));
+				epMaxCloud->setPointSize(5);
+				epMaxCloud->setTempColor(ccColor::green);
+				debug->addChild(epMaxCloud);
+			}
 		}
 
-		for (auto point : points)
-		{
-			select_points->addPoint(point);
-		}
+		// 7.7 更新当前点和方向
+		curr_pt = CCVector3(epMax.x(), epMax.y(), epMax.z());
+		curr_dir = CCVector3(
+			localDir.x(), localDir.y(), localDir.z()
+		);
+		curr_dir.normalize();
 
-		int last_num = 1;
-
-		// 如果找到足够的点，继续延伸
-		if (points.size() >= Nmin)
-		{
-			Eigen::Vector4f centroid;
-			Eigen::Vector3f axis;
-			getPointsCentroidAndAxis(points, centroid, axis);
-			axis.normalize();
-
-			CCVector3 axis_n = { axis[0], axis[1], axis[2] };
-
-			// 判断框内是否是线段
-			// 旋转判断包围盒是否为长宽分明（1/2以上）的矩形
-			{
-				PCLCloudPtr pclCloud(new PCLCloud);
-				for (auto& p : points)pclCloud->push_back({p.x, p.y, p.z});
-				PCLCloudPtr rot_cloud = rotate_cloud(pclCloud, axis, {1,0,0}); // 长与x轴对齐
-
-				pcl::PointXYZ min_pt, max_pt;
-				pcl::getMinMax3D(*rot_cloud, min_pt, max_pt);
-
-				float length = max_pt.x - min_pt.x; // 长
-				float width = max_pt.y - min_pt.y;	// 宽
-
-				// 判断长宽比是否大于等于 1/2
-				if (width*2 > length)
-				{
-					jumpCount++;
-					curr_pt = next_pt;
-					// 丢弃这个片段
-					continue;
-				}
-			}
-
-
-			if (fabs(axis_n.z) > (fabs(axis_n.x) + fabs(axis_n.y))*10)
-			{
-				// xy方向特征太小了
-				break;
-			}
-
-			if (curr_dir.dot(axis_n) < 0)
-			{
-				axis_n = -axis_n;
-			}
-
-			axis_n.normalize();
-
-			float cosAngle = curr_dir.dot(axis_n);
-			cosAngle = std::clamp(cosAngle, -1.0f, 1.0f);
-			float angleRad = std::acos(cosAngle);
-			//float angleDeg = angleRad * 180.0f / static_cast<float>(M_PI);
-			if (angleRad > theta_max) //角度限制
-			{
-				jumpCount++;
-				curr_pt = next_pt;
-				continue;
-			}
-
-
-			curr_pt = next_pt;
-			curr_dir = curr_dir*last_num + axis_n* points.size();  // 用点的数量做权值
-			last_num = points.size();
-			axis[2] = 0;
-			curr_dir.normalize();
-			result.push_back(curr_pt);  // 将新点加入结果
-
-			// 重置跳跃计数器
-			jumpCount = 0;
-		}
-		else
-		{
-			// 否则，进行跳跃（向前延伸）
-			jumpCount++;
-
-			// 如果超过最大跳跃次数，停止延伸
-			if (jumpCount > Kmax)
-			{
-				break;
-			}
-
-			// 否则，继续跳跃
-			curr_pt = next_pt; // 更新当前点
-		}
+		// 7.8 保存结果
+		result.push_back(curr_pt);
+		for (auto& p : pts)
+			select_points->addPoint(p);
 	}
 }
-
 
 
 

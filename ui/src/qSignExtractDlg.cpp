@@ -297,27 +297,32 @@ void qSignExtractDlg::onPointGrowExtract()
 	m_foregroundPolylineEditor->setCallbackfunc([&]
 		{
 			SettingsDialog settingsDialog;
-			settingsDialog.setDescription("参数：\n"
+			settingsDialog.setDescription(
+				"参数：\n"
 				"调试模式：是否开启调试显示（将线显示在窗口上）\n"
-				"是否进行额外的csf提取地面：\n"
-				"是否允许相交：(线往前延伸时，是否判断局部点云为线段，允许相交则不判断，不允许则判断)\n"
+				"是否进行额外的 csf 提取地面：\n"
+				"是否拟合直线：\n"
+				"是否使用动态矩形：\n"
 				"矩形宽度(m)：线生长的宽度\n"
 				"生长步长(m)：每次扩展的长度\n"
 				"最小点数：每段线段需要包含的最少点数\n"
 				"最大弯折角度(度)：线段间允许的最大弯折角度\n"
-				"最大跳跃次数：尝试跳跃的最大次数（用于处理断开的线）");
+				"最大跳跃次数：尝试跳跃的最大次数（用于处理断开的线）"
+			);
 
 			// 布尔值
 			settingsDialog.registerComponent<bool>("开启调试显示", "debugEnabled", false);
 			settingsDialog.registerComponent<bool>("开启提取地面", "isGetGround", false);
+			settingsDialog.registerComponent<bool>("拟合直线", "doFitLine", false);
+			settingsDialog.registerComponent<bool>("使用动态矩形", "useDynamicRect", true);
 
 			// 浮点值
-			settingsDialog.registerComponent<float>("矩形宽度", "W", 0.4);
-			settingsDialog.registerComponent<float>("生长步长", "L", 2.0);
-			settingsDialog.registerComponent<float>("最大弯折角度(度)", "theta_max_degrees", 45.0);
+			settingsDialog.registerComponent<float>("矩形宽度", "W", 1.0f);
+			settingsDialog.registerComponent<float>("生长步长", "L", 2.0f);
+			settingsDialog.registerComponent<float>("最大弯折角度(度)", "theta_max_degrees", 45.0f);
 
 			// 整数值
-			settingsDialog.registerComponent<int>("最小点数", "Nmin", 50);
+			settingsDialog.registerComponent<int>("最小点数", "Nmin", 20);
 			settingsDialog.registerComponent<int>("最大跳跃次数", "Kmax", 10);
 
 			if (settingsDialog.exec() != QDialog::Accepted)
@@ -328,13 +333,14 @@ void qSignExtractDlg::onPointGrowExtract()
 			// 参数提取
 			bool debugEnabled = parameters["debugEnabled"].toBool();
 			bool isGetGround = parameters["isGetGround"].toBool();
+			bool doFitLine = parameters["doFitLine"].toBool();
+			bool useDynamicRect = parameters["useDynamicRect"].toBool();
 			double W = parameters["W"].toFloat();
 			double L = parameters["L"].toFloat();
-			int Nmin = parameters["Nmin"].toUInt();
-			double theta_max = parameters["theta_max_degrees"].toFloat() * M_PI / 180.0; // 角度转弧度
-			int Kmax = parameters["Kmax"].toUInt();
-
-
+			int    Nmin = parameters["Nmin"].toUInt();
+			double theta_max = parameters["theta_max_degrees"]
+				.toFloat() * M_PI / 180.0; // 角度转弧度
+			int    Kmax = parameters["Kmax"].toUInt();
 
 			std::vector<CCVector3d> polyline;
 			m_foregroundPolylineEditor->getPoints(polyline);
@@ -352,8 +358,23 @@ void qSignExtractDlg::onPointGrowExtract()
 			ccPointCloud* cloud= new ccPointCloud;
 			std::vector<CCVector3>line;
 
-			CloudProcess::grow_line_from_seed(static_cast<ccPointCloud*>(p_select_cloud), p0, v0, cloud, line,
-				debugEnabled?m_glWindow:nullptr, isGetGround,W, L, Nmin, theta_max, Kmax);
+			CloudProcess::grow_line_from_seed(
+				static_cast<ccPointCloud*>(p_select_cloud),
+				p0,
+				v0,
+				cloud,
+				line,
+				debugEnabled ? m_glWindow : nullptr,
+				isGetGround,
+				doFitLine,        
+				useDynamicRect,
+				W,
+				L,
+				Nmin,
+				theta_max,
+				Kmax
+			);
+
 
 			ccPointCloud* ccCloud = new ccPointCloud;
 			// 创建ccPolyline对象
@@ -604,10 +625,9 @@ void ForegroundPolylineEditor::finishDraw(bool doAction)
 {
 	isFreezeUI = true;
 
-	if (isClosed)m_3DPoints.push_back(m_3DPoints[0]);
-
 	if (doAction && m_callback)
 	{
+		if (isClosed)m_3DPoints.push_back(m_3DPoints[0]);
 		m_callback();
 	}
 	m_glWindow->setInteractionMode(interaction_flags_backup);
