@@ -31,6 +31,7 @@
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
+#include <opencv2/opencv.hpp>
 
 using namespace roadmarking;
 
@@ -984,8 +985,8 @@ void getPointsInBox(ccPointCloud* cloud,
 /// <param name="cloud">点云</param>
 /// <param name="C">矩形中心</param>
 /// <param name="dir">矩形长边方向</param>
-/// <param name="halfL">半长</param>
-/// <param name="halfW">半宽</param>
+/// <param name="L">长</param>
+/// <param name="W">宽</param>
 /// <param name="indices">输出参数：在矩形内的点</param>
 void getPointsInBox(ccPointCloud* cloud,
 	const CCVector3& C,
@@ -1035,6 +1036,67 @@ void getPointsInBox(ccPointCloud* cloud,
 		points.push_back(*p.point);
 	}
 }
+
+
+/// <summary>
+/// 从矩形中筛选出等腰三角形内的点
+/// 三角形的顶点为 startPt，高为 height，底边长为 baseLen，dir 为高的方向（单位向量）
+/// </summary>
+void getPointsInIsoscelesTriangleRegion(
+	ccPointCloud* cloud,
+	const CCVector3& startPt,
+	const CCVector3& dir,         // 高的方向（单位向量）
+	float height,                 // 高
+	float baseLen,                // 底边长度
+	std::vector<CCVector3>& trianglePoints)
+{
+	// Step 1: 算出底边中心点
+	CCVector3 centerBase = startPt + dir * height;
+
+	// Step 2: 算出高的中点作为 box 的中心
+	CCVector3 boxCenter = (startPt + centerBase) / 2.0f;
+
+	// Step 3: 用 getPointsInBox 得到初步候选点
+	std::vector<CCVector3> boxPoints;
+	getPointsInBox(cloud, boxCenter, dir, height, baseLen, boxPoints);
+
+	// Step 4: 构造底边方向（垂直于高）
+	CCVector3 perp(-dir.y, dir.x, 0);  // 顺时针旋转90度
+	perp.normalize();
+
+	// Step 5: 构造三角形三点
+	CCVector3 A = startPt;
+	CCVector3 B = centerBase + perp * (baseLen / 2.0f);
+	CCVector3 C = centerBase - perp * (baseLen / 2.0f);
+
+	// Step 6: 使用重心坐标法判断点是否在三角形 ABC 内
+	for (const CCVector3& P : boxPoints)
+	{
+		CCVector3 v0 = C - A;
+		CCVector3 v1 = B - A;
+		CCVector3 v2 = P - A;
+
+		float dot00 = v0.dot(v0);
+		float dot01 = v0.dot(v1);
+		float dot02 = v0.dot(v2);
+		float dot11 = v1.dot(v1);
+		float dot12 = v1.dot(v2);
+
+		float denom = dot00 * dot11 - dot01 * dot01;
+		if (fabs(denom) < 1e-6)
+			continue;
+
+		float u = (dot11 * dot02 - dot01 * dot12) / denom;
+		float v = (dot00 * dot12 - dot01 * dot02) / denom;
+
+		if (u >= 0 && v >= 0 && (u + v <= 1))
+		{
+			trianglePoints.push_back(P);
+		}
+	}
+}
+
+
 
 PCLCloudPtr CloudProcess::rotate_cloud(PCLCloudPtr pclCloud, const Eigen::Vector3f& now_v, const Eigen::Vector3f& new_v)
 {
@@ -1090,7 +1152,7 @@ ccPointCloud* CloudProcess::rotate_cloud(ccPointCloud* P, const CCVector3& now_v
 /// 可选。若不为 nullptr，则赋值为沿方向投影最大的端点坐标；
 /// 传入 nullptr 可跳过此端点计算。
 /// </param>
-void fitLineAndErode(
+void fitLineByRANSAC(
 	PCLCloudPtr cloud,
 	float distance_threshold,
 	PCLCloudPtr cloud_filtered,
@@ -1107,6 +1169,7 @@ void fitLineAndErode(
 	seg.setModelType(pcl::SACMODEL_LINE);
 	seg.setMethodType(pcl::SAC_RANSAC);
 	seg.setDistanceThreshold(distance_threshold);
+	seg.setNumberOfThreads(0);
 	seg.setInputCloud(cloud);
 	seg.segment(*inliers, *coefficients);
 
@@ -1152,6 +1215,101 @@ void fitLineAndErode(
 		if (endpoint_max) {
 			*endpoint_max = p0 + t_max * dir;
 		}
+	}
+}
+
+/// <summary>
+/// 从固定起点 start_point 沿 dir 大致方向，用“矩形走廊”方法搜索 ±30° 扫描，
+/// 选出最大 inliers 对应的精确方向。
+/// </summary>
+void fitLineByBox(
+	PCLCloudPtr                    cloud,
+	float                          distance_threshold,
+	const Eigen::Vector3f& start_point,
+	const Eigen::Vector3f& dir,
+	PCLCloudPtr                    cloud_filtered,
+	Eigen::Vector3f* direction = nullptr,
+	Eigen::Vector3f* endpoint_min = nullptr,
+	Eigen::Vector3f* endpoint_max = nullptr)
+{
+	if (!cloud || !cloud_filtered) return;
+
+	// 1. 归一化中心方向
+	Eigen::Vector3f d0 = dir.normalized();
+	float half_w = distance_threshold;
+
+	// 2. 准备“上下浮动”范围：±30°
+	constexpr float maxAngleRad = 30.0f * static_cast<float>(M_PI) / 180.0f;
+	const int   numSteps = 61;  // 扫描粒度：每度一次
+
+	// 3. 确定“摆动轴”：取 d0 与全局“上”（0,0,1）做叉乘，如果平行再换 (1,0,0)
+	Eigen::Vector3f up(0, 0, 1);
+	if (std::fabs(d0.dot(up)) > 0.99f) up = Eigen::Vector3f(1, 0, 0);
+	Eigen::Vector3f swingAxis = d0.cross(up).normalized();
+
+	// 4. 对每个候选角度投票
+	size_t bestCount = 0;
+	float  bestMaxProj = 0.0f;
+	float  bestAngle = 0.0f;
+
+	for (int i = 0; i < numSteps; ++i)
+	{
+		// 线性插值角度
+		float angle = -maxAngleRad + (2 * maxAngleRad) * (float(i) / (numSteps - 1));
+		Eigen::Vector3f dcand = Eigen::AngleAxisf(angle, swingAxis) * d0;
+
+		// 统计 inliers 并记录最大投影长度
+		size_t count = 0;
+		float  maxProj = -std::numeric_limits<float>::infinity();
+		for (const auto& pt : cloud->points)
+		{
+			Eigen::Vector3f p(pt.x, pt.y, pt.z);
+			Eigen::Vector3f v = p - start_point;
+			float proj = v.dot(dcand);
+			float perp = (v - dcand * proj).norm();
+			if (proj >= 0.0f && perp <= half_w)
+			{
+				++count;
+				if (proj > maxProj) maxProj = proj;
+			}
+		}
+
+		if (count > bestCount)
+		{
+			bestCount = count;
+			bestMaxProj = maxProj;
+			bestAngle = angle;
+		}
+	}
+
+	// 5. 选出最佳方向，重新填充滤波点云和端点
+	Eigen::Vector3f bestDir = Eigen::AngleAxisf(bestAngle, swingAxis) * d0;
+	cloud_filtered->clear();
+	float max_proj = -std::numeric_limits<float>::infinity();
+	for (const auto& pt : cloud->points)
+	{
+		Eigen::Vector3f p(pt.x, pt.y, pt.z);
+		Eigen::Vector3f v = p - start_point;
+		float proj = v.dot(bestDir);
+		float perp = (v - bestDir * proj).norm();
+		if (proj >= 0.0f && perp <= half_w)
+		{
+			cloud_filtered->push_back(pt);
+			if (proj > max_proj) max_proj = proj;
+		}
+	}
+
+	// 输出生长方向
+	if (direction)    *direction = bestDir;
+	// 最小端点始终是起点
+	if (endpoint_min) *endpoint_min = start_point;
+	// 最大端点
+	if (endpoint_max)
+	{
+		if (bestCount > 0)
+			*endpoint_max = start_point + bestDir * max_proj;
+		else
+			*endpoint_max = start_point;
 	}
 }
 
@@ -1317,7 +1475,9 @@ void CloudProcess::grow_line_from_seed(
 		{
 			next_pt = curr_pt + curr_dir * len;
 			
-			getPointsInBox(ground, (curr_pt + next_pt) * 0.5, curr_dir, len, W, pts);
+			//getPointsInBox(ground, (curr_pt + next_pt) * 0.5, curr_dir, len, W, pts);
+			getPointsInIsoscelesTriangleRegion(ground, curr_pt, curr_dir, len, W, pts);
+
 
 			if (doFitLine)
 			{
@@ -1326,8 +1486,26 @@ void CloudProcess::grow_line_from_seed(
 					raw->push_back(pcl::PointXYZ(p.x, p.y, p.z));
 
 				filtered->clear();
-				fitLineAndErode(raw, 0.1f, filtered);
-
+				//fitLineByRANSAC(raw, 0.1f, filtered);
+				if (len == L) //第一次使用fitLineByRANSAC来确定起点
+				{
+					Eigen::Vector3f eigenDir, epMin, epMax;
+					fitLineByRANSAC(raw, 0.1f, filtered, &eigenDir, &epMin, &epMax);
+					if (filtered->size() > Nmin)
+					{
+						if (curr_dir.dot(CCVector3(eigenDir.x(), eigenDir.y(), eigenDir.z())) < 0)
+						{
+							eigenDir = -eigenDir;
+							std::swap(epMax, epMin);
+						}
+						curr_pt = { epMin.x(), epMin.y(), epMin.z() };
+						curr_dir = { eigenDir.x(), eigenDir.y(), eigenDir.z() };
+					}
+				}
+				else
+				{
+					fitLineByRANSAC(raw, 0.1f, filtered);
+				}
 				pts.clear();
 				pts.reserve(filtered->size());
 				for (auto& q : *filtered)
@@ -1384,6 +1562,8 @@ void CloudProcess::grow_line_from_seed(
 				for (int i = 0; i < 4; ++i) poly->addPointIndex(i);
 				poly->addPointIndex(0);
 				poly->setName(QString("jumpCount %1 pts:%2").arg(jumpCount).arg(pts.size()));
+				poly->setColor(ccColor::blue);
+				poly->showColors(true);
 				debug->addChild(poly);
 			}
 			curr_pt = next_pt;
@@ -1397,7 +1577,8 @@ void CloudProcess::grow_line_from_seed(
 
 		inliers->clear();
 		Eigen::Vector3f eigenDir, epMin, epMax;
-		fitLineAndErode(cloud, 0.1f, inliers, &eigenDir, &epMin, &epMax);
+		//fitLineByRANSAC(cloud, 0.1f, inliers, &eigenDir, &epMin, &epMax);
+		fitLineByBox(cloud, 0.1f, { curr_pt.x, curr_pt.y, curr_pt.z }, {curr_dir.x, curr_dir.y, curr_dir.z}, inliers, &eigenDir, &epMin, &epMax);
 
 		// 7.4 方向一致性修正
 		if (curr_dir.dot(CCVector3(eigenDir.x(), eigenDir.y(), eigenDir.z())) < 0)
@@ -1410,8 +1591,8 @@ void CloudProcess::grow_line_from_seed(
 		Eigen::Vector3f localDir;
 		Eigen::Vector3f diff = epMax - epMin;
 		float segmentLength = diff.norm();
-		float tailRatio = (segmentLength > 0.5f)
-			? 0.5f/segmentLength
+		float tailRatio = (segmentLength > 0.7f)
+			? 0.7f/segmentLength
 			: 1.0f;
 		if (inliers->size() < 10) tailRatio = 1.0f;
 
@@ -1421,9 +1602,10 @@ void CloudProcess::grow_line_from_seed(
 		float angle = std::acos(std::clamp(
 			float(curr_dir.dot(CCVector3(localDir.x(), localDir.y(), localDir.z()))), -1.0f, 1.0f));
 		if (angle > theta_max) {
-			if (++jumpCount > Kmax) break;
-			curr_pt = CCVector3(epMax.x(), epMax.y(), epMax.z());
-			continue;
+			break;
+			//if (++jumpCount > Kmax) break;
+			//curr_pt = CCVector3(epMax.x(), epMax.y(), epMax.z());
+			//continue;
 		}
 
 		jumpCount = 0;
@@ -1463,6 +1645,8 @@ void CloudProcess::grow_line_from_seed(
 				arrowLine->addPointIndex(0);
 				arrowLine->addPointIndex(1);
 				arrowLine->setName(QString("Dir frame %1").arg(frameCount));
+				arrowLine->setColor(ccColor::redRGB);
+				arrowLine->showColors(true);
 				debug->addChild(arrowLine);
 			}
 
@@ -1523,3 +1707,89 @@ plan1：寻找末端方向有问题，且不够鲁棒（比如出现割裂，与
 plan2：对于是否能按预期中的适应线的转弯有疑问（局部的弯曲过大，矩形中的点少判断不了方向）。
 
 */
+
+
+
+
+
+void CloudProcess::extract_zebra_by_projection(
+	ccPointCloud* inputCloud,
+	float binWidth,
+	int densityThreshold,
+	float minStripeLength,
+	ccGLWindowInterface* m_glWindow,
+	ccPointCloud* outputCloud,
+	std::vector<CCVector3>& centers
+) {
+	if (!inputCloud || !outputCloud)
+		return;
+
+	ccHObject* debug = nullptr;
+	if (m_glWindow)
+	{
+		debug = new ccHObject;
+		m_glWindow->addToOwnDB(debug);
+		debug->setName("zebra_debug");
+	}
+
+
+	std::vector<unsigned> allIndices(inputCloud->size());
+	for (unsigned i = 0; i < inputCloud->size(); ++i)
+		allIndices[i] = i;
+
+	Eigen::Vector4f centroid;
+	Eigen::Vector3f axis;
+	getPointsCentroidAndAxis(inputCloud, allIndices, centroid, axis);
+
+	if (debug)
+	{
+		const float lineLength = 10.0f; // 可视化主轴线长度（单位米）
+		ccPointCloud* axisLineCloud = new ccPointCloud;
+		CCVector3 centroid3f(centroid[0], centroid[1], centroid[2]);
+		CCVector3 axis3f(axis[0], axis[1], axis[2]);
+		axisLineCloud->addPoint(centroid3f - axis3f * lineLength);
+		axisLineCloud->addPoint(centroid3f + axis3f * lineLength);
+
+		ccPolyline* axisLine = new ccPolyline(axisLineCloud);
+		axisLine->addPointIndex(0);
+		axisLine->addPointIndex(1);
+		axisLine->setColor(ccColor::red);
+		axisLine->showColors(true);
+		axisLine->setName("主方向线段");
+
+		debug->addChild(axisLine);
+	}
+
+	std::map<int, std::vector<int>> bins;
+	for (unsigned i = 0; i < inputCloud->size(); ++i)
+	{
+		Eigen::Vector3f p(inputCloud->getPoint(i)->x, inputCloud->getPoint(i)->y, inputCloud->getPoint(i)->z);
+		float proj = (p - Eigen::Vector3f(centroid[0], centroid[1], centroid[2])).dot(axis);
+		int binId = static_cast<int>(proj / binWidth);
+		bins[binId].push_back(i);
+	}
+
+
+
+	for (const auto& [binId, indices] : bins)
+	{
+		if (indices.size() < densityThreshold)
+			continue;
+
+		Eigen::Vector3f sum(0, 0, 0);
+		for (int idx : indices)
+		{
+			const CCVector3* pt = inputCloud->getPoint(idx);
+			sum += Eigen::Vector3f(pt->x, pt->y, pt->z);
+		}
+		sum /= indices.size();
+
+		CCVector3 center(sum.x(), sum.y(), sum.z());
+		centers.push_back(center);
+	}
+
+	for (const CCVector3& pt : centers)
+	{
+		outputCloud->addPoint(pt);
+	}
+}

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "PointCloudIO.h"
-#include <opencv2/opencv.hpp>
+//#include <opencv2/opencv.hpp>
 
 namespace roadmarking
 {
@@ -91,6 +91,25 @@ namespace roadmarking
 			unsigned                 Nmin = 50,
 			double                   theta_max = 45.0 * M_PI / 180.0,
 			unsigned                 Kmax = 10
+		);
+
+		/// <summary>
+		/// 从主方向投影点云，按密度阈值分段提取斑马线白线段的几何中心线。
+		/// </summary>
+		/// <param name="inputCloud">输入点云</param>
+		/// <param name="binWidth">投影分组宽度（米），大于点云点之间的体素等间隔距离</param>
+		/// <param name="densityThreshold">每个 bin 中最小点数，超过该值认为是白线段</param>
+		/// <param name="minStripeLength">白线段最小有效长度（未使用，可拓展）</param>
+		/// <param name="outputCloud">输出点云，用于显示所有识别出的白线中心点</param>
+		/// <param name="centers">输出每个白线段的几何中心</param>
+		static void extract_zebra_by_projection(
+			ccPointCloud* inputCloud,
+			float binWidth,
+			int densityThreshold,
+			float minStripeLength,
+			ccGLWindowInterface* m_glWindow,
+			ccPointCloud* outputCloud,
+			std::vector<CCVector3>& centers
 		);
 
 	private:

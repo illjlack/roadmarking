@@ -6,7 +6,7 @@
 #include <vector>
 #include <queue>
 #include <functional>
-#include <opencv2/opencv.hpp>
+// #include <opencv2/opencv.hpp>
 #include <QDir>
 #include <ccPolyline.h>
 #include <ccPointCloud.h>
@@ -850,22 +850,22 @@ void GridProcess::fit_lines(Line& points)
 
 void GridProcess::export_2D_image(const Grid& IGrid, const QString& filename)
 {
-	// 创建一个 OpenCV 图像对象
-	cv::Mat image(IGrid.size(), IGrid[0].size(), CV_32F);
+	//// 创建一个 OpenCV 图像对象
+	//cv::Mat image(IGrid.size(), IGrid[0].size(), CV_32F);
 
-	for (size_t i = 0; i < IGrid.size(); ++i)
-	{
-		for (size_t j = 0; j < IGrid[i].size(); ++j)
-		{
-			image.at<float>(i, j) = IGrid[i][j];
-		}
-	}
+	//for (size_t i = 0; i < IGrid.size(); ++i)
+	//{
+	//	for (size_t j = 0; j < IGrid[i].size(); ++j)
+	//	{
+	//		image.at<float>(i, j) = IGrid[i][j];
+	//	}
+	//}
 
 
-	// 确保文件路径正确
-	QString filePath = filename;
-	filePath = QDir::toNativeSeparators(filePath);  // 转换为本地文件分隔符
+	//// 确保文件路径正确
+	//QString filePath = filename;
+	//filePath = QDir::toNativeSeparators(filePath);  // 转换为本地文件分隔符
 
-	// 保存图像
-	cv::imwrite(filePath.toStdString(), image);
+	//// 保存图像
+	//cv::imwrite(filePath.toStdString(), image);
 }

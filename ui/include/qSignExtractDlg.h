@@ -65,6 +65,7 @@ private slots:
 	void onBoxClip();            // 框选截取
 	void onFilteCloudByIntensity();         // 过滤点云
 	void onFilteCloudByZ();
+	void onZebraExtract();
 
 	void onItemPicked(ccHObject* entity, unsigned itemIdx, int x, int y, const CCVector3&, const CCVector3d&);
 	void onItemPickedFast(ccHObject* entity, int subEntityID, int x, int y);

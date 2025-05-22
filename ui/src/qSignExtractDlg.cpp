@@ -145,6 +145,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		addCheckableButton("框选提取", [this]() { onBoxSelectExtract(); });
 		addCheckableButton("点选生长提取", [this]() { onPointGrowExtract(); });
 		addCheckableButton("框选截取点云", [this]() { onBoxClip(); });
+		addCheckableButton("框选斑马线提取", [this]() { onZebraExtract(); });
 
 		functionGroup->setLayout(functionLayout);
 		leftLayout->addWidget(functionGroup);
@@ -292,6 +293,11 @@ void qSignExtractDlg::onBoxSelectExtract()
 
 void qSignExtractDlg::onPointGrowExtract()
 {
+	if (!p_select_cloud || !dynamic_cast<ccPointCloud*>(p_select_cloud))
+	{
+		ccLog::Error("未选择点云");
+		return;
+	}
 	m_foregroundPolylineEditor->startDraw();
 	m_foregroundPolylineEditor->setDraw(2, false);
 	m_foregroundPolylineEditor->setCallbackfunc([&]
@@ -401,6 +407,57 @@ void qSignExtractDlg::onPointGrowExtract()
 			m_objectTree->refresh();
 		});
 }
+
+void qSignExtractDlg::onZebraExtract()
+{
+	if (!p_select_cloud || !dynamic_cast<ccPointCloud*>(p_select_cloud))
+	{
+		ccLog::Error("未选择点云");
+		return;
+	}
+	m_foregroundPolylineEditor->startDraw();
+	m_foregroundPolylineEditor->setCallbackfunc([&]
+		{
+			SettingsDialog settingsDialog;
+			settingsDialog.setDescription(
+				"参数：\n"
+				"矩形宽度(m)：主方向投影分析的栅格宽度\n"
+				"密度阈值：判断白线的投影密度阈值\n"
+				"最小白线长度(m)：有效白线段的最小长度\n"
+				"是否显示调试结果"
+			);
+
+			settingsDialog.registerComponent<float>("矩形宽度", "binWidth", 0.1f);
+			settingsDialog.registerComponent<int>("密度阈值", "densityThreshold", 10);
+			settingsDialog.registerComponent<float>("最小白线长度", "minStripeLength", 1.0f);
+			settingsDialog.registerComponent<bool>("调试显示", "debugEnabled", true);
+
+			if (settingsDialog.exec() != QDialog::Accepted)
+				return;
+
+			QMap<QString, QVariant> parameters = settingsDialog.getParameters();
+
+			float binWidth = parameters["binWidth"].toFloat();
+			int densityThreshold = parameters["densityThreshold"].toInt();
+			float minStripeLength = parameters["minStripeLength"].toFloat();
+			bool debugEnabled = parameters["debugEnabled"].toBool();
+
+			std::vector<CCVector3d> polyline;
+			m_foregroundPolylineEditor->getPoints(polyline);
+			std::vector <ccPointCloud*> clouds;
+			m_objectTree->getAllPointClouds(clouds);
+
+			ccPointCloud* cloud = new ccPointCloud;
+			CloudProcess::crop_cloud_with_polygon(clouds, polyline, cloud);
+
+			ccPointCloud* outCloud = new ccPointCloud;
+			std::vector<CCVector3> centers;
+			CloudProcess::extract_zebra_by_projection(cloud, binWidth, densityThreshold, minStripeLength,m_glWindow, outCloud, centers);
+
+			delete cloud;
+		});
+}
+
 
 void qSignExtractDlg::onFilteCloudByIntensity()
 {
