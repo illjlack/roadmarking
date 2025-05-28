@@ -628,49 +628,64 @@ std::vector<PCLPoint> CloudProcess::draw_polyline_on_cloud_by_pcl_view(const PCL
 /// <param name="polygon_points">裁剪的闭合折线</param>
 /// <param name="cloud_cropped">裁剪后的点云</param>
 void CloudProcess::crop_cloud_with_polygon(
-	const std::vector<ccPointCloud*>& clouds,            // 输入点云
-	const std::vector<CCVector3d>& polygon_points,     // 自定义的裁剪区域（多边形）
-	ccPointCloud* cloud_cropped                       // 输出裁剪后的点云
+    const std::vector<ccPointCloud*>& clouds,             // 输入点云集合
+    const std::vector<CCVector3d>& polygon_points,        // 裁剪多边形（闭合）
+    ccPointCloud* cloud_cropped                           // 输出点云
 )
 {
-	if (clouds.empty() || !cloud_cropped)
-	{
-		return;
-	}
+    if (clouds.empty() || !cloud_cropped || polygon_points.size() < 3)
+        return;
 
-	std::vector<cv::Point> polygon_cv;
-	for (const auto& pt : polygon_points)
-	{
-		polygon_cv.push_back(cv::Point(pt.x, pt.y));
-	}
+    // ==================== 1. 构建 polygon + AABB ====================
+    std::vector<cv::Point2f> polygon_cv;
+    double minX = DBL_MAX, maxX = -DBL_MAX;
+    double minY = DBL_MAX, maxY = -DBL_MAX;
 
-	cloud_cropped->addScalarField("intensity");
-	auto _sf = cloud_cropped->getScalarField(cloud_cropped->getScalarFieldIndexByName("intensity"));
+    for (const auto& pt : polygon_points)
+    {
+        polygon_cv.emplace_back(static_cast<float>(pt.x), static_cast<float>(pt.y));
+        minX = std::min(minX, pt.x);
+        maxX = std::max(maxX, pt.x);
+        minY = std::min(minY, pt.y);
+        maxY = std::max(maxY, pt.y);
+    }
 
-	for (auto cloud : clouds)
-	{
-		int sfIdx = PointCloudIO::get_intensity_idx(cloud);
-		if (sfIdx > -1)
-		{
+    // ==================== 2. 准备输出 scalar field ====================
+    cloud_cropped->addScalarField("intensity");
+    auto _sf = cloud_cropped->getScalarField(cloud_cropped->getScalarFieldIndexByName("intensity"));
 
-			auto sf = cloud->getScalarField(sfIdx);
-			for (size_t i = 0; i < cloud->size(); ++i)
-			{
-				const auto& point = cloud->getPoint(i);
-				cv::Point pt_2d(point->x, point->y);
+    // ==================== 3. 遍历所有点云进行裁剪 ====================
+    for (auto cloud : clouds)
+    {
+        int sfIdx = PointCloudIO::get_intensity_idx(cloud);
+        if (sfIdx < 0) continue;
 
-				if (cv::pointPolygonTest(polygon_cv, pt_2d, true) >= 0)
-				{
-					if (sf) {
-						cloud_cropped->addPoint(*point);
-						_sf->addElement(sf->getValue(i));
-					}
-				}
-			}
-		}
-	}
-	_sf->computeMinAndMax();
-	CloudProcess::apply_default_intensity_and_visible(cloud_cropped);
+        auto sf = cloud->getScalarField(sfIdx);
+        if (!sf) continue;
+
+        for (size_t i = 0; i < cloud->size(); ++i)
+        {
+            const CCVector3* pt = cloud->getPoint(i);
+            float x = pt->x;
+            float y = pt->y;
+
+            // AABB 快速过滤
+            if (x < minX || x > maxX || y < minY || y > maxY)
+                continue;
+
+            // 多边形点内测试
+            cv::Point2f pt2d(x, y);
+            if (cv::pointPolygonTest(polygon_cv, pt2d, false) > 0)
+            {
+                cloud_cropped->addPoint(*pt);
+                _sf->addElement(sf->getValue(i));
+            }
+        }
+    }
+
+    // ==================== 4. 完善输出字段 & 可视化设置 ====================
+    _sf->computeMinAndMax();
+    CloudProcess::apply_default_intensity_and_visible(cloud_cropped);
 }
 
 
@@ -1591,7 +1606,7 @@ void CloudProcess::grow_line_from_seed(
 
 						Eigen::Vector3f diff = epMax - epMin;
 						float segmentLength = diff.norm();
-						if (segmentLength > 1.0f)
+						if (segmentLength > 1.0f && useDynamicRect)
 						{
 							is_confirm_start = true;
 							curr_pt = { epMin.x(), epMin.y(), epMin.z() };
@@ -2154,6 +2169,281 @@ void CloudProcess::grow_line_from_seed(
 }
 */
 
+void CloudProcess::extract_zebra_by_struct(ccPointCloud* inputCloud, ccGLWindowInterface* m_glWindow)
+{
+	if (!inputCloud)
+		return;
+
+	const float binWidth = 0.1f;
+
+	ccHObject* debug = nullptr;
+	if (m_glWindow)
+	{
+		debug = new ccHObject("zebra_debug");
+		m_glWindow->addToOwnDB(debug);
+	}
+
+	// 1.计算主轴并把点映射到主轴上
+	std::vector<unsigned> allIndices(inputCloud->size());
+	std::iota(allIndices.begin(), allIndices.end(), 0);
+	Eigen::Vector4f centroid;
+	Eigen::Vector3f axis;
+	getPointsCentroidAndAxis(inputCloud, allIndices, centroid, axis);
+
+	std::map<int, std::vector<int>> bins;
+	std::map<int, float> binPosMap;
+	
+	for (unsigned i = 0; i < inputCloud->size(); ++i)
+	{
+		Eigen::Vector3f p(inputCloud->getPoint(i)->x, inputCloud->getPoint(i)->y, inputCloud->getPoint(i)->z);
+		float proj = (p - Eigen::Vector3f(centroid[0], centroid[1], centroid[2])).dot(axis);
+		int binId = static_cast<int>(proj / binWidth);
+		bins[binId].push_back(i);
+		binPosMap[binId] = proj;
+	}
+
+	// 2.简单确定阈值，是一个中位数 / 平均值 / 最大类间方差
+	int baseThreshold;
+	{
+		// 统计所有bin中的点数作为密度
+		std::vector<int> densityValues;
+		for (const auto& [binId, pts] : bins)
+			densityValues.push_back(static_cast<int>(pts.size()));
+
+		// --------------------------
+		// 方法一：中位数阈值
+		// --------------------------
+		
+		//std::nth_element(densityValues.begin(), densityValues.begin() + densityValues.size() / 2, densityValues.end());
+		//baseThreshold = densityValues[densityValues.size() / 2];
+		
+
+		// --------------------------
+		// 方法二：平均值阈值
+		// --------------------------
+
+		int sum = std::accumulate(densityValues.begin(), densityValues.end(), 0);
+		baseThreshold = static_cast<int>(sum / densityValues.size());
+		
+
+		// --------------------------
+		// 方法三：最大类间方差(阈值大了)
+		// --------------------------
+		/*
+		const int maxValue = *std::max_element(densityValues.begin(), densityValues.end());
+		std::vector<int> histogram(maxValue + 1, 0);
+		for (int v : densityValues)
+			histogram[v]++;
+
+		int totalPoints = static_cast<int>(densityValues.size());
+		double sumAll = 0;
+		for (int t = 0; t <= maxValue; ++t)
+			sumAll += t * histogram[t];
+
+		int threshold = 0;
+		double maxVariance = -1.0;
+		int wB = 0;
+		double sumB = 0;
+
+		for (int t = 0; t <= maxValue; ++t) {
+			wB += histogram[t];
+			if (wB == 0) continue;
+
+			int wF = totalPoints - wB;
+			if (wF == 0) break;
+
+			sumB += t * histogram[t];
+			double mB = sumB / wB;
+			double mF = (sumAll - sumB) / wF;
+
+			double betweenVar = static_cast<double>(wB) * wF * (mB - mF) * (mB - mF);
+			if (betweenVar > maxVariance) {
+				maxVariance = betweenVar;
+				threshold = t;
+			}
+		}
+		baseThreshold = threshold;
+		*/
+	}
+
+
+	// 3.计算线区域
+	std::vector<std::vector<int>> stripes;
+	int medianStripeLength = 0;
+	int medianBlankLength = 0;
+	{
+		std::vector<int> currentStripe;
+		std::vector<int> sortedBinIds;
+		for (const auto& [binId, _] : bins)
+			sortedBinIds.push_back(binId);
+		std::sort(sortedBinIds.begin(), sortedBinIds.end());
+
+		for (size_t i = 0; i < sortedBinIds.size(); ++i)
+		{
+			int binId = sortedBinIds[i];
+			if (bins[binId].size() >= baseThreshold)
+			{
+				if (currentStripe.empty() || binId == currentStripe.back() + 1)
+					currentStripe.push_back(binId);
+				else
+				{
+					if (!currentStripe.empty())
+						stripes.push_back(currentStripe);
+					currentStripe = { binId };
+				}
+			}
+			else
+			{
+				if (!currentStripe.empty())
+				{
+					stripes.push_back(currentStripe);
+					currentStripe.clear();
+				}
+			}
+		}
+		if (!currentStripe.empty())
+			stripes.push_back(currentStripe);
+
+
+		// ======================== 计算stripe、blank宽度中位数
+		std::vector<int> stripeLengths;
+		std::vector<int> blankLengths;
+		for (int i = 0; i < stripeLengths.size(); i++)
+		{
+			stripeLengths.push_back(stripes[i].back() - stripes[i].front());
+			if(i)
+			{
+				blankLengths.push_back(stripes[i].front() - stripes[i - 1].back());
+			}
+		}
+
+		auto median = [](std::vector<int>& vec) -> int {
+			if (vec.empty()) return 0;
+			std::sort(vec.begin(), vec.end());
+			size_t mid = vec.size() / 2;
+			if (vec.size() % 2 == 0)
+				return (vec[mid - 1] + vec[mid]) / 2;
+			else
+				return vec[mid];
+		};
+
+		medianStripeLength = median(stripeLengths);
+		medianBlankLength = median(blankLengths);
+
+		// ========================= 修复stripes
+		// (首尾两段的stripe往两边补切)
+	}
+
+	
+	
+	// =================================================================== debug
+	if (debug)
+	{
+		float max_dis = 0, min_dis = 0;
+		float _max_dis = 0, _min_dis = 0;
+		for (unsigned i = 0; i < inputCloud->size(); ++i)
+		{
+			Eigen::Vector3f p(inputCloud->getPoint(i)->x, inputCloud->getPoint(i)->y, inputCloud->getPoint(i)->z);
+			float proj = (p - Eigen::Vector3f(centroid[0], centroid[1], centroid[2])).dot(axis);
+			max_dis = std::max(proj, max_dis);
+			min_dis = std::min(proj, min_dis);
+			float _proj = (p - Eigen::Vector3f(centroid[0], centroid[1], centroid[2])).dot(Eigen::Vector3f{ -axis.y() , axis.x(), 0 });
+			_max_dis = std::max(_proj, _max_dis);
+			_min_dis = std::min(_proj, _min_dis);
+		}
+		ccPointCloud* axisLineCloud = new ccPointCloud;
+		CCVector3 centroid3f(centroid[0], centroid[1], centroid[2]);
+		CCVector3 axis3f(axis[0], axis[1], 0);
+		CCVector3 _axis3f(-axis[1], axis[0], 0);
+		axisLineCloud->addPoint(centroid3f + axis3f * min_dis + _axis3f * _max_dis);
+		axisLineCloud->addPoint(centroid3f + axis3f * min_dis + _axis3f * _min_dis);
+		axisLineCloud->addPoint(centroid3f + axis3f * max_dis + _axis3f * _min_dis);
+		axisLineCloud->addPoint(centroid3f + axis3f * max_dis + _axis3f * _max_dis);
+		ccPolyline* axisLine = new ccPolyline(axisLineCloud);
+		axisLine->addPointIndex(0);
+		axisLine->addPointIndex(1);
+		axisLine->addPointIndex(2);
+		axisLine->addPointIndex(3);
+		axisLine->addPointIndex(0);
+		axisLine->setColor(ccColor::red);
+		axisLine->showColors(true);
+		axisLine->setName("主方向线段");
+		debug->addChild(axisLine);
+
+
+		// ============================每块stripe，用主轴方向生成矩形=========================
+		for (size_t i = 0; i < stripes.size(); ++i)
+		{
+			std::vector<Eigen::Vector3f> stripePoints;
+
+			// 收集当前stripe的所有点
+			for (int binId : stripes[i])
+			{
+				for (int ptIdx : bins[binId])
+				{
+					const CCVector3* pt = inputCloud->getPoint(ptIdx);
+					stripePoints.emplace_back(pt->x, pt->y, pt->z);
+				}
+			}
+
+			if (stripePoints.size() < 10)
+				continue; // 点数太少，跳过拟合
+
+			// 使用已知主轴 axis 和垂直方向构造矩形
+			Eigen::Vector3f stripeDir = Eigen::Vector3f(-axis.y(), axis.x(), 0);  // 条纹方向，垂直于axis
+			Eigen::Vector3f stripePerp = axis;  // 沿着主轴的方向用于计算长度
+
+			// 点中心
+			Eigen::Vector3f mean(0.0f, 0.0f, 0.0f);
+			for (const auto& pt : stripePoints)
+			{
+				mean += pt;
+			}
+			mean /= static_cast<float>(stripePoints.size());
+
+
+			// 投影到 stripeDir / stripePerp，找边界
+			std::vector<float> projAlong, projPerp;
+			for (const auto& pt : stripePoints)
+			{
+				Eigen::Vector3f d = pt - mean;
+				projAlong.push_back(d.dot(stripeDir));
+				projPerp.push_back(d.dot(stripePerp));
+			}
+
+			auto minmaxAlong = std::minmax_element(projAlong.begin(), projAlong.end());
+			auto minmaxPerp = std::minmax_element(projPerp.begin(), projPerp.end());
+
+			float halfLen = (*minmaxAlong.second - *minmaxAlong.first) / 2.0f;
+			float halfWid = (*minmaxPerp.second - *minmaxPerp.first) / 2.0f;
+			Eigen::Vector3f center = mean + stripeDir * ((*minmaxAlong.second + *minmaxAlong.first) / 2.0f)
+				+ stripePerp * ((*minmaxPerp.second + *minmaxPerp.first) / 2.0f);
+
+			// 构造矩形四个角点
+			std::vector<Eigen::Vector3f> corners;
+			corners.push_back(center + stripeDir * halfLen + stripePerp * halfWid);
+			corners.push_back(center - stripeDir * halfLen + stripePerp * halfWid);
+			corners.push_back(center - stripeDir * halfLen - stripePerp * halfWid);
+			corners.push_back(center + stripeDir * halfLen - stripePerp * halfWid);
+
+			// 添加 polyline 到 debug 中
+			ccPointCloud* rectCloud = new ccPointCloud;
+			for (const auto& pt : corners)
+				rectCloud->addPoint(CCVector3(pt.x(), pt.y(), pt.z()));
+			rectCloud->addPoint(CCVector3(corners[0].x(), corners[0].y(), corners[0].z())); // 闭环
+
+			ccPolyline* rect = new ccPolyline(rectCloud);
+			for (unsigned j = 0; j < 5; ++j)
+				rect->addPointIndex(j);
+			rect->setColor(ccColor::yellow);
+			rect->showColors(true);
+			rect->setName(QString("Stripe_Rect_%1").arg(i));
+			debug->addChild(rect);
+		}
+
+	}
+}
+
 
 void CloudProcess::extract_zebra_by_projection(
 	ccPointCloud* inputCloud,
@@ -2164,17 +2454,19 @@ void CloudProcess::extract_zebra_by_projection(
 	ccPointCloud* outputCloud,
 	std::vector<CCVector3>& centers
 ) {
+	std::vector<CCVector3> dirs;
+	std::vector<float> lengths;
 	if (!inputCloud || !outputCloud)
 		return;
 
 	ccHObject* debug = nullptr;
 	if (m_glWindow)
 	{
-		debug = new ccHObject;
+		auto debugCloud = new ccPointCloud("debug_centers");
+		debug = new ccHObject("zebra_debug");
+		debug->addChild(debugCloud);
 		m_glWindow->addToOwnDB(debug);
-		debug->setName("zebra_debug");
 	}
-
 
 	std::vector<unsigned> allIndices(inputCloud->size());
 	for (unsigned i = 0; i < inputCloud->size(); ++i)
@@ -2186,53 +2478,201 @@ void CloudProcess::extract_zebra_by_projection(
 
 	if (debug)
 	{
-		const float lineLength = 10.0f; // 可视化主轴线长度（单位米）
+		float max_dis = 0, min_dis = 0;
+		float _max_dis = 0, _min_dis = 0;
+		for (unsigned i = 0; i < inputCloud->size(); ++i)
+		{
+			Eigen::Vector3f p(inputCloud->getPoint(i)->x, inputCloud->getPoint(i)->y, inputCloud->getPoint(i)->z);
+			float proj = (p - Eigen::Vector3f(centroid[0], centroid[1], centroid[2])).dot(axis);
+			max_dis = std::max(proj, max_dis);
+			min_dis = std::min(proj, min_dis);
+			float _proj = (p - Eigen::Vector3f(centroid[0], centroid[1], centroid[2])).dot(Eigen::Vector3f{ -axis.y() , axis.x(), 0 });
+			_max_dis = std::max(_proj, _max_dis);
+			_min_dis = std::min(_proj, _min_dis);
+		}
 		ccPointCloud* axisLineCloud = new ccPointCloud;
 		CCVector3 centroid3f(centroid[0], centroid[1], centroid[2]);
-		CCVector3 axis3f(axis[0], axis[1], axis[2]);
-		axisLineCloud->addPoint(centroid3f - axis3f * lineLength);
-		axisLineCloud->addPoint(centroid3f + axis3f * lineLength);
-
+		CCVector3 axis3f(axis[0], axis[1], 0);
+		CCVector3 _axis3f(-axis[1], axis[0], 0);
+		axisLineCloud->addPoint(centroid3f + axis3f * min_dis + _axis3f * _max_dis);
+		axisLineCloud->addPoint(centroid3f + axis3f * min_dis + _axis3f * _min_dis);
+		axisLineCloud->addPoint(centroid3f + axis3f * max_dis + _axis3f * _min_dis);
+		axisLineCloud->addPoint(centroid3f + axis3f * max_dis + _axis3f * _max_dis);
 		ccPolyline* axisLine = new ccPolyline(axisLineCloud);
 		axisLine->addPointIndex(0);
 		axisLine->addPointIndex(1);
+		axisLine->addPointIndex(2);
+		axisLine->addPointIndex(3);
+		axisLine->addPointIndex(0);
 		axisLine->setColor(ccColor::red);
 		axisLine->showColors(true);
 		axisLine->setName("主方向线段");
-
 		debug->addChild(axisLine);
 	}
 
 	std::map<int, std::vector<int>> bins;
+	std::map<int, float> binPosMap;
 	for (unsigned i = 0; i < inputCloud->size(); ++i)
 	{
 		Eigen::Vector3f p(inputCloud->getPoint(i)->x, inputCloud->getPoint(i)->y, inputCloud->getPoint(i)->z);
 		float proj = (p - Eigen::Vector3f(centroid[0], centroid[1], centroid[2])).dot(axis);
 		int binId = static_cast<int>(proj / binWidth);
 		bins[binId].push_back(i);
+		binPosMap[binId] = proj;
+	}
+
+	std::vector<int> densityValues;
+	for (const auto& [binId, pts] : bins)
+		densityValues.push_back(static_cast<int>(pts.size()));
+
+	std::nth_element(densityValues.begin(), densityValues.begin() + densityValues.size() / 2, densityValues.end());
+	int autoDensityThreshold = densityValues[densityValues.size() / 2];
+
+	ccLog::Print(QString("自动估计的密度阈值（中位数）: %1").arg(autoDensityThreshold));
+
+	std::vector<std::vector<int>> stripes;
+	std::vector<int> currentStripe;
+	std::vector<int> sortedBinIds;
+	for (const auto& [binId, _] : bins)
+		sortedBinIds.push_back(binId);
+	std::sort(sortedBinIds.begin(), sortedBinIds.end());
+
+	for (size_t i = 0; i < sortedBinIds.size(); ++i)
+	{
+		int binId = sortedBinIds[i];
+		if (bins[binId].size() >= autoDensityThreshold)
+		{
+			if (currentStripe.empty() || binId == currentStripe.back() + 1)
+				currentStripe.push_back(binId);
+			else
+			{
+				if (!currentStripe.empty())
+					stripes.push_back(currentStripe);
+				currentStripe = { binId };
+			}
+		}
+		else
+		{
+			if (!currentStripe.empty())
+			{
+				stripes.push_back(currentStripe);
+				currentStripe.clear();
+			}
+		}
+	}
+	if (!currentStripe.empty())
+		stripes.push_back(currentStripe);
+
+	// Step 2: 推断白线宽度 + 修正 stripes（基于间距）
+	std::vector<float> centerProjs;
+	for (const auto& stripe : stripes)
+	{
+		float proj = 0.5f * (binPosMap[stripe.front()] + binPosMap[stripe.back()]);
+		centerProjs.push_back(proj);
+	}
+
+	std::vector<float> gaps;
+	for (size_t i = 1; i < centerProjs.size(); ++i)
+		gaps.push_back(centerProjs[i] - centerProjs[i - 1]);
+	if (!gaps.empty()) {
+		std::nth_element(gaps.begin(), gaps.begin() + gaps.size() / 2, gaps.end());
+		float gapMed = gaps[gaps.size() / 2];
+		std::vector<std::vector<int>> repaired;
+		for (size_t i = 0; i < stripes.size(); ++i)
+		{
+			repaired.push_back(stripes[i]);
+			if (i + 1 < stripes.size())
+			{
+				float dist = centerProjs[i + 1] - centerProjs[i];
+				int missing = int(std::round(dist / gapMed)) - 1;
+				if (missing >= 1 && missing <= 3)
+				{
+					for (int m = 1; m <= missing; ++m)
+					{
+						float inferred = centerProjs[i] + gapMed * m;
+						Eigen::Vector3f inferPos = centroid.head<3>() + axis * inferred;
+						if (debug) {
+							auto dbgCloud = static_cast<ccPointCloud*>(debug->getChild(0));
+							CCVector3 infpt(inferPos.x(), inferPos.y(), inferPos.z());
+							dbgCloud->addPoint(infpt);
+						}
+					}
+				}
+			}
+		}
+		stripes = std::move(repaired);
 	}
 
 
-
-	for (const auto& [binId, indices] : bins)
+	// 遍历每一段连续高密度 bin 组成的白线 stripe
+	for (const std::vector<int>& stripe : stripes)
 	{
-		if (indices.size() < densityThreshold)
-			continue;
+		// 聚合该 stripe 所有 bin 中的点索引
+		std::vector<int> stripeIndices;
+		for (int binId : stripe)
+		{
+			const std::vector<int>& idxs = bins[binId];
+			stripeIndices.insert(stripeIndices.end(), idxs.begin(), idxs.end());
+		}
 
+		// 计算该 stripe 在主轴投影上的起止位置和长度
+		float startProj = binPosMap[stripe.front()];
+		float endProj = binPosMap[stripe.back()];
+		float stripeLen = std::abs(endProj - startProj);
+		if (stripeLen < minStripeLength)
+			continue;  // 太短则跳过，可能是误识别
+
+		// 计算 stripe 所有点的中心点坐标（用于可视化和方向计算参考点）
 		Eigen::Vector3f sum(0, 0, 0);
-		for (int idx : indices)
+		for (int idx : stripeIndices)
 		{
 			const CCVector3* pt = inputCloud->getPoint(idx);
 			sum += Eigen::Vector3f(pt->x, pt->y, pt->z);
 		}
-		sum /= indices.size();
-
+		sum /= stripeIndices.size();
 		CCVector3 center(sum.x(), sum.y(), sum.z());
-		centers.push_back(center);
-	}
+		centers.push_back(center);              // 存入输出中心点数组
+		outputCloud->addPoint(center);         // 添加到结果点云中
 
-	for (const CCVector3& pt : centers)
-	{
-		outputCloud->addPoint(pt);
+		// 可视化中心点为红点（调试用）
+		if (debug)
+		{
+			auto debugCloud = static_cast<ccPointCloud*>(debug->getChild(0));
+			auto cp = center;
+			debugCloud->addPoint(cp);
+		}
+
+		// 计算该 stripe 的主方向向量
+		CCVector3 localDir(0, 0, 0);
+		if (stripeIndices.size() >= 5)
+		{
+			std::vector<CCVector3> stripePts;
+			for (int idx : stripeIndices)
+				stripePts.push_back(*inputCloud->getPoint(idx));
+			localDir = fitPCADirection(stripePts);  // 使用 PCA 拟合方向
+		}
+		else
+		{
+			localDir = CCVector3(axis[0], axis[1], axis[2]);  // 太少则退化为整体主方向
+		}
+		dirs.push_back(localDir);
+		lengths.push_back(stripeLen);
+
+		// 可视化白线主方向线段（绿色）
+		if (debug)
+		{
+			ccPointCloud* linePts = new ccPointCloud;
+			linePts->addPoint(center - localDir * (stripeLen * 0.5f));
+			linePts->addPoint(center + localDir * (stripeLen * 0.5f));
+
+			// 创建用于可视化白线方向的线段，并添加到 debug 树中
+			ccPolyline* line = new ccPolyline(linePts);
+			line->addPointIndex(0);
+			line->addPointIndex(1);
+			line->setColor(ccColor::green);
+			line->showColors(true);
+			line->setName("stripe");
+			debug->addChild(line);
+		}
 	}
 }

@@ -107,4 +107,12 @@ PCA:  点云的特征方向，比较接近切线方向
 
 
 
-2.
+2.详细设计：
+
+每个bin设置0.1左右宽度，统计每个bin的点数
+
+使用阈值（中位数）分割哪些bin是stripe的部分，遍历把相邻的bin连成stripe.
+
+修复strips:先统计间隙和stripe的宽度，取中位数，然后遍历stripes，大的stripe可能是 stripe+间隙+ stripe组成，所以分解一下；大的间隙，可能是间隙+ stripe+间隙组成，所以补充stripe
+
+然后使用

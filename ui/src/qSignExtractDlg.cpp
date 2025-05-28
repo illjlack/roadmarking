@@ -452,7 +452,8 @@ void qSignExtractDlg::onZebraExtract()
 
 			ccPointCloud* outCloud = new ccPointCloud;
 			std::vector<CCVector3> centers;
-			CloudProcess::extract_zebra_by_projection(cloud, binWidth, densityThreshold, minStripeLength,m_glWindow, outCloud, centers);
+			//CloudProcess::extract_zebra_by_projection(cloud, binWidth, densityThreshold, minStripeLength,m_glWindow, outCloud, centers);
+			CloudProcess::extract_zebra_by_struct(cloud, m_glWindow);
 
 			delete cloud;
 		});

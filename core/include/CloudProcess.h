@@ -93,6 +93,8 @@ namespace roadmarking
 			unsigned                 Kmax = 10
 		);
 
+		static void extract_zebra_by_struct(ccPointCloud* inputCloud, ccGLWindowInterface* m_glWindow);
+
 		/// <summary>
 		/// 从主方向投影点云，按密度阈值分段提取斑马线白线段的几何中心线。
 		/// </summary>
