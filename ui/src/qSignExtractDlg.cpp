@@ -17,7 +17,7 @@
 
 #include "CloudProcess.h"
 #include "RoadMarkingExtract.h"
-
+#include "PointCloudSelector.h"
 
 using namespace roadmarking;
 
@@ -38,8 +38,8 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		m_app->createGLWindow(m_glWindow, m_glWidget);
 
 	// ==================================== 前景绘制器
-	m_foregroundPolylineEditor = new ForegroundPolylineEditor(m_glWindow);
-	m_foregroundPolylineEditor->setSelectCloudPtr(&p_select_cloud);
+	m_pointCloudSelector = new PointCloudSelector(m_glWindow);
+	m_pointCloudSelector->setSelectCloudPtr(&p_select_cloud);
 
 
 	// ==================================== 阈值筛选
@@ -96,7 +96,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 				}
 			});
 
-		connect(m_foregroundPolylineEditor, &ForegroundPolylineEditor::draw_finish, [viewGroup]()
+		connect(m_pointCloudSelector, &PointCloudSelector::draw_finish, [viewGroup]()
 			{
 				for (int i = 0; i < viewGroup->layout()->count(); ++i) {
 					QToolButton* btn = qobject_cast<QToolButton*>(viewGroup->layout()->itemAt(i)->widget());
@@ -106,7 +106,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 				}
 			});
 
-		connect(m_foregroundPolylineEditor, &ForegroundPolylineEditor::draw_start, [viewGroup]()
+		connect(m_pointCloudSelector, &PointCloudSelector::draw_start, [viewGroup]()
 			{
 				for (int i = 0; i < viewGroup->layout()->count(); ++i) {
 					QToolButton* btn = qobject_cast<QToolButton*>(viewGroup->layout()->itemAt(i)->widget());
@@ -151,7 +151,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		leftLayout->addWidget(functionGroup);
 
 
-		connect(m_foregroundPolylineEditor, &ForegroundPolylineEditor::draw_finish, [buttonGroup]()
+		connect(m_pointCloudSelector, &PointCloudSelector::draw_finish, [buttonGroup]()
 			{
 				for (auto* btn : buttonGroup->buttons())
 				{
@@ -159,7 +159,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 				}
 			});
 
-		connect(m_foregroundPolylineEditor, &ForegroundPolylineEditor::draw_start, [buttonGroup]()
+		connect(m_pointCloudSelector, &PointCloudSelector::draw_start, [buttonGroup]()
 			{
 				for (auto* btn : buttonGroup->buttons())
 				{
@@ -210,9 +210,9 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 
 	// ==================================== 一些信号
 
-	connect(m_foregroundPolylineEditor, &ForegroundPolylineEditor::update_tree, m_objectTree, [=]() { m_objectTree->refresh(); });
-	connect(m_foregroundPolylineEditor, &ForegroundPolylineEditor::draw_start, [&]() {m_selectionMode = DRAW_SELECTION; });
-	connect(m_foregroundPolylineEditor, &ForegroundPolylineEditor::draw_finish, [&](){m_selectionMode = ENTITY_SELECTION;});
+	connect(m_pointCloudSelector, &PointCloudSelector::update_tree, m_objectTree, [=]() { m_objectTree->refresh(); });
+	connect(m_pointCloudSelector, &PointCloudSelector::draw_start, [&]() {m_selectionMode = DRAW_SELECTION; });
+	connect(m_pointCloudSelector, &PointCloudSelector::draw_finish, [&](){m_selectionMode = ENTITY_SELECTION;});
 
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::entitySelectionChanged, this, &qSignExtractDlg::onEntitySelectionChanged);
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::itemPicked, this, &qSignExtractDlg::onItemPicked);
@@ -240,9 +240,9 @@ qSignExtractDlg::~qSignExtractDlg()
 		}
 	}
 
-	if (m_foregroundPolylineEditor)
+	if (m_pointCloudSelector)
 	{
-		delete m_foregroundPolylineEditor;
+		delete m_pointCloudSelector;
 	}
 }
 
@@ -268,11 +268,11 @@ void qSignExtractDlg::onAutoExtract()
 
 void qSignExtractDlg::onBoxSelectExtract()
 {
-	m_foregroundPolylineEditor->startDraw();
-	m_foregroundPolylineEditor->setCallbackfunc([=]
+	m_pointCloudSelector->startDraw();
+	m_pointCloudSelector->setCallbackfunc([=]
 		{
 			std::vector<CCVector3d> polyline;
-			m_foregroundPolylineEditor->getPoints(polyline);
+			m_pointCloudSelector->getPoints(polyline);
 			std::vector <ccPointCloud*> clouds;
 			m_objectTree->getAllPointClouds(clouds);
 
@@ -298,9 +298,9 @@ void qSignExtractDlg::onPointGrowExtract()
 		ccLog::Error("未选择点云");
 		return;
 	}
-	m_foregroundPolylineEditor->startDraw();
-	m_foregroundPolylineEditor->setDraw(2, false);
-	m_foregroundPolylineEditor->setCallbackfunc([&]
+	m_pointCloudSelector->startDraw();
+	m_pointCloudSelector->setDraw(2, false);
+	m_pointCloudSelector->setCallbackfunc([&]
 		{
 			SettingsDialog settingsDialog;
 			settingsDialog.setDescription(
@@ -349,7 +349,7 @@ void qSignExtractDlg::onPointGrowExtract()
 			int    Kmax = parameters["Kmax"].toUInt();
 
 			std::vector<CCVector3d> polyline;
-			m_foregroundPolylineEditor->getPoints(polyline);
+			m_pointCloudSelector->getPoints(polyline);
 
 			if (!p_select_cloud || !dynamic_cast<ccPointCloud*>(p_select_cloud))return;
 
@@ -415,8 +415,8 @@ void qSignExtractDlg::onZebraExtract()
 		ccLog::Error("未选择点云");
 		return;
 	}
-	m_foregroundPolylineEditor->startDraw();
-	m_foregroundPolylineEditor->setCallbackfunc([&]
+	m_pointCloudSelector->startDraw();
+	m_pointCloudSelector->setCallbackfunc([&]
 		{
 			SettingsDialog settingsDialog;
 			settingsDialog.setDescription(
@@ -443,7 +443,7 @@ void qSignExtractDlg::onZebraExtract()
 			bool debugEnabled = parameters["debugEnabled"].toBool();
 
 			std::vector<CCVector3d> polyline;
-			m_foregroundPolylineEditor->getPoints(polyline);
+			m_pointCloudSelector->getPoints(polyline);
 			std::vector <ccPointCloud*> clouds;
 			m_objectTree->getAllPointClouds(clouds);
 
@@ -491,11 +491,11 @@ void qSignExtractDlg::onFilteCloudByZ()
 void qSignExtractDlg::onBoxClip()
 {
 	m_selectionMode = DRAW_SELECTION;
-	m_foregroundPolylineEditor->startDraw();
-	m_foregroundPolylineEditor->setCallbackfunc([&]
+	m_pointCloudSelector->startDraw();
+	m_pointCloudSelector->setCallbackfunc([&]
 		{
 			std::vector<CCVector3d> polyline;
-			m_foregroundPolylineEditor->getPoints(polyline);
+			m_pointCloudSelector->getPoints(polyline);
 			std::vector <ccPointCloud*> clouds;
 			m_objectTree->getAllPointClouds(clouds);
 
@@ -531,7 +531,7 @@ void qSignExtractDlg::onLeftButtonClicked(int x, int y)
 {
 	if (m_selectionMode == DRAW_SELECTION)
 	{
-		m_foregroundPolylineEditor->onLeftButtonClicked(x, y);
+		m_pointCloudSelector->onLeftButtonClicked(x, y);
 	}
 	m_glWindow->redraw();
 }
@@ -540,7 +540,7 @@ void qSignExtractDlg::onLeftButtonDoubleClicked(int x, int y)
 {
 	if (m_selectionMode == DRAW_SELECTION)
 	{
-		m_foregroundPolylineEditor->onDoubleLeftButtonClicked(x, y);
+		m_pointCloudSelector->onDoubleLeftButtonClicked(x, y);
 	}
 	m_glWindow->redraw();
 }
@@ -549,7 +549,7 @@ void qSignExtractDlg::onRightButtonDoubleClicked(int x, int y)
 {
 	if (m_selectionMode == DRAW_SELECTION)
 	{
-		m_foregroundPolylineEditor->onDoubleRightButtonClicked(x, y);
+		m_pointCloudSelector->onDoubleRightButtonClicked(x, y);
 	}
 	m_glWindow->redraw();
 }
@@ -558,7 +558,7 @@ void qSignExtractDlg::onMouseMoved(int x, int y, Qt::MouseButtons button)
 {
 	if (m_selectionMode == DRAW_SELECTION)
 	{
-		m_foregroundPolylineEditor->onMouseMoved(x, y, button);
+		m_pointCloudSelector->onMouseMoved(x, y, button);
 	}
 	m_glWindow->redraw();
 }
@@ -572,7 +572,7 @@ void qSignExtractDlg::onMouseWheelRotated(int delta)
 {
 	if (m_selectionMode == DRAW_SELECTION)
 	{
-		m_foregroundPolylineEditor->onMouseWheelRotated(delta);
+		m_pointCloudSelector->onMouseWheelRotated(delta);
 	}
 	m_glWindow->redraw();
 }
@@ -595,7 +595,7 @@ void qSignExtractDlg::keyPressEvent(QKeyEvent* event)
 {
 	if (m_selectionMode == DRAW_SELECTION)
 	{
-		m_foregroundPolylineEditor->onKeyPressEvent(event);
+		m_pointCloudSelector->onKeyPressEvent(event);
 	}
 }
 
@@ -606,247 +606,6 @@ void qSignExtractDlg::showThresholdHistogram(ccPointCloud* pointCloud, bool isfi
 	histogramWidget->setUpperAndLowerThreshold(is_has_threshold, lowerThreshold, upperThreshold); // 设置阈值
 
 	histogramWidget->show();
-}
-
-
-// ============================================================================ ForegroundPolylineEditor
-
-ForegroundPolylineEditor::ForegroundPolylineEditor(ccGLWindowInterface* glWindow)
-	: m_glWindow(glWindow), m_pointCloud(new ccPointCloud()), m_foregroundPolyline(new ccPolyline(m_pointCloud))
-{
-	m_foregroundPolyline->addChild(m_pointCloud);
-	m_foregroundPolyline->setColor(ccColor::green);
-	m_foregroundPolyline->showColors(true);
-	m_foregroundPolyline->set2DMode(true);
-	m_foregroundPolyline->setForeground(true);
-	m_foregroundPolyline->showVertices(true);
-	m_foregroundPolyline->setVertexMarkerWidth(2);
-}
-
-ForegroundPolylineEditor::~ForegroundPolylineEditor()
-{
-	m_glWindow->removeFromOwnDB(m_foregroundPolyline);
-
-	if (m_pointCloud)
-	{
-		delete m_pointCloud;  // 删除内部创建的点云
-		m_pointCloud = nullptr;
-	}
-	// 释放资源
-	if (m_foregroundPolyline)
-	{
-		delete m_foregroundPolyline;
-		m_foregroundPolyline = nullptr;
-	}
-
-}
-
-void ForegroundPolylineEditor::setSelectCloudPtr(ccHObject** select_cloud)
-{
-	pp_select_cloud = select_cloud;
-}
-
-void ForegroundPolylineEditor::startDraw()
-{
-	// 窗口的准备
-	{
-		// 备份交互方式，结束时恢复，禁用其他按钮
-		interaction_flags_backup = m_glWindow->getInteractionMode();
-		picking_mode_backup = m_glWindow->getPickingMode();
-		emit draw_start();
-
-		// 固定为从上往下的正交视图，禁止相机旋转
-		m_glWindow->setView(CC_TOP_VIEW);
-		//if (pp_select_cloud && *pp_select_cloud)
-		//{
-		//	ccBBox bbox = (*pp_select_cloud)->getOwnBB();
-		//	m_glWindow->updateConstellationCenterAndZoom(&bbox);
-		//}
-		m_glWindow->setInteractionMode(ccGLWindowInterface::MODE_PAN_ONLY | ccGLWindowInterface::INTERACT_SEND_ALL_SIGNALS);
-		m_glWindow->setPickingMode(ccGLWindowInterface::NO_PICKING);
-	}
-
-	// 数据的准备
-	{
-		// 如果已有折线，则删除它
-		if (m_foregroundPolyline->size())
-		{
-			m_foregroundPolyline->clear();
-			m_pointCloud->clear();
-			m_3DPoints.clear();
-		}
-		m_glWindow->addToOwnDB(m_foregroundPolyline);
-	}
-}
-
-void ForegroundPolylineEditor::finishDraw(bool doAction)
-{
-	isFreezeUI = true;
-
-	if (doAction && m_callback)
-	{
-		if (isClosed)m_3DPoints.push_back(m_3DPoints[0]);
-		m_callback();
-	}
-	m_glWindow->setInteractionMode(interaction_flags_backup);
-	m_glWindow->setPickingMode(picking_mode_backup);
-	emit draw_finish();
-	m_glWindow->removeFromOwnDB(m_foregroundPolyline);
-	emit update_tree();
-	if (m_foregroundPolyline->size())
-	{
-		m_foregroundPolyline->clear();
-		m_pointCloud->clear();
-		m_3DPoints.clear();
-	}
-	m_glWindow->redraw(true, false);
-	isFreezeUI = false;
-	resetDraw();
-}
-
-void ForegroundPolylineEditor:: setCallbackfunc(std::function<void()> callback)
-{
-	// 设置回调函数
-	m_callback = callback;
-}
-
-void ForegroundPolylineEditor::onLeftButtonClicked(int x, int y)
-{
-	if (isFreezeUI)return;
-	QPointF pos2D = m_glWindow->toCenteredGLCoordinates(x, y);
-	CCVector3 newPoint(static_cast<PointCoordinateType>(pos2D.x()), static_cast<PointCoordinateType>(pos2D.y()), 0);
-
-	if (!m_pointCloud->size())
-	{
-		m_pointCloud->addPoint(newPoint);
-		m_foregroundPolyline->addPointIndex(static_cast<unsigned>(m_pointCloud->size() - 1)); // 临时
-		m_foregroundPolyline->addPointIndex(0); // 闭合
-	}
-
-	// 上一个点固定
-	{
-		CCVector3* lastPoint = const_cast<CCVector3*>(m_pointCloud->getPointPersistentPtr(m_foregroundPolyline->size() - 2));
-		*lastPoint = newPoint;
-		ccGLCameraParameters camera;
-		m_glWindow->getGLCameraParameters(camera);
-
-		// 修正，同 ForegroundPolylineEditor::updatePoly()
-		camera.viewport[0] = -camera.viewport[2] / 2;
-		camera.viewport[1] = -camera.viewport[3] / 2;
-
-		CCVector3d _3DPoint;
-		camera.unproject(*lastPoint, _3DPoint);
-		m_3DPoints.push_back(_3DPoint);
-
-		if (m_3DPoints.size() == max_points_num)
-		{
-			finishDraw(true);
-			return;
-		}
-	}
-
-	m_pointCloud->addPoint(newPoint);
-	m_foregroundPolyline->removePointGlobalIndex(m_foregroundPolyline->size() - 1);
-	m_foregroundPolyline->addPointIndex(static_cast<unsigned>(m_pointCloud->size() - 1));
-	if(isClosed)m_foregroundPolyline->addPointIndex(0);
-	else m_foregroundPolyline->addPointIndex(static_cast<unsigned>(m_pointCloud->size() - 1));
-	m_glWindow->redraw(true, false);
-}
-
-void ForegroundPolylineEditor::onMouseMoved(int x, int y, Qt::MouseButtons button)
-{
-	if (isFreezeUI)return;
-
-	if (!m_pointCloud->size())
-		return;
-
-	// 拖动更新2D屏幕上的点
-	if (button == Qt::RightButton)
-	{
-		updatePoly();
-	}
-
-	QPointF pos2D = m_glWindow->toCenteredGLCoordinates(x, y);
-	CCVector3 newPoint(static_cast<PointCoordinateType>(pos2D.x()), static_cast<PointCoordinateType>(pos2D.y()), 0);
-
-	CCVector3* lastPoint = const_cast<CCVector3*>(m_pointCloud->getPointPersistentPtr(m_foregroundPolyline->size() - 2));
-	*lastPoint = newPoint;
-}
-
-void ForegroundPolylineEditor::onDoubleLeftButtonClicked(int x, int y)
-{
-	if (isFreezeUI) return;
-	finishDraw(true);
-}
-
-void ForegroundPolylineEditor::onDoubleRightButtonClicked(int x, int y)
-{
-	if (isFreezeUI) return;
-	finishDraw(false);
-}
-
-void ForegroundPolylineEditor::onMouseWheelRotated(int delta)
-{
-	if (isFreezeUI)return;
-
-	updatePoly();
-}
-
-void ForegroundPolylineEditor::onKeyPressEvent(QKeyEvent* event)
-{
-	if (isFreezeUI)return;
-
-	if (event->key() == Qt::Key_F)
-	{
-		finishDraw(true);
-	}
-
-	if (event->key() == Qt::Key_G)
-	{
-		finishDraw(false);
-	}
-}
-
-void ForegroundPolylineEditor::updatePoly()
-{
-	ccGLCameraParameters camera;
-
-	// 缩放中心(viewport[0] + viewport[2]/2, viewport[1] + viewport[3]/2)在gl屏幕上是右上角， 需要移到中心
-	// 不知道内部的过程为什么会产生这样的结果
-	// 手动修正
-	m_glWindow->getGLCameraParameters(camera);
-	camera.viewport[0] = -camera.viewport[2] / 2;
-	camera.viewport[1] = -camera.viewport[3] / 2;
-
-	for (size_t i = 0; i < m_3DPoints.size(); ++i)
-	{
-		CCVector3d projectedPoint;
-		camera.project(m_3DPoints[i], projectedPoint);
-		CCVector3* point = const_cast<CCVector3*>(m_pointCloud->getPointPersistentPtr(i));
-
-		*point = CCVector3(projectedPoint.x
-			, projectedPoint.y
-			, 0);
-	}
-	m_glWindow->redraw(true, false);
-}
-
-
-void ForegroundPolylineEditor::getPoints(std::vector<CCVector3d>& polyline)
-{
-	polyline = m_3DPoints;
-}
-
-void ForegroundPolylineEditor::setDraw(int max_points_num,bool isClosed)
-{
-	this->max_points_num = max_points_num;
-	this->isClosed = isClosed;
-}
-
-void ForegroundPolylineEditor::resetDraw()
-{
-	max_points_num = INF;
-	isClosed = true;
 }
 
 // ============================================================================ CloudObjectTreeWidget

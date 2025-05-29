@@ -620,74 +620,91 @@ std::vector<PCLPoint> CloudProcess::draw_polyline_on_cloud_by_pcl_view(const PCL
 	return polylinePoints;
 }
 
-/// <summary>
-/// 裁剪点云：
-/// 直接用射线法精细筛选点（没必要先使用凸包筛一遍）
-/// </summary>
-/// <param name="clouds">原始点云</param>
-/// <param name="polygon_points">裁剪的闭合折线</param>
-/// <param name="cloud_cropped">裁剪后的点云</param>
 void CloudProcess::crop_cloud_with_polygon(
-    const std::vector<ccPointCloud*>& clouds,             // 输入点云集合
-    const std::vector<CCVector3d>& polygon_points,        // 裁剪多边形（闭合）
-    ccPointCloud* cloud_cropped                           // 输出点云
+	const std::vector<ccPointCloud*>& clouds,
+	const std::vector<CCVector3d>& polygon_points,
+	ccPointCloud* cloud_cropped
 )
 {
-    if (clouds.empty() || !cloud_cropped || polygon_points.size() < 3)
-        return;
+	if (clouds.empty() || !cloud_cropped || polygon_points.size() < 3)
+		return;
 
-    // ==================== 1. 构建 polygon + AABB ====================
-    std::vector<cv::Point2f> polygon_cv;
-    double minX = DBL_MAX, maxX = -DBL_MAX;
-    double minY = DBL_MAX, maxY = -DBL_MAX;
+	// ==================== 1. 构建 polygon + AABB ====================
+	std::vector<cv::Point2f> polygon_cv;
+	double minX = DBL_MAX, maxX = -DBL_MAX;
+	double minY = DBL_MAX, maxY = -DBL_MAX;
 
-    for (const auto& pt : polygon_points)
-    {
-        polygon_cv.emplace_back(static_cast<float>(pt.x), static_cast<float>(pt.y));
-        minX = std::min(minX, pt.x);
-        maxX = std::max(maxX, pt.x);
-        minY = std::min(minY, pt.y);
-        maxY = std::max(maxY, pt.y);
-    }
+	for (const auto& pt : polygon_points)
+	{
+		polygon_cv.emplace_back(static_cast<float>(pt.x), static_cast<float>(pt.y));
+		minX = std::min(minX, pt.x);
+		maxX = std::max(maxX, pt.x);
+		minY = std::min(minY, pt.y);
+		maxY = std::max(maxY, pt.y);
+	}
 
-    // ==================== 2. 准备输出 scalar field ====================
-    cloud_cropped->addScalarField("intensity");
-    auto _sf = cloud_cropped->getScalarField(cloud_cropped->getScalarFieldIndexByName("intensity"));
+	// ==================== 2. 准备输出 scalar field ====================
+	cloud_cropped->addScalarField("intensity");
+	auto _sf = cloud_cropped->getScalarField(cloud_cropped->getScalarFieldIndexByName("intensity"));
 
-    // ==================== 3. 遍历所有点云进行裁剪 ====================
-    for (auto cloud : clouds)
-    {
-        int sfIdx = PointCloudIO::get_intensity_idx(cloud);
-        if (sfIdx < 0) continue;
+	// ==================== 3. 并行裁剪所有点云 ====================
+	for (auto cloud : clouds)
+	{
+		int sfIdx = PointCloudIO::get_intensity_idx(cloud);
+		if (sfIdx < 0) continue;
 
-        auto sf = cloud->getScalarField(sfIdx);
-        if (!sf) continue;
+		auto sf = cloud->getScalarField(sfIdx);
+		if (!sf) continue;
 
-        for (size_t i = 0; i < cloud->size(); ++i)
-        {
-            const CCVector3* pt = cloud->getPoint(i);
-            float x = pt->x;
-            float y = pt->y;
+		const size_t pointCount = cloud->size();
+		std::vector<CCVector3> local_points_all;
+		std::vector<ScalarType> local_scalars_all;
 
-            // AABB 快速过滤
-            if (x < minX || x > maxX || y < minY || y > maxY)
-                continue;
+		// ========== 3.1 对大规模点云内部进行并行裁剪 ==========
+#pragma omp parallel
+		{
+			std::vector<CCVector3> local_points;
+			std::vector<ScalarType> local_scalars;
 
-            // 多边形点内测试
-            cv::Point2f pt2d(x, y);
-            if (cv::pointPolygonTest(polygon_cv, pt2d, false) > 0)
-            {
-                cloud_cropped->addPoint(*pt);
-                _sf->addElement(sf->getValue(i));
-            }
-        }
-    }
+#pragma omp for schedule(static)
+			for (int i = 0; i < static_cast<int>(pointCount); ++i)
+			{
+				const CCVector3* pt = cloud->getPoint(i);
+				float x = pt->x;
+				float y = pt->y;
 
-    // ==================== 4. 完善输出字段 & 可视化设置 ====================
-    _sf->computeMinAndMax();
-    CloudProcess::apply_default_intensity_and_visible(cloud_cropped);
+				// AABB 快速排除
+				if (x < minX || x > maxX || y < minY || y > maxY)
+					continue;
+
+				// 射线法精细判断
+				if (cv::pointPolygonTest(polygon_cv, cv::Point2f(x, y), false) > 0)
+				{
+					local_points.push_back(*pt);
+					local_scalars.push_back(sf->getValue(i));
+				}
+			}
+
+			// ========== 3.2 合并当前线程结果 ==========
+#pragma omp critical
+			{
+				local_points_all.insert(local_points_all.end(), local_points.begin(), local_points.end());
+				local_scalars_all.insert(local_scalars_all.end(), local_scalars.begin(), local_scalars.end());
+			}
+		}
+
+		// ========== 3.3 将合并结果写入输出点云 ==========
+		for (size_t j = 0; j < local_points_all.size(); ++j)
+		{
+			cloud_cropped->addPoint(local_points_all[j]);
+			_sf->addElement(local_scalars_all[j]);
+		}
+	}
+
+	// ==================== 4. 完善输出字段 & 可视化设置 ====================
+	_sf->computeMinAndMax();
+	CloudProcess::apply_default_intensity_and_visible(cloud_cropped);
 }
-
 
 //#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 //#include <CGAL/convex_hull_2.h>
@@ -2169,6 +2186,97 @@ void CloudProcess::grow_line_from_seed(
 }
 */
 
+// 生成一维模板
+std::vector<int> generate_stripe_template(double stripeLength, double gapLength, int stripeCount,
+	double binSize, int totalBins)
+{
+	std::vector<int> templateMask(totalBins, 0);
+	int stripeBins = static_cast<int>(stripeLength / binSize);
+	int gapBins = static_cast<int>(gapLength / binSize);
+	int offset = (totalBins - (stripeBins * stripeCount + gapBins * (stripeCount - 1))) / 2;
+
+	int cursor = std::max(offset, 0);
+	for (int i = 0; i < stripeCount && cursor + stripeBins <= totalBins; ++i)
+	{
+		for (int j = 0; j < stripeBins; ++j)
+			templateMask[cursor + j] = 1;
+		cursor += stripeBins + gapBins;
+	}
+	return templateMask;
+}
+
+// 匹配 bins 数据（假设是投影后的 binId => 点数）
+int match_stripe_template(const std::map<int, std::vector<int>>& bins, const std::vector<int>& templateMask, int& bestOffset)
+{
+	// step 1: 创建直方图
+	if (bins.empty()) return 0;
+
+	int minBin = bins.begin()->first;
+	int maxBin = bins.rbegin()->first;
+	int totalBins = maxBin - minBin + 1;
+
+	std::vector<int> histogram(totalBins, 0);
+	for (const auto& [binId, indices] : bins)
+	{
+		histogram[binId - minBin] = static_cast<int>(indices.size());
+	}
+
+	// step 2: 滑动模板匹配
+	int maxScore = -1;
+	bestOffset = 0;
+	int tmplLen = static_cast<int>(templateMask.size());
+
+	for (int offset = 0; offset <= totalBins - tmplLen; ++offset)
+	{
+		int score = 0;
+		for (int j = 0; j < tmplLen; ++j)
+		{
+			if (templateMask[j] == 1)
+				score += histogram[offset + j];
+		}
+		if (score > maxScore)
+		{
+			maxScore = score;
+			bestOffset = offset;
+		}
+	}
+
+	return maxScore;
+}
+
+// 自动寻找最佳模板参数
+void auto_match_best_stripe(const std::map<int, std::vector<int>>& bins, double binSize,
+	double stripeLen, double gapLen, int minStripes, int maxStripes)
+{
+	if (bins.empty()) return;
+
+	int minBin = bins.begin()->first;
+	int maxBin = bins.rbegin()->first;
+	int totalBins = maxBin - minBin + 1;
+
+	int bestGlobalScore = -1;
+	int bestOffset = 0;
+	int bestStripeCount = 0;
+
+	for (int stripeCount = minStripes; stripeCount <= maxStripes; ++stripeCount)
+	{
+		auto mask = generate_stripe_template(stripeLen, gapLen, stripeCount, binSize, totalBins);
+		int offset = 0;
+		int score = match_stripe_template(bins, mask, offset);
+
+		if (score > bestGlobalScore)
+		{
+			bestGlobalScore = score;
+			bestOffset = offset;
+			bestStripeCount = stripeCount;
+		}
+	}
+
+	std::cout << "Best Stripe Count: " << bestStripeCount << "\n";
+	std::cout << "Best Offset: " << bestOffset << "\n";
+	std::cout << "Best Score: " << bestGlobalScore << "\n";
+}
+
 void CloudProcess::extract_zebra_by_struct(ccPointCloud* inputCloud, ccGLWindowInterface* m_glWindow)
 {
 	if (!inputCloud)
@@ -2270,8 +2378,9 @@ void CloudProcess::extract_zebra_by_struct(ccPointCloud* inputCloud, ccGLWindowI
 	// 3.计算线区域
 	std::vector<std::vector<int>> stripes;
 	int medianStripeLength = 0;
-	int medianBlankLength = 0;
+	int medianGapLength = 0;
 	{
+		int windowSize = 17;
 		std::vector<int> currentStripe;
 		std::vector<int> sortedBinIds;
 		for (const auto& [binId, _] : bins)
@@ -2281,10 +2390,32 @@ void CloudProcess::extract_zebra_by_struct(ccPointCloud* inputCloud, ccGLWindowI
 		for (size_t i = 0; i < sortedBinIds.size(); ++i)
 		{
 			int binId = sortedBinIds[i];
-			if (bins[binId].size() >= baseThreshold)
+
+			// 计算滑动窗口内的平均密度
+			int count = 0;
+			int sum = 0;
+			for (int offset = -windowSize / 2; offset <= windowSize / 2; ++offset)
+			{
+				int neighborId = binId + offset;
+				auto it = bins.find(neighborId);
+				if (it != bins.end())
+				{
+					sum += static_cast<int>(it->second.size());
+				}
+				if (neighborId >= sortedBinIds.front() && neighborId < sortedBinIds.back())
+				{
+					count++;
+				}
+			}
+			double avgDensity = (count > 0) ? (double)sum / count : 0.0;
+
+			// 判断是否是 stripe 区域
+			if (bins[binId].size() > avgDensity)
 			{
 				if (currentStripe.empty() || binId == currentStripe.back() + 1)
+				{
 					currentStripe.push_back(binId);
+				}
 				else
 				{
 					if (!currentStripe.empty())
@@ -2305,15 +2436,15 @@ void CloudProcess::extract_zebra_by_struct(ccPointCloud* inputCloud, ccGLWindowI
 			stripes.push_back(currentStripe);
 
 
-		// ======================== 计算stripe、blank宽度中位数
+		// ======================== 计算stripe、gap宽度中位数
 		std::vector<int> stripeLengths;
-		std::vector<int> blankLengths;
-		for (int i = 0; i < stripeLengths.size(); i++)
+		std::vector<int> gapLengths;
+		for (int i = 0; i < stripes.size(); i++)
 		{
 			stripeLengths.push_back(stripes[i].back() - stripes[i].front());
 			if(i)
 			{
-				blankLengths.push_back(stripes[i].front() - stripes[i - 1].back());
+				gapLengths.push_back(stripes[i].front() - stripes[i - 1].back());
 			}
 		}
 
@@ -2328,7 +2459,7 @@ void CloudProcess::extract_zebra_by_struct(ccPointCloud* inputCloud, ccGLWindowI
 		};
 
 		medianStripeLength = median(stripeLengths);
-		medianBlankLength = median(blankLengths);
+		medianGapLength = median(gapLengths);
 
 		// ========================= 修复stripes
 		// (首尾两段的stripe往两边补切)
