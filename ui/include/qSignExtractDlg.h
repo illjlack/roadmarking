@@ -29,16 +29,18 @@
 #include "comm.h"
 #include "CloudFilterDlg.h"
 
+#include "PointCloudSelector.h"
+#include "PointCloudDrawing.h"
 // 前向声明
 class CloudObjectTreeWidget;
-class PointCloudSelector;
 
 // 选择模式枚举
 enum SelectionMode
 {
 	ENTITY_SELECTION,  // 实体选择状态
 	POINT_SELECTION,   // 点选择模式
-	DRAW_SELECTION     // 多边形框选模式
+	DRAW_SELECTION,    // 多边形框选模式
+	DRAW_MODEL	       // 模板绘制
 };
 
 /// <summary>
@@ -61,6 +63,8 @@ private slots:
 	void onBoxSelectExtract();   // 框选提取
 	void onPointGrowExtract();   // 点生长提取
 	void onBoxClip();            // 框选截取
+	void onRectClip();
+	void onMakeModel();
 	void onFilteCloudByIntensity();         // 过滤点云
 	void onFilteCloudByZ();
 	void onZebraExtract();
@@ -90,7 +94,8 @@ private:
 	CloudObjectTreeWidget* m_objectTree = nullptr; // 对象树
 	SelectionMode m_selectionMode = ENTITY_SELECTION; // 选择模式
 
-	PointCloudSelector* m_pointCloudSelector; // 前景折线编辑器
+	cc_interact::PointCloudSelector* m_pointCloudSelector; // 前景折线编辑器
+	cc_drawing::PointCloudDrawer* m_pointCloudDrawer;
 };
 
 /// <summary>

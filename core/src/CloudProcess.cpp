@@ -404,7 +404,7 @@ ccHObject* CloudProcess::apply_roadmarking_vectorization(std::vector<PCLCloudPtr
 		// 创建 ccPointCloud 对象，用来存储折线的点
 		ccCloudPtr polylineCloud(new ccPointCloud);
 
-		// 将 polyline 中的点添加到 polylineCloud 中
+		// 将 ctrolPoints 中的点添加到 polylineCloud 中
 		for (const auto& point : polyline)
 		{
 			polylineCloud->addPoint({ point.x ,point.y, point.z });
@@ -665,7 +665,6 @@ void CloudProcess::crop_cloud_with_polygon(
 		{
 			std::vector<CCVector3> local_points;
 			std::vector<ScalarType> local_scalars;
-
 #pragma omp for schedule(static)
 			for (int i = 0; i < static_cast<int>(pointCount); ++i)
 			{
@@ -2557,7 +2556,7 @@ void CloudProcess::extract_zebra_by_struct(ccPointCloud* inputCloud, ccGLWindowI
 			corners.push_back(center - stripeDir * halfLen - stripePerp * halfWid);
 			corners.push_back(center + stripeDir * halfLen - stripePerp * halfWid);
 
-			// 添加 polyline 到 debug 中
+			// 添加 ctrolPoints 到 debug 中
 			ccPointCloud* rectCloud = new ccPointCloud;
 			for (const auto& pt : corners)
 				rectCloud->addPoint(CCVector3(pt.x(), pt.y(), pt.z()));

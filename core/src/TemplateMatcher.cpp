@@ -713,13 +713,13 @@ bool RoadMarkingClassifier::is_line_cloud_and_get_direction(PCLCloudPtr cloud, R
 		Eigen::Vector4f orig_corner3 = T_inv * corner3;
 		Eigen::Vector4f orig_corner4 = T_inv * corner4;
 
-		// 6. 将转换后的四个顶点保存到 roadmarkings.back().polyline
-		//roadmarkings.back().polyline.push_back(pcl::PointXYZ(orig_corner1.x(), orig_corner1.y(), orig_corner1.z()));
-		//roadmarkings.back().polyline.push_back(pcl::PointXYZ(orig_corner2.x(), orig_corner2.y(), orig_corner2.z()));
-		//roadmarkings.back().polyline.push_back(pcl::PointXYZ(orig_corner3.x(), orig_corner3.y(), orig_corner3.z()));
-		//roadmarkings.back().polyline.push_back(pcl::PointXYZ(orig_corner4.x(), orig_corner4.y(), orig_corner4.z()));
+		// 6. 将转换后的四个顶点保存到 roadmarkings.back().ctrolPoints
+		//roadmarkings.back().ctrolPoints.push_back(pcl::PointXYZ(orig_corner1.x(), orig_corner1.y(), orig_corner1.z()));
+		//roadmarkings.back().ctrolPoints.push_back(pcl::PointXYZ(orig_corner2.x(), orig_corner2.y(), orig_corner2.z()));
+		//roadmarkings.back().ctrolPoints.push_back(pcl::PointXYZ(orig_corner3.x(), orig_corner3.y(), orig_corner3.z()));
+		//roadmarkings.back().ctrolPoints.push_back(pcl::PointXYZ(orig_corner4.x(), orig_corner4.y(), orig_corner4.z()));
 		// 闭合
-		//roadmarkings.back().polyline.push_back(pcl::PointXYZ(orig_corner1.x(), orig_corner1.y(), orig_corner1.z()));
+		//roadmarkings.back().ctrolPoints.push_back(pcl::PointXYZ(orig_corner1.x(), orig_corner1.y(), orig_corner1.z()));
 
 		// 从左到右(沿记录的方向)
 		Eigen::Vector4f mid_bottom = (orig_corner1 + orig_corner2) / 2.0f;

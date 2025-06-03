@@ -14,12 +14,20 @@
 #include <ccPolyline.h>
 #include <QThread>
 #include <QApplication>
-
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QInputDialog>
+#include <QMessageBox>
+#include <QString>
+#include <nlohmann/json.hpp>
 #include "CloudProcess.h"
 #include "RoadMarkingExtract.h"
 #include "PointCloudSelector.h"
 
 using namespace roadmarking;
+using namespace cc_interact;
+using namespace cc_drawing;
+using json = nlohmann::json;
 
 // =========================================================================================================================== qSignExtractDlg
 qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
@@ -40,6 +48,9 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	// ==================================== 前景绘制器
 	m_pointCloudSelector = new PointCloudSelector(m_glWindow);
 	m_pointCloudSelector->setSelectCloudPtr(&p_select_cloud);
+
+	m_pointCloudDrawer = new PointCloudDrawer(m_glWindow);
+	m_pointCloudDrawer->setSelectCloudPtr(&p_select_cloud);
 
 
 	// ==================================== 阈值筛选
@@ -118,55 +129,131 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 					}
 				}
 			});
+
+		connect(m_pointCloudDrawer, &PointCloudDrawer::draw_finish, [viewGroup]()
+			{
+				for (int i = 0; i < viewGroup->layout()->count(); ++i) {
+					QToolButton* btn = qobject_cast<QToolButton*>(viewGroup->layout()->itemAt(i)->widget());
+					if (btn) {
+						btn->setEnabled(true);
+					}
+				}
+			});
+
+		connect(m_pointCloudDrawer, &PointCloudDrawer::draw_start, [viewGroup]()
+			{
+				for (int i = 0; i < viewGroup->layout()->count(); ++i) {
+					QToolButton* btn = qobject_cast<QToolButton*>(viewGroup->layout()->itemAt(i)->widget());
+					if (btn) {
+						if (btn->text() == "1:1") {
+							continue;
+						}
+						btn->setEnabled(false);
+					}
+				}
+			});
 	}
 
 
 
-	// ==================================== 功能按钮组
+	std::vector<QButtonGroup*> allGroups;
+	// ==================================== 功能按钮组工具函数
+	auto addGroupedButton = [&](const QString& text,
+		std::function<void()> callback,
+		QGroupBox* parentGroup,
+		QVBoxLayout* layout,
+		QButtonGroup* group)
 	{
-		QGroupBox* functionGroup = new QGroupBox("功能选择", this);
-		QVBoxLayout* functionLayout = new QVBoxLayout(functionGroup);
+		QPushButton* btn = new QPushButton(text, parentGroup);
+		btn->setCheckable(true);
+		layout->addWidget(btn);
+		connect(btn, &QPushButton::clicked, this, std::move(callback));
+		group->addButton(btn);
+	};
 
-		QButtonGroup* buttonGroup = new QButtonGroup(this);
-		buttonGroup->setExclusive(true);
+	// ==================================== 功能按钮组：过滤类
+	{
+		QGroupBox* filterGroup = new QGroupBox("点云过滤", this);
+		QVBoxLayout* filterLayout = new QVBoxLayout(filterGroup);
+		QButtonGroup* filterButtonGroup = new QButtonGroup(this);
+		allGroups.push_back(filterButtonGroup);
+		filterButtonGroup->setExclusive(true);
 
-		auto addCheckableButton = [&](const QString& text, std::function<void()> callback)
-		{
-			QPushButton* btn = new QPushButton(text, functionGroup);
-			btn->setCheckable(true);
-			functionLayout->addWidget(btn);
-			connect(btn, &QPushButton::clicked, this, std::move(callback));
-			buttonGroup->addButton(btn);
-		};
+		addGroupedButton("选择强度阈值过滤点云", [this]() { onFilteCloudByIntensity(); }, filterGroup, filterLayout, filterButtonGroup);
+		addGroupedButton("选择高程阈值过滤点云", [this]() { onFilteCloudByZ(); }, filterGroup, filterLayout, filterButtonGroup);
 
-		addCheckableButton("选择强度阈值过滤点云", [this]() { onFilteCloudByIntensity(); });
-		addCheckableButton("选择高程阈值过滤点云", [this]() { onFilteCloudByZ(); });
-		addCheckableButton("全自动提取", [this]() { onAutoExtract(); });
-		addCheckableButton("框选提取", [this]() { onBoxSelectExtract(); });
-		addCheckableButton("点选生长提取", [this]() { onPointGrowExtract(); });
-		addCheckableButton("框选截取点云", [this]() { onBoxClip(); });
-		addCheckableButton("框选斑马线提取", [this]() { onZebraExtract(); });
+		filterGroup->setLayout(filterLayout);
+		leftLayout->addWidget(filterGroup);
+	}
 
-		functionGroup->setLayout(functionLayout);
-		leftLayout->addWidget(functionGroup);
+	// ==================================== 功能按钮组：剪切类
+	{
+		QGroupBox* clipGroup = new QGroupBox("点云剪切", this);
+		QVBoxLayout* clipLayout = new QVBoxLayout(clipGroup);
+		QButtonGroup* clipButtonGroup = new QButtonGroup(this);
+		allGroups.push_back(clipButtonGroup);
+		clipButtonGroup->setExclusive(true);
 
+		addGroupedButton("多边形截取点云", [this]() { onBoxClip(); }, clipGroup, clipLayout, clipButtonGroup);
+		addGroupedButton("矩形截取点云", [this]() { onRectClip(); }, clipGroup, clipLayout, clipButtonGroup);
+		addGroupedButton("模型制作", [this]() {onMakeModel(); }, clipGroup, clipLayout, clipButtonGroup);
 
-		connect(m_pointCloudSelector, &PointCloudSelector::draw_finish, [buttonGroup]()
+		clipGroup->setLayout(clipLayout);
+		leftLayout->addWidget(clipGroup);
+	}
+
+	// ==================================== 功能按钮组：提取类
+	{
+		QGroupBox* extractGroup = new QGroupBox("特征提取", this);
+		QVBoxLayout* extractLayout = new QVBoxLayout(extractGroup);
+		QButtonGroup* extractButtonGroup = new QButtonGroup(this);
+		allGroups.push_back(extractButtonGroup);
+		extractButtonGroup->setExclusive(true);
+
+		addGroupedButton("全自动提取", [this]() { onAutoExtract(); }, extractGroup, extractLayout, extractButtonGroup);
+		addGroupedButton("框选提取", [this]() { onBoxSelectExtract(); }, extractGroup, extractLayout, extractButtonGroup);
+		addGroupedButton("点选生长提取", [this]() { onPointGrowExtract(); }, extractGroup, extractLayout, extractButtonGroup);
+		addGroupedButton("框选斑马线提取", [this]() { onZebraExtract(); }, extractGroup, extractLayout, extractButtonGroup);
+
+		extractGroup->setLayout(extractLayout);
+		leftLayout->addWidget(extractGroup);
+	}
+
+	// ==================================== 启用/禁用控制（所有组按钮）
+	{
+		connect(m_pointCloudSelector, &PointCloudSelector::draw_start, [allGroups]() {
+			for (auto* group : allGroups)
 			{
-				for (auto* btn : buttonGroup->buttons())
-				{
-					btn->setEnabled(true);
-				}
+				for (auto* btn : group->buttons())
+					btn->setEnabled(false);
+			}
 			});
 
-		connect(m_pointCloudSelector, &PointCloudSelector::draw_start, [buttonGroup]()
+		connect(m_pointCloudSelector, &PointCloudSelector::draw_finish, [allGroups]() {
+			for (auto* group : allGroups)
 			{
-				for (auto* btn : buttonGroup->buttons())
-				{
+				for (auto* btn : group->buttons())
+					btn->setEnabled(true);
+			}
+			});
+
+		connect(m_pointCloudDrawer, &PointCloudDrawer::draw_start, [allGroups]() {
+			for (auto* group : allGroups)
+			{
+				for (auto* btn : group->buttons())
 					btn->setEnabled(false);
-				}
+			}
+			});
+
+		connect(m_pointCloudDrawer, &PointCloudDrawer::draw_finish, [allGroups]() {
+			for (auto* group : allGroups)
+			{
+				for (auto* btn : group->buttons())
+					btn->setEnabled(true);
+			}
 			});
 	}
+
 
 
 	leftLayout->addStretch();
@@ -214,6 +301,10 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	connect(m_pointCloudSelector, &PointCloudSelector::draw_start, [&]() {m_selectionMode = DRAW_SELECTION; });
 	connect(m_pointCloudSelector, &PointCloudSelector::draw_finish, [&](){m_selectionMode = ENTITY_SELECTION;});
 
+	connect(m_pointCloudDrawer, &PointCloudDrawer::update_tree, m_objectTree, [=]() { m_objectTree->refresh(); });
+	connect(m_pointCloudDrawer, &PointCloudDrawer::draw_start, [&]() {m_selectionMode = DRAW_MODEL; });
+	connect(m_pointCloudDrawer, &PointCloudDrawer::draw_finish, [&]() {m_selectionMode = ENTITY_SELECTION; });
+
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::entitySelectionChanged, this, &qSignExtractDlg::onEntitySelectionChanged);
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::itemPicked, this, &qSignExtractDlg::onItemPicked);
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::itemPickedFast, this, &qSignExtractDlg::onItemPickedFast);
@@ -226,6 +317,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::rightButtonDoubleClicked, this, &qSignExtractDlg::onRightButtonDoubleClicked);
 
 }
+
 qSignExtractDlg::~qSignExtractDlg()
 {
 	if (m_glWindow)
@@ -243,6 +335,11 @@ qSignExtractDlg::~qSignExtractDlg()
 	if (m_pointCloudSelector)
 	{
 		delete m_pointCloudSelector;
+	}
+
+	if (m_pointCloudDrawer)
+	{
+		delete m_pointCloudDrawer;
 	}
 }
 
@@ -299,7 +396,7 @@ void qSignExtractDlg::onPointGrowExtract()
 		return;
 	}
 	m_pointCloudSelector->startDraw();
-	m_pointCloudSelector->setDraw(2, false);
+	m_pointCloudSelector->setDraw(DrawMode::PolylineOpen, 2);
 	m_pointCloudSelector->setCallbackfunc([&]
 		{
 			SettingsDialog settingsDialog;
@@ -356,11 +453,11 @@ void qSignExtractDlg::onPointGrowExtract()
 			CCVector3 p0, v0;
 			p0.x = polyline[0].x;
 			p0.y = polyline[0].y;
-			//p0.z = polyline[0].z;
+			//p0.z = ctrolPoints[0].z;
 
 			v0.x = polyline[1].x - p0.x;
 			v0.y = polyline[1].y - p0.y;
-			//v0.z = polyline[1].z - p0.z;
+			//v0.z = ctrolPoints[1].z - p0.z;
 			ccPointCloud* cloud= new ccPointCloud;
 			std::vector<CCVector3>line;
 
@@ -416,6 +513,7 @@ void qSignExtractDlg::onZebraExtract()
 		return;
 	}
 	m_pointCloudSelector->startDraw();
+	m_pointCloudSelector->setDraw(DrawMode::PolylineClosed);
 	m_pointCloudSelector->setCallbackfunc([&]
 		{
 			SettingsDialog settingsDialog;
@@ -459,7 +557,6 @@ void qSignExtractDlg::onZebraExtract()
 		});
 }
 
-
 void qSignExtractDlg::onFilteCloudByIntensity()
 {
 	if (!p_select_cloud || !dynamic_cast<ccPointCloud*>(p_select_cloud))
@@ -490,8 +587,8 @@ void qSignExtractDlg::onFilteCloudByZ()
 
 void qSignExtractDlg::onBoxClip()
 {
-	m_selectionMode = DRAW_SELECTION;
 	m_pointCloudSelector->startDraw();
+	m_pointCloudSelector->setDraw(DrawMode::PolylineClosed);
 	m_pointCloudSelector->setCallbackfunc([&]
 		{
 			std::vector<CCVector3d> polyline;
@@ -507,6 +604,197 @@ void qSignExtractDlg::onBoxClip()
 			m_objectTree->async_refresh();
 		});
 }
+
+void qSignExtractDlg::onRectClip()
+{
+	m_selectionMode = DRAW_SELECTION;
+	m_pointCloudSelector->startDraw();
+	m_pointCloudSelector->setDraw(DrawMode::Rectangle);
+	m_pointCloudSelector->setCallbackfunc([&]
+		{
+			std::vector<CCVector3d> polyline;
+			m_pointCloudSelector->getPoints(polyline);
+			std::vector <ccPointCloud*> clouds;
+			m_objectTree->getAllPointClouds(clouds);
+
+			ccPointCloud* cloud = new ccPointCloud;
+			CloudProcess::crop_cloud_with_polygon(clouds, polyline, cloud);
+
+			cloud->setName("cloud_cropped");
+			addCloudToDB(cloud);
+			m_objectTree->async_refresh();
+		});
+}
+
+#include <pcl/io/pcd_io.h>
+void qSignExtractDlg::onMakeModel()
+{
+	if (!p_select_cloud || !dynamic_cast<ccPointCloud*>(p_select_cloud))
+	{
+		QMessageBox::critical(nullptr, "错误", "未选择点云");
+		return;
+	}
+
+	// 选择 JSON 模板文件
+	QString jsonFilePath = QFileDialog::getOpenFileName(
+		nullptr, "选择 JSON 模板文件", "", "JSON Files (*.json);;All Files (*)");
+	if (jsonFilePath.isEmpty()) {
+		QMessageBox::information(nullptr, "提示", "未选择文件");
+		return;
+	}
+
+	// 读取 JSON 文件
+	json j;
+	{
+		std::ifstream inputFile(jsonFilePath.toStdString());
+		if (inputFile.is_open()) {
+			try {
+				inputFile >> j;
+			}
+			catch (...) {
+				QMessageBox::critical(nullptr, "错误", "JSON 读取失败，可能格式错误");
+				return;
+			}
+			inputFile.close();
+		}
+		else {
+			QMessageBox::critical(nullptr, "错误", "无法打开 JSON 文件");
+			return;
+		}
+	}
+
+	// 用户输入模板名称
+	bool ok;
+	QString modelName = QInputDialog::getText(
+		nullptr, "输入模板名称", "请输入模板名称：", QLineEdit::Normal, "", &ok);
+	if (!ok || modelName.isEmpty()) {
+		QMessageBox::information(nullptr, "提示", "未输入模板名称");
+		return;
+	}
+
+	ccPointCloud* p_cloud = static_cast<ccPointCloud*>(p_select_cloud);
+	if (p_cloud->size() > 100000)
+	{
+		QMessageBox::critical(nullptr, "错误", "点云太大");
+		return;
+	}
+	// 获取原始点云和轮廓
+	PCLCloudPtr pclCloud = PointCloudIO::convert_to_PCLCloudPtr(p_cloud);
+	PCLCloudPtr outlineCloud = CloudProcess::extract_outline(pclCloud);
+	if (!outlineCloud) {
+		QMessageBox::critical(nullptr, "错误", "轮廓提取失败");
+		return;
+	}
+
+	// 获取用户绘制的折线
+	std::vector<PCLPoint> controlPoints;
+	std::vector<std::vector<int>> polylines;
+
+	m_pointCloudDrawer->startDraw();
+	m_pointCloudDrawer->setCallbackfunc([=]() mutable
+		{
+			// ========== A. 从绘制器获取所有折线（多条） ==========
+			std::vector<std::vector<CCVector3d>> allPolylines;
+			m_pointCloudDrawer->getPoints(allPolylines);
+
+			// 如果用户没有画任何折线，就提示并返回
+			if (allPolylines.empty())
+			{
+				QMessageBox::warning(nullptr, "提示", "未检测到任何折线，无法生成模板。");
+				return;
+			}
+
+			// ========== B. 获取当前场景中所有点云，并执行裁剪 ==========
+			std::vector<ccPointCloud*> clouds;
+			m_objectTree->getAllPointClouds(clouds);
+
+			// ========== C. 准备保存路径（PCD） ==========
+			QFileInfo jsonInfo(jsonFilePath);
+			QString dirPath = jsonInfo.absolutePath();
+			QString modelPath = dirPath + "/" + modelName + ".pcd";
+			QString outlinePath = dirPath + "/" + modelName + "_outline.pcd";
+
+			// --------- 1. 对原始裁剪后点云进行平面化处理，并保存到 modelPath ---------
+			{
+				// 深拷贝出一份新的点云
+				PCLCloudPtr flatCloud(new pcl::PointCloud<pcl::PointXYZ>);
+				*flatCloud = *pclCloud; // 逐点复制原始 PCLCloudPtr
+
+				// 将所有点的 z 坐标置为 0
+				for (auto& pt : flatCloud->points)
+				{
+					pt.z = 0.0f;
+				}
+
+				// 写入磁盘到 modelPath
+				if (pcl::io::savePCDFileASCII(modelPath.toStdString(), *flatCloud) < 0)
+				{
+					QMessageBox::warning(nullptr, "错误", "保存平面化后的 PCD 文件失败: " + modelPath);
+					return;
+				}
+			}
+
+			// --------- 2. 如果存在轮廓点云，则对其进行平面化并保存到 outlinePath ---------
+			if (outlineCloud && !outlineCloud->empty())
+			{
+				PCLCloudPtr flatOutline(new pcl::PointCloud<pcl::PointXYZ>);
+				*flatOutline = *outlineCloud; // 深拷贝
+
+				// 同样将轮廓点云的 z 全部置为 0
+				for (auto& pt : flatOutline->points)
+				{
+					pt.z = 0.0f;
+				}
+
+				if (pcl::io::savePCDFileASCII(outlinePath.toStdString(), *flatOutline) < 0)
+				{
+					QMessageBox::warning(nullptr, "错误", "保存平面化后的轮廓 PCD 文件失败: " + outlinePath);
+					return;
+				}
+			}
+
+			// ========== D. 构造 JSON 对象并写入文件 ==========
+			json modelJson;
+			modelJson["_comment"] = "该模板包含多条折线，每条折线存放为一组 3D 坐标数组";
+			modelJson["name"] = modelName.toStdString();
+			modelJson["raw_point_cloud_path"] = modelPath.toStdString();
+			modelJson["outline_point_cloud_path"] = outlinePath.toStdString();
+
+			// 直接按折线分组，每条 polyline 是一个点列表，且都投影到 z = 0 平面
+			for (const auto& poly : allPolylines)
+			{
+				json lineArray = json::array();
+				for (const auto& cc3d : poly)
+				{
+					// 保证折线的所有顶点 z 坐标都为 0
+					lineArray.push_back({ cc3d.x, cc3d.y, 0.0 });
+				}
+				modelJson["graph_elements"].push_back({
+					{ "type", "polyline" },
+					{ "points", lineArray }
+					});
+			}
+
+			json j;
+			j["models"].push_back(modelJson);
+
+			// 写入磁盘（覆盖原 JSON 文件）
+			{
+				std::ofstream outputFile(jsonFilePath.toStdString());
+				if (!outputFile.is_open())
+				{
+					QMessageBox::warning(nullptr, "错误", "无法打开 JSON 文件: " + jsonFilePath);
+					return;
+				}
+				outputFile << j.dump(4); // 缩进 4 空格
+				outputFile.close();
+			}
+
+			QMessageBox::information(nullptr, "成功", "模板已成功保存到 JSON 文件！");
+		});
+}
+
+
 
 void qSignExtractDlg::addCloudToDB(ccPointCloud* cloud)
 {
@@ -533,6 +821,11 @@ void qSignExtractDlg::onLeftButtonClicked(int x, int y)
 	{
 		m_pointCloudSelector->onLeftButtonClicked(x, y);
 	}
+	else if (m_selectionMode == DRAW_MODEL)
+	{
+		// 绘制模式下，左键点击也要通知 Drawer
+		m_pointCloudDrawer->onLeftButtonClicked(x, y);
+	}
 	m_glWindow->redraw();
 }
 
@@ -541,6 +834,11 @@ void qSignExtractDlg::onLeftButtonDoubleClicked(int x, int y)
 	if (m_selectionMode == DRAW_SELECTION)
 	{
 		m_pointCloudSelector->onDoubleLeftButtonClicked(x, y);
+	}
+	else if (m_selectionMode == DRAW_MODEL)
+	{
+		// 绘制模式下，左键双击结束当前折线或切换状态
+		m_pointCloudDrawer->onDoubleLeftButtonClicked(x, y);
 	}
 	m_glWindow->redraw();
 }
@@ -551,6 +849,11 @@ void qSignExtractDlg::onRightButtonDoubleClicked(int x, int y)
 	{
 		m_pointCloudSelector->onDoubleRightButtonClicked(x, y);
 	}
+	else if (m_selectionMode == DRAW_MODEL)
+	{
+		// 绘制模式下，右键双击也可结束或退出绘制
+		m_pointCloudDrawer->onDoubleRightButtonClicked(x, y);
+	}
 	m_glWindow->redraw();
 }
 
@@ -560,11 +863,11 @@ void qSignExtractDlg::onMouseMoved(int x, int y, Qt::MouseButtons button)
 	{
 		m_pointCloudSelector->onMouseMoved(x, y, button);
 	}
-	m_glWindow->redraw();
-}
-
-void qSignExtractDlg::onButtonReleased()
-{
+	else if (m_selectionMode == DRAW_MODEL)
+	{
+		// 绘制模式下，鼠标移动用于更新折线跟踪
+		m_pointCloudDrawer->onMouseMoved(x, y, button);
+	}
 	m_glWindow->redraw();
 }
 
@@ -574,6 +877,29 @@ void qSignExtractDlg::onMouseWheelRotated(int delta)
 	{
 		m_pointCloudSelector->onMouseWheelRotated(delta);
 	}
+	else if (m_selectionMode == DRAW_MODEL)
+	{
+		// 如果需要，绘制模式下滚轮缩放时也可以更新折线的投影
+		m_pointCloudDrawer->onMouseWheelRotated(delta);
+	}
+	m_glWindow->redraw();
+}
+
+void qSignExtractDlg::keyPressEvent(QKeyEvent* event)
+{
+	if (m_selectionMode == DRAW_SELECTION)
+	{
+		m_pointCloudSelector->onKeyPressEvent(event);
+	}
+	else if (m_selectionMode == DRAW_MODEL)
+	{
+		// 绘制模式下，按键（如 F/G）用于结束折线或退出绘制
+		m_pointCloudDrawer->onKeyPressEvent(event);
+	}
+}
+
+void qSignExtractDlg::onButtonReleased()
+{
 	m_glWindow->redraw();
 }
 
@@ -588,15 +914,6 @@ void qSignExtractDlg::onEntitySelectionChanged(ccHObject* entity)
 	p_select_cloud = entity;
 	m_glWindow->redraw();
 	if (m_objectTree)m_objectTree->async_refresh();
-}
-
-// 应该是很多键被主程序当作快捷键拦截了，只有部分键有效
-void qSignExtractDlg::keyPressEvent(QKeyEvent* event)
-{
-	if (m_selectionMode == DRAW_SELECTION)
-	{
-		m_pointCloudSelector->onKeyPressEvent(event);
-	}
 }
 
 void qSignExtractDlg::showThresholdHistogram(ccPointCloud* pointCloud, bool isfilterIntensity,bool is_has_threshold, float lowerThreshold, float upperThreshold)
