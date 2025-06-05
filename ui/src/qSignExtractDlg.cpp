@@ -219,6 +219,23 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		leftLayout->addWidget(extractGroup);
 	}
 
+	// ==================================== 功能按钮组：匹配类（新增）
+	{
+		QGroupBox* matchGroup = new QGroupBox("点云匹配", this);
+		QVBoxLayout* matchLayout = new QVBoxLayout(matchGroup);
+		QButtonGroup* matchButtonGroup = new QButtonGroup(this);
+		allGroups.push_back(matchButtonGroup);
+		matchButtonGroup->setExclusive(true);
+
+		addGroupedButton("直接匹配模板", [this]() { onMatchTemplateDirect(); }, matchGroup, matchLayout, matchButtonGroup);
+		addGroupedButton("框选匹配模板", [this]() { onMatchTemplateByBox();   }, matchGroup, matchLayout, matchButtonGroup);
+		addGroupedButton("点击匹配模板", [this]() { onMatchTemplateByClick(); }, matchGroup, matchLayout, matchButtonGroup);
+
+		matchGroup->setLayout(matchLayout);
+		leftLayout->addWidget(matchGroup);
+	}
+
+
 	// ==================================== 启用/禁用控制（所有组按钮）
 	{
 		connect(m_pointCloudSelector, &PointCloudSelector::draw_start, [allGroups]() {
@@ -366,6 +383,7 @@ void qSignExtractDlg::onAutoExtract()
 void qSignExtractDlg::onBoxSelectExtract()
 {
 	m_pointCloudSelector->startDraw();
+	m_pointCloudSelector->setDraw(DrawMode::PolylineClosed);
 	m_pointCloudSelector->setCallbackfunc([=]
 		{
 			std::vector<CCVector3d> polyline;
@@ -605,9 +623,41 @@ void qSignExtractDlg::onBoxClip()
 		});
 }
 
+void qSignExtractDlg::onMatchTemplateDirect()
+{
+	if (!p_select_cloud || !dynamic_cast<ccPointCloud*>(p_select_cloud))
+	{
+		ccLog::Error("未选择点云");
+		return;
+	}
+
+	auto p_cloud = PointCloudIO::convert_to_ccCloudPtr(p_select_cloud);
+	p_select_cloud->addChild(CloudProcess::apply_roadmarking_vectorization(p_cloud));
+	m_objectTree->async_refresh();
+}
+
+void qSignExtractDlg::onMatchTemplateByBox()
+{
+	// 先让用户在视图中用矩形框选区域
+	m_pointCloudSelector->startDraw();
+	m_pointCloudSelector->setDraw(DrawMode::Rectangle);
+	m_pointCloudSelector->setCallbackfunc([&]()
+		{
+			// 获取用户绘制的闭合多边形（矩形四角）
+			std::vector<CCVector3d> polyline;
+			m_pointCloudSelector->getPoints(polyline);
+
+
+		});
+}
+
+void qSignExtractDlg::onMatchTemplateByClick()
+{
+	
+}
+
 void qSignExtractDlg::onRectClip()
 {
-	m_selectionMode = DRAW_SELECTION;
 	m_pointCloudSelector->startDraw();
 	m_pointCloudSelector->setDraw(DrawMode::Rectangle);
 	m_pointCloudSelector->setCallbackfunc([&]
@@ -775,7 +825,10 @@ void qSignExtractDlg::onMakeModel()
 					});
 			}
 
-			json j;
+			if (!j.contains("models") || !j["models"].is_array())
+			{
+				j["models"] = json::array();
+			}
 			j["models"].push_back(modelJson);
 
 			// 写入磁盘（覆盖原 JSON 文件）
@@ -793,8 +846,6 @@ void qSignExtractDlg::onMakeModel()
 			QMessageBox::information(nullptr, "成功", "模板已成功保存到 JSON 文件！");
 		});
 }
-
-
 
 void qSignExtractDlg::addCloudToDB(ccPointCloud* cloud)
 {
@@ -1082,6 +1133,8 @@ void CloudObjectTreeWidget::refresh()
 		loadTreeItem(dbRoot->getChild(i), nullptr);
 	}
 	expandAll();  // 展开所有项
+
+	m_glWindow->redraw();
 
 	// 恢复信号处理
 	blockSignals(false);

@@ -99,7 +99,6 @@ using PCLCloudXYZIPtr = pcl::PointCloud<pcl::PointXYZI>::Ptr;
 using PCLOctree = pcl::octree::OctreePointCloudSearch<pcl::PointXYZ>;
 using PCLOctreePtr = pcl::octree::OctreePointCloudSearch<pcl::PointXYZ>::Ptr;
 
-// ============================================pcl显示点云
 template <typename... PointClouds>
 void visualizePointClouds(
 	const QString& title,
@@ -113,9 +112,7 @@ void visualizePointClouds(
 	Eigen::Vector4f overall_centroid(0.0f, 0.0f, 0.0f, 0.0f);
 	int total_points = 0;
 
-	// 使用折叠参数添加多个点云
 	size_t cloud_index = 0;
-	// 使用折叠表达式展开并添加点云
 	([&] {
 		// 为每个点云设置不同的颜色
 		pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> color(
@@ -158,6 +155,61 @@ void visualizePointClouds(
 	// 显示点云个数
 	std::stringstream cloud_count_text;
 	cloud_count_text << "Total Points: " << total_points;
+	viewer.addText(cloud_count_text.str(), 10, 10, 1.0, 1.0, 1.0, "cloud_count_text");
+
+	// 显示动态文本
+	int y_offset = 30;
+	for (const auto& text : dynamic_text) {
+		viewer.addText(text.toStdString(), 10, y_offset, 1.0, 1.0, 1.0, "dynamic_text_" + std::to_string(y_offset));
+		y_offset += 20;  // 每个文本下移20像素
+	}
+
+	// 持续显示直到关闭窗口
+	while (!viewer.wasStopped()) {
+		viewer.spinOnce();
+	}
+}
+
+
+inline void visualizePointCloudWithNormals(
+	const QString& title,
+	const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, // 单个点云
+	const pcl::PointCloud<pcl::Normal>::Ptr& normals,  // 对应的法向量
+	const std::vector<QString>& dynamic_text = {}      // 动态文本
+)
+{
+	pcl::visualization::PCLVisualizer viewer(title.toStdString());
+
+	std::string cloud_id = "cloud_0"; // 只有一个点云
+	std::string normals_id = "normals_0";
+
+	// 设置点云的颜色
+	pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> color(cloud, 255, 0, 0);
+
+	// 添加点云到视图器
+	viewer.addPointCloud(cloud, color, cloud_id);
+
+	// 添加法向量
+	viewer.addPointCloudNormals<pcl::PointXYZ, pcl::Normal>(cloud, normals, 10, 0.05, normals_id);
+
+	// 计算点云的中心
+	Eigen::Vector4f centroid;
+	pcl::compute3DCentroid(*cloud, centroid);
+
+	// 设置坐标系
+	viewer.addCoordinateSystem(1.0);
+	viewer.setBackgroundColor(0, 0, 0);  // 设置背景颜色为黑色
+
+	// 设置相机视角，聚焦在点云的中心
+	viewer.setCameraPosition(
+		centroid[0], centroid[1], centroid[2] + 10,
+		centroid[0], centroid[1], centroid[2],
+		0, -1, 0  // 观察目标点、视角和上方向
+	);
+
+	// 显示点云个数
+	std::stringstream cloud_count_text;
+	cloud_count_text << "Total Points: " << cloud->size();
 	viewer.addText(cloud_count_text.str(), 10, 10, 1.0, 1.0, 1.0, "cloud_count_text");
 
 	// 显示动态文本

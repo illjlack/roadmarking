@@ -366,11 +366,9 @@ PCLCloudPtr CloudProcess::match_roadmarking(PCLCloudPtr pclCloud)
 
 ccHObject* CloudProcess::apply_roadmarking_vectorization(ccCloudPtr cloud)
 {
-	ccHObject* polylineContainer(new ccHObject);
-	GridProcess gridProcess(0.05);
-	gridProcess.perform_orthogonal_grid_mapping(cloud);
-	gridProcess.process_grid_to_polylines(polylineContainer);
-	return polylineContainer;
+	std::vector<PCLCloudPtr>pclCloud;
+	pclCloud.push_back(PointCloudIO::convert_to_PCLCloudPtr(cloud));
+	return apply_roadmarking_vectorization(pclCloud);
 }
 
 ccHObject* CloudProcess::apply_roadmarking_vectorization(std::vector<PCLCloudPtr> pclClouds)
@@ -383,56 +381,64 @@ ccHObject* CloudProcess::apply_roadmarking_vectorization(std::vector<PCLCloudPtr
 
 	ccHObject* allLinesContainer = new ccHObject();
 
-	// 提示用户选择一个 JSON 文件
-	/*QString model_path = QFileDialog::getOpenFileName(nullptr, "选择 JSON 文件", "", "JSON Files (*.json);;All Files (*)");
-	if (model_path.isEmpty()) {
-		QMessageBox::information(nullptr, "提示", "未选择文件");
-		return allLinesContainer;
-	}*/
+	// 目前硬编码了 model.json 路径
+	QString model_path = "F:\\RoadMarking\\install\\CloudCompare_debug\\model\\model.json";
 
-	QString model_path = "F:\\RoadMarking\\CloudCompare\\plugins\\core\\Standard\\qRoadMarking\\model\\model.json";
-
-	// 调用分类函数
+	// 调用分类函数，得到 roadmarkings（其中每个 RoadMarking 现在包含 polylines 而非 polyline）
 	classifier.ClassifyRoadMarkings(pclClouds, roadmarkings, model_path.toStdString());
 
 	// 遍历分类结果中的每个 roadmarking
 	for (const auto& roadmarking : roadmarkings)
 	{
-		// 获取分类中的折线（polyline）
-		const std::vector<pcl::PointXYZ>& polyline = roadmarking.polyline;
+		// 跳过非折线类型（假设只有 polylines 里有内容才处理）
+		if (roadmarking.polylines.empty())
+			continue;
 
-		// 创建 ccPointCloud 对象，用来存储折线的点
-		ccCloudPtr polylineCloud(new ccPointCloud);
-
-		// 将 ctrolPoints 中的点添加到 polylineCloud 中
-		for (const auto& point : polyline)
+		// 对 roadmarking.polylines 中的每一条折线都创建一个 ccPolyline
+		for (const auto& singlePolyline : roadmarking.polylines)
 		{
-			polylineCloud->addPoint({ point.x ,point.y, point.z });
+			if (singlePolyline.size() < 2)
+				continue; // 至少要两个点才算“折线”
+
+			// 创建一个 ccPointCloud 来存储这一条折线的点
+			ccCloudPtr polylineCloud(new ccPointCloud);
+
+			// 将 singlePolyline 中的点添加到 polylineCloud
+			for (const auto& pt : singlePolyline)
+			{
+				polylineCloud->addPoint({ pt.x, pt.y, pt.z });
+			}
+
+			// 创建 ccPolyline，并将所有点索引加入
+			// 注意这里直接把 release() 后的裸指针传给 ccPolyline，ccPolyline 会接管销毁
+			ccPolyline* polylineObj = new ccPolyline(polylineCloud.release());
+
+			// 把 ccPointCloud 注册为 ccPolyline 的子节点，以便在场景里一起删除
+			polylineObj->addChild(polylineCloud.release());
+
+			// 为折线预留索引空间
+			polylineObj->reserve(static_cast<unsigned>(singlePolyline.size()));
+
+			// 将每个顶点的索引依次添加
+			for (unsigned idx = 0; idx < singlePolyline.size(); ++idx)
+			{
+				polylineObj->addPointIndex(idx);
+			}
+
+			// 设置可见性和颜色
+			polylineObj->setVisible(true);
+			polylineObj->setColor(ccColor::redRGB);
+			polylineObj->showColors(true);
+
+			// 将折线加入到 allLinesContainer
+			allLinesContainer->addChild(polylineObj);
 		}
-
-		// 创建 ccPolyline 对象并将 polylineCloud 作为输入点云
-		ccPolyline* polylineObj = new ccPolyline(polylineCloud.release());
-
-		polylineObj->addChild(polylineCloud.get()); // 一起删除
-
-		// 预留空间用于折线点索引
-		polylineObj->reserve(static_cast<unsigned>(polyline.size()));
-
-		// 将折线中的每个点添加到 ccPolyline 中
-		for (size_t i = 0; i < polyline.size(); ++i)
-		{
-			polylineObj->addPointIndex(static_cast<unsigned>(i));
-		}
-
-		// 将创建的 ccPolyline 添加到 allLinesContainer 中
-		polylineObj->setVisible(true);
-		polylineObj->setColor(ccColor::redRGB);
-		polylineObj->showColors(true);
-		allLinesContainer->addChild(polylineObj);
 	}
+
 	allLinesContainer->setVisible(true);
 	return allLinesContainer;
 }
+
 
 template <typename PointT>
 void CloudProcess::extract_euclidean_clusters(
@@ -661,6 +667,7 @@ void CloudProcess::crop_cloud_with_polygon(
 		std::vector<ScalarType> local_scalars_all;
 
 		// ========== 3.1 对大规模点云内部进行并行裁剪 ==========
+		omp_set_num_threads(8);
 #pragma omp parallel
 		{
 			std::vector<CCVector3> local_points;

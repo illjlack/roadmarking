@@ -63,6 +63,9 @@ private slots:
 	void onBoxSelectExtract();   // 框选提取
 	void onPointGrowExtract();   // 点生长提取
 	void onBoxClip();            // 框选截取
+	void onMatchTemplateDirect();
+	void onMatchTemplateByBox();
+	void onMatchTemplateByClick();
 	void onRectClip();
 	void onMakeModel();
 	void onFilteCloudByIntensity();         // 过滤点云

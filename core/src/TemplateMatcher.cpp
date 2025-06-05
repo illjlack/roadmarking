@@ -22,6 +22,7 @@ enum ROADMARKING_TYPE
 
 
 using namespace roadmarking;
+using json = nlohmann::json;
 
 inline int l(int pos)
 {
@@ -39,7 +40,7 @@ public:
 	// 成员变量
 	std::string outline_point_cloud_path;  // 轮廓点云
 	std::string raw_point_cloud_path;      // 原始点云路径
-	std::vector<PCLPoint> vectorized_points;  // 向量化点的列表
+	std::vector<std::vector<PCLPoint>> vectorized_polylines;  // 向量化点的列表
 
 	std::string name;
 
@@ -53,55 +54,90 @@ public:
 	Eigen::Vector3f centroid;			 // 质心
 	Eigen::Vector4f min_bounding_box;    // 最小旋转包围盒（xmin, xmax, ymin, ymax）
 	// 构造函数
-	Model(const string& name, const std::string& outline_path, const std::string& raw_path, const std::vector<PCLPoint>& points)
-		:name(name), outline_point_cloud_path(outline_path), raw_point_cloud_path(raw_path), vectorized_points(points)
+	Model(const std::string& name,
+		const std::string& outline_path,
+		const std::string& raw_path,
+		const std::vector<std::vector<PCLPoint>>& polylines)
+		: name(name)
+		, outline_point_cloud_path(outline_path)
+		, raw_point_cloud_path(raw_path)
+		, vectorized_polylines(polylines)
 	{
-		// 读取轮廓点云文件
+		// 加载轮廓点云
 		outline_point_cloud = loadPointCloud(outline_path);
-		// 读取原始点云文件
+		// 加载原始点云
 		raw_point_cloud = loadPointCloud(raw_path);
 
-		if (outline_point_cloud->empty() || raw_point_cloud->empty())
+		if (!outline_point_cloud || outline_point_cloud->empty()
+			|| !raw_point_cloud || raw_point_cloud->empty())
 		{
+			// 如果任一条点云加载失败，则直接返回
 			return;
 		}
 
 		calculatePCA();
-
 		calculateCentroid();
-
 		calculateBoundingBox();
 	}
 
-	// 静态函数加载 JSON 文件
-	static std::vector<Model> loadFromJson(const std::string& filename) {
-		// 打开文件
+	static std::vector<Model> loadFromJson(const std::string& filename)
+	{
 		std::ifstream input(filename);
 		if (!input.is_open()) {
 			std::cerr << "Could not open file " << filename << std::endl;
 			return {};
 		}
 
-		// 解析 JSON 数据
-		nlohmann::json j;
+		json j;
 		input >> j;
+
 		std::vector<Model> models;
+		// 顶层键名应为 "models"（注意与旧代码中 "model" 不同）
+		if (!j.contains("models") || !j["models"].is_array()) {
+			std::cerr << "Invalid JSON format: no \"models\" array found." << std::endl;
+			return {};
+		}
 
-		// 遍历 JSON 中的 "model" 数组
-		for (const auto& model_data : j["model"]) {
-			std::string name = model_data["name"];
-			std::string outline_path = model_data["outline_point_cloud_path"];
-			std::string raw_path = model_data["raw_point_cloud_path"];
-			std::vector<PCLPoint> points;
+		// 遍历 JSON 中的每一个 model 对象
+		for (const auto& model_data : j["models"])
+		{
+			// 读取基本字段
+			std::string name = model_data.value("name", "");
+			std::string outline_path = model_data.value("outline_point_cloud_path", "");
+			std::string raw_path = model_data.value("raw_point_cloud_path", "");
 
-			// 遍历 "vectorized_points"
-			for (const auto& point : model_data["vectorized_points"]) {
-				std::vector<float> point_vec = point.get<std::vector<float>>();
-				points.push_back({ point_vec[0], point_vec[1] ,point_vec[2] });
+			// 用于存储该 model 对应的多条折线
+			std::vector<std::vector<PCLPoint>> polylines;
+
+			// 如果存在 "graph_elements"，就逐条解析
+			if (model_data.contains("graph_elements") && model_data["graph_elements"].is_array())
+			{
+				for (const auto& elem : model_data["graph_elements"])
+				{
+					// 只处理 type == "polyline" 的元素
+					if (elem.value("type", "") == "polyline"
+						&& elem.contains("points") && elem["points"].is_array())
+					{
+						std::vector<PCLPoint> onePolyline;
+						for (const auto& ptArr : elem["points"])
+						{
+							// 每个 ptArr 应该是 [x, y, z] 这样的数组
+							if (ptArr.is_array() && ptArr.size() == 3)
+							{
+								float x = ptArr[0].get<float>();
+								float y = ptArr[1].get<float>();
+								float z = ptArr[2].get<float>();
+								onePolyline.emplace_back(x, y, z);
+							}
+						}
+						// 将这一条折线加入到 polylines 中
+						polylines.push_back(std::move(onePolyline));
+					}
+				}
 			}
 
-			// 创建 Model 对象并添加到 models 向量中
-			models.push_back(Model(name, outline_path, raw_path, points));
+			// 创建 Model 对象并加入到返回列表
+			models.emplace_back(name, outline_path, raw_path, polylines);
 		}
 
 		return models;
@@ -202,84 +238,76 @@ void RoadMarkingClassifier::ClassifyRoadMarkings(const std::vector<PCLCloudPtr>&
 	vectorize_roadmarking(models, roadmarkings);
 }
 
-void test_CombineSideLines(RoadMarkingClassifier& obj,
-	void (RoadMarkingClassifier::* func_ptr)(const RoadMarkings&, double, RoadMarkings&)
-) {
-	// 使用 reinterpret_cast 将成员函数指针转换为可以调用的指针
-	void (RoadMarkingClassifier:: * func_ptr_cast)(const RoadMarkings&, double, RoadMarkings&) =
-		reinterpret_cast<void (RoadMarkingClassifier::*)(const RoadMarkings&, double, RoadMarkings&)>(func_ptr);
-
-	RoadMarkings roadmarkings;
-
-	for (int i = 1; i < 5; i++)
-	{
-		roadmarkings.push_back({});
-		roadmarkings.back().category = SIDE_LINE;
-		roadmarkings.back().polyline = { {0,(float)10.0 * i,0}, {0,(float)10.0 * i + 5,0} };
-		roadmarkings.back().direction = { 0,1,0,0 };
-	}
-
-	double combine_length = 11;
-	RoadMarkings combine_sideline_markings;
-	// 调用私有成员函数
-	(obj.*func_ptr_cast)(roadmarkings, combine_length, combine_sideline_markings);
-};
-
 void RoadMarkingClassifier::vectorize_roadmarking(std::vector<Model>& models, RoadMarkings& roadmarkings)
 {
 	for (auto& roadmarking : roadmarkings)
 	{
-		if (roadmarking.category >= 0)
+		if (roadmarking.category < 0)
 		{
-			if (roadmarking.category == SIDE_LINE) // 线形
-			{
-				continue;
-			}
+			continue;
+		}
 
+		if (roadmarking.category == SIDE_LINE) // 如果是侧线，则跳过
+		{
+			continue;
+		}
+
+		// 找到对应类别的模型
+		Model& model = models[roadmarking.category];
+
+		// 清空旧的多条折线（如果之前已有残留）
+		roadmarking.polylines.clear();
+
+		// 获取对应的变换矩阵
+		const Eigen::Matrix4f& transform = roadmarking.localization_tranmat_m2s;
+
+		// 遍历该模型下的每一条“原始折线”
+		for (const auto& singlePolyline : model.vectorized_polylines)
+		{
+			// 先把这一条折线的所有顶点装到一个 PCL 点云里
 			pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in(new pcl::PointCloud<pcl::PointXYZ>());
-			for (const auto& point : models[roadmarking.category].vectorized_points)
+			cloud_in->reserve(singlePolyline.size());
+			for (const auto& pt : singlePolyline)
 			{
-				cloud_in->push_back(point);
+				cloud_in->push_back(pt);
 			}
-
-			// 获取对应的变换矩阵
-			Eigen::Matrix4f transform = roadmarking.localization_tranmat_m2s;
 
 			// 创建一个新的点云来存储变换后的结果
 			pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out(new pcl::PointCloud<pcl::PointXYZ>());
 
-			// 进行变换
+			// 对该折线进行坐标变换
 			pcl::transformPointCloud(*cloud_in, *cloud_out, transform);
 
-			// 将变换后的点云转换回 std::vector
-			roadmarking.polyline.clear();  // 清空原有的点
-			for (const auto& point : cloud_out->points)
+			// 将变换后的点云转回 std::vector<pcl::PointXYZ> 并加入到 roadmarking.polylines
+			std::vector<pcl::PointXYZ> transformedPolyline;
+			transformedPolyline.reserve(cloud_out->size());
+			for (const auto& pt : cloud_out->points)
 			{
-				roadmarking.polyline.push_back({ point.x, point.y, point.z });
+				transformedPolyline.push_back(pt);
 			}
+
+			roadmarking.polylines.push_back(std::move(transformedPolyline));
 		}
 	}
 
-
-	//test_CombineSideLines(*this, &RoadMarkingClassifier::CombineSideLines);
-
-
-
+	// 下面依旧按原有逻辑合并侧线，结果也要写回 roadmarkings
 	RoadMarkings combine_sideline_markings;
 	combine_side_lines(roadmarkings, 20, combine_sideline_markings);
 
 	RoadMarkings result;
-	for (auto& line : roadmarkings)
+	for (auto& rm : roadmarkings)
 	{
-		if (line.category != SIDE_LINE)result.push_back(line);
+		if (rm.category != SIDE_LINE)
+		{
+			result.push_back(rm);
+		}
 	}
-	for (auto& line : combine_sideline_markings)
+	for (auto& rm : combine_sideline_markings)
 	{
-		result.push_back(line);
+		result.push_back(rm);
 	}
 	result.swap(roadmarkings);
 }
-
 
 bool RoadMarkingClassifier::model_match(const std::vector<Model>& models, const vector<PCLCloudPtr>& sceneClouds, RoadMarkings& roadmarkings)
 {
@@ -293,8 +321,6 @@ bool RoadMarkingClassifier::model_match(const std::vector<Model>& models, const 
 	float overlapping_dist_thre = overlapDis_;
 	float heading_increment = heading_increment_;
 	int iter_num = iter_num_;
-
-	float corr_dist_thre = FLT_MAX;
 
 	//modeldatas.resize(scenePointClouds.size());
 	//is_rights.resize(scenePointClouds.size());
@@ -341,7 +367,9 @@ bool RoadMarkingClassifier::model_match(const std::vector<Model>& models, const 
 			Eigen::Matrix4f tran_mat_m2s_temp; // 临时的变换矩阵
 
 			// 执行ICP匹配，得到临时匹配拟合度和变换矩阵
-			temp_match_fitness = reg_pca_then_icp(models[j], sceneCloud, tran_mat_m2s_temp, heading_increment, iter_num, corr_dist_thre);
+			temp_match_fitness = reg_pca_then_icp(models[j], sceneCloud, tran_mat_m2s_temp, heading_increment, iter_num, correct_match_fitness_thre);
+
+			if (temp_match_fitness < 0)continue;
 
 			// 对模型点云进行变换
 			pcl::transformPointCloud(*models[j].raw_point_cloud, *modelPointClouds_tran, tran_mat_m2s_temp);
@@ -360,8 +388,8 @@ bool RoadMarkingClassifier::model_match(const std::vector<Model>& models, const 
 					cal_overlap_ratio(sceneCloud, model_kdtree.makeShared(), overlapping_dist_thre));
 			}
 
-			/*std::vector<QString> dynamic_text = { t("模板点云：") + QString::fromStdString(models[j].name),t("重叠率：") + QString::number(overlapping_ratio),t("得分：") + QString::number(temp_match_fitness) };
-			visualizePointClouds(t("点云匹配"), dynamic_text, sceneCloud, modelPointClouds_tran);*/
+			//std::vector<QString> dynamic_text = { "模板点云：" + QString::fromStdString(models[j].name),"重叠率：" + QString::number(overlapping_ratio),"得分：" + QString::number(temp_match_fitness) };
+			//visualizePointClouds("点云匹配", dynamic_text, sceneCloud, modelPointClouds_tran);
 
 			// 如果当前模型的重叠比率更好且拟合度小于阈值，则更新最佳匹配
 			if (overlapping_ratio > best_overlapping_ratio && temp_match_fitness < correct_match_fitness_thre)
@@ -551,6 +579,73 @@ void RoadMarkingClassifier::align_with_PCA(const PCLCloudPtr& ModelCloud,
 	transformation.block<3, 1>(0, 3) = scene_centroid.head<3>() - rotation_matrix * model_centroid.head<3>();
 }
 
+/*
+#include <pcl/features/fpfh.h>
+#include <pcl/point_types.h>
+#include <pcl/kdtree/kdtree_flann.h>
+#include <pcl/registration/icp.h>
+#include <pcl/registration/sample_consensus_prerejective.h>
+// 特征点配准
+float feature_based_registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr& model_cloud,
+	const pcl::PointCloud<pcl::PointXYZ>::Ptr& scene_cloud,
+	Eigen::Matrix4f& transformation_matrix)
+{
+	// Step 1: 提取源点云的 FPFH 特征
+	pcl::FPFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::FPFHSignature33> fpfh_estimation;
+	pcl::PointCloud<pcl::FPFHSignature33>::Ptr model_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>);
+	pcl::PointCloud<pcl::FPFHSignature33>::Ptr scene_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>);
+
+	fpfh_estimation.setInputCloud(model_cloud);
+	fpfh_estimation.setRadiusSearch(0.05);
+	fpfh_estimation.compute(*model_fpfh);
+
+	fpfh_estimation.setInputCloud(scene_cloud);
+	fpfh_estimation.compute(*scene_fpfh);
+
+	// Step 2: 使用 Kd-Tree 进行最近邻匹配
+	pcl::KdTreeFLANN<pcl::FPFHSignature33> kdtree;
+	kdtree.setInputCloud(model_fpfh);
+
+	std::vector<int> match_indices;
+	std::vector<float> match_distances;
+	float total_distance = 0.0f;
+	int match_count = 0;
+
+	for (size_t i = 0; i < scene_fpfh->size(); ++i)
+	{
+		if (kdtree.nearestKSearch(scene_fpfh->points[i], 1, match_indices, match_distances) > 0)
+		{
+			total_distance += match_distances[0];
+			match_count++;
+		}
+	}
+
+	// Step 3: 判断特征匹配质量
+	float average_distance = total_distance / match_count;
+	if (average_distance > 0.1f)  // 假设阈值
+	{
+		// 如果匹配的误差较大，说明可能存在较大方向偏差
+		return -1.0f;
+	}
+
+	// Step 4: 计算变换矩阵
+	// 这里可以用简单的 **SVD** 或其他方法来计算点云之间的变换
+	pcl::registration::CorrespondenceEstimation<pcl::FPFHSignature33, pcl::FPFHSignature33> corr_estimation;
+	corr_estimation.setInputSource(model_fpfh);
+	corr_estimation.setInputTarget(scene_fpfh);
+
+	pcl::registration::SampleConsensusPrerejective<pcl::PointXYZ, pcl::PointXYZ, pcl::FPFHSignature33> reg;
+	reg.setInputSource(model_cloud);
+	reg.setInputTarget(scene_cloud);
+	reg.setMinSampleDistance(0.05);
+	reg.setMaxCorrespondenceDistance(0.1);
+	reg.setMaximumIterations(1000);
+	reg.align(*model_cloud);
+
+	// 返回配准后的变换矩阵
+	transformation_matrix = reg.getFinalTransformation();
+	return 0.0f; // 匹配成功
+}
 
 float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloudPtr& sceneCloud,
 	Eigen::Matrix4f& tran_mat_m2s_best, float heading_step_d, int max_iter_num, float dis_thre)
@@ -602,6 +697,321 @@ float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloud
 	//}
 	return fitness_score;
 }
+*/
+
+
+/*
+#include <pcl/features/fpfh.h>
+#include <pcl/kdtree/kdtree_flann.h>
+#include <pcl/registration/icp.h>
+#include <pcl/registration/sample_consensus_prerejective.h>
+#include <pcl/features/normal_3d.h>
+
+// 使用特征配准代替 PCA
+float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloudPtr& sceneCloud,
+	Eigen::Matrix4f& tran_mat_m2s_best, float heading_step_d, int max_iter_num, float dis_thre)
+{
+	// ----- 第零步：异常值滤除（可选） -----
+	pcl::PointCloud<pcl::PointXYZ>::Ptr scene_filtered(new pcl::PointCloud<pcl::PointXYZ>);
+	{
+		pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor;
+		sor.setInputCloud(sceneCloud);
+		sor.setMeanK(50);
+		sor.setStddevMulThresh(0.5);  // 调低标准差阈值
+		sor.filter(*scene_filtered);
+	}
+
+	// ----- 第一步：体素下采样（可选，但一般推荐） -----
+	float voxel_size = 0.05f; // 增大体素大小
+	pcl::PointCloud<pcl::PointXYZ>::Ptr model_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr scene_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
+
+	{
+		pcl::VoxelGrid<pcl::PointXYZ> vg;
+		vg.setLeafSize(voxel_size, voxel_size, voxel_size);
+
+		vg.setInputCloud(model.raw_point_cloud);
+		vg.filter(*model_downsampled);
+
+		vg.setInputCloud(scene_filtered);
+		vg.filter(*scene_downsampled);
+	}
+
+	// ----- 第二步：法向量估计 -----
+	pcl::PointCloud<pcl::Normal>::Ptr model_normals(new pcl::PointCloud<pcl::Normal>);
+	pcl::PointCloud<pcl::Normal>::Ptr scene_normals(new pcl::PointCloud<pcl::Normal>);
+
+	{
+		pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne;
+		pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+
+		ne.setInputCloud(model_downsampled);
+		ne.setSearchMethod(tree);
+		ne.setRadiusSearch(0.2);  // 增大法向量估计半径
+		ne.compute(*model_normals);
+
+		ne.setInputCloud(scene_downsampled);
+		ne.compute(*scene_normals);
+	}
+
+	// ----- 第三步：FPFH 特征计算 -----
+	pcl::PointCloud<pcl::FPFHSignature33>::Ptr model_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>);
+	pcl::PointCloud<pcl::FPFHSignature33>::Ptr scene_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>);
+
+	{
+		pcl::FPFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::FPFHSignature33> fpfh;
+		pcl::search::KdTree<pcl::PointXYZ>::Ptr fpfh_tree(new pcl::search::KdTree<pcl::PointXYZ>);
+		fpfh.setSearchMethod(fpfh_tree);
+		fpfh.setRadiusSearch(0.2);  // 增大特征半径
+
+		fpfh.setInputCloud(model_downsampled);
+		fpfh.setInputNormals(model_normals);
+		fpfh.compute(*model_fpfh);
+
+		fpfh.setInputCloud(scene_downsampled);
+		fpfh.setInputNormals(scene_normals);
+		fpfh.compute(*scene_fpfh);
+	}
+
+	// ----- 第四步：基于 RANSAC 的粗配准（SampleConsensusPrerejective） -----
+	pcl::SampleConsensusPrerejective<pcl::PointXYZ, pcl::PointXYZ, pcl::FPFHSignature33> sac;
+	sac.setInputSource(model_downsampled);
+	sac.setInputTarget(scene_downsampled);
+	sac.setSourceFeatures(model_fpfh);
+	sac.setTargetFeatures(scene_fpfh);
+
+	sac.setMaximumIterations(10000);  // 增加 RANSAC 迭代次数
+	sac.setNumberOfSamples(3);
+	sac.setCorrespondenceRandomness(5);
+	sac.setSimilarityThreshold(0.9f);
+	sac.setMaxCorrespondenceDistance(0.08f);  // 调整最大对应距离
+	sac.setInlierFraction(0.4f);  // 增加内点比例
+
+	pcl::PointCloud<pcl::PointXYZ>::Ptr sac_aligned(new pcl::PointCloud<pcl::PointXYZ>);
+	sac.align(*sac_aligned);
+
+	if (!sac.hasConverged()) {
+		return -1.0f;  // 特征配准失败
+	}
+
+	Eigen::Matrix4f init_transformation = sac.getFinalTransformation();
+
+	// ----- 第五步：ICP 精细配准 -----
+	// 如果想使用轮廓点云，可从 outline_point_cloud 获取，否则直接用下采样的完整场景点云
+	pcl::PointCloud<pcl::PointXYZ>::Ptr target_for_icp = get_hull_cloud(sceneCloud);
+	if (target_for_icp->empty())
+	{
+		// 如果 hull 云为空，就退回到下采样后的完整场景云
+		target_for_icp = scene_downsampled;
+	}
+
+	// 同样，对目标 ICP 云进行下采样或滤波以提高效率（可选）
+	pcl::PointCloud<pcl::PointXYZ>::Ptr target_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
+	{
+		pcl::VoxelGrid<pcl::PointXYZ> vg2;
+		vg2.setLeafSize(voxel_size, voxel_size, voxel_size);
+		vg2.setInputCloud(target_for_icp);
+		vg2.filter(*target_downsampled);
+	}
+
+	// 也可以对 sac_aligned 做一次下采样，保证与 target_downsampled 点数相近
+	pcl::PointCloud<pcl::PointXYZ>::Ptr source_for_icp(new pcl::PointCloud<pcl::PointXYZ>);
+	{
+		pcl::VoxelGrid<pcl::PointXYZ> vg3;
+		vg3.setLeafSize(voxel_size, voxel_size, voxel_size);
+		vg3.setInputCloud(sac_aligned);
+		vg3.filter(*source_for_icp);
+	}
+
+	pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
+	icp.setInputSource(source_for_icp);
+	icp.setInputTarget(target_downsampled);
+	icp.setMaxCorrespondenceDistance(dis_thre);   // 点到点最大对应距离阈值
+	icp.setMaximumIterations(max_iter_num);      // 最大迭代次数
+	icp.setTransformationEpsilon(1e-8);          // 变换矩阵收敛阈值
+	icp.setEuclideanFitnessEpsilon(1e-6);        // 坐标误差收敛阈值
+
+	pcl::PointCloud<pcl::PointXYZ> icp_result;
+	icp.align(icp_result, init_transformation);
+
+	if (!icp.hasConverged())
+	{
+		// ICP 未收敛
+		return -1.0f;
+	}
+
+	tran_mat_m2s_best = icp.getFinalTransformation();
+	float fitness_score = static_cast<float>(icp.getFitnessScore());
+
+	return fitness_score;
+}
+
+*/
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/statistical_outlier_removal.h>
+#include <pcl/registration/icp.h>
+#include <pcl/registration/sample_consensus_prerejective.h>
+#include <pcl/features/fpfh.h>
+#include <pcl/surface/concave_hull.h>
+#include <pcl/features/normal_3d.h>
+
+float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloudPtr& sceneCloud,
+	Eigen::Matrix4f& tran_mat_m2s_best, float heading_step_d, int max_iter_num, float dis_thre) {
+
+	max_iter_num = 50;
+	// 1. 体素下采样
+	float voxel_size = 0.05f;
+	pcl::PointCloud<pcl::PointXYZ>::Ptr model_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr scene_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::VoxelGrid<pcl::PointXYZ> vg;
+	vg.setLeafSize(voxel_size, voxel_size, voxel_size);
+
+	vg.setInputCloud(model.raw_point_cloud);
+	vg.filter(*model_downsampled);
+	vg.setInputCloud(sceneCloud);
+	vg.filter(*scene_downsampled);
+
+	// 2. Alpha Shape 提取边界点
+	auto extract_alpha_shape = [](const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, float alpha)
+		-> pcl::PointCloud<pcl::PointXYZ>::Ptr
+	{
+		pcl::PointCloud<pcl::PointXYZ>::Ptr boundary(new pcl::PointCloud<pcl::PointXYZ>);
+		pcl::ConcaveHull<pcl::PointXYZ> chull;
+		chull.setInputCloud(cloud);
+		chull.setAlpha(alpha);
+		chull.setKeepInformation(true); // 保留边界点
+		chull.reconstruct(*boundary);
+		return boundary;
+	};
+
+	pcl::PointCloud<pcl::PointXYZ>::Ptr model_keypoints = extract_alpha_shape(model_downsampled, 0.1f);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr scene_keypoints = extract_alpha_shape(scene_downsampled, 0.1f);
+
+	if (model_keypoints->empty() || scene_keypoints->empty()) {
+		return -1.0f;
+	}
+
+	// 3. 计算法向量
+	pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne;
+	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+
+	auto getXYNormal = [&](PCLCloudPtr cloud) {
+		// 创建新的点云集合，给每个点云加上多个不同Z值的“层”
+		pcl::PointCloud<pcl::PointXYZ>::Ptr cloudLayered(new pcl::PointCloud<pcl::PointXYZ>());
+		cloudLayered->reserve(cloud->points.size() * 15);  // 生成三个层次
+
+		// 创建多个不同Z值的“层”
+		for (float z_offset = -0.1f; z_offset <= 0.1f; z_offset += 0.02f) {
+			if (fabs(z_offset - 0.0f) < 0.01)continue;
+			for (const auto& point : cloud->points) {
+				pcl::PointXYZ new_point = point;
+				new_point.z += z_offset;  // 在Z轴上增加不同的偏移量
+				cloudLayered->push_back(new_point);
+			}
+		}
+
+		ne.setInputCloud(cloudLayered);
+		pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
+		ne.compute(*normals);
+
+		normals->points.resize(cloud->points.size());
+		return normals;
+	};
+
+	ne.setSearchMethod(tree);
+	ne.setRadiusSearch(0.1);
+
+	pcl::PointCloud<pcl::Normal>::Ptr model_normals = getXYNormal(model_keypoints);
+	pcl::PointCloud<pcl::Normal>::Ptr scene_normals = getXYNormal(scene_keypoints);
+
+	// 4. 计算 FPFH 特征描述子
+	pcl::PointCloud<pcl::FPFHSignature33>::Ptr model_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>);
+	pcl::PointCloud<pcl::FPFHSignature33>::Ptr scene_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>);
+
+	pcl::FPFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::FPFHSignature33> fpfh;
+	fpfh.setInputCloud(model_keypoints);
+	fpfh.setInputNormals(model_normals);
+	fpfh.setSearchMethod(tree);
+	fpfh.setRadiusSearch(0.1);
+	fpfh.compute(*model_fpfh);
+
+	fpfh.setInputCloud(scene_keypoints);
+	fpfh.setInputNormals(scene_normals);
+	fpfh.compute(*scene_fpfh);
+
+	// 5. 粗配准 - RANSAC
+	pcl::SampleConsensusPrerejective<pcl::PointXYZ, pcl::PointXYZ, pcl::FPFHSignature33> sac;
+	sac.setInputSource(model_keypoints);
+	sac.setInputTarget(scene_keypoints);
+
+	sac.setSourceFeatures(model_fpfh);
+	sac.setTargetFeatures(scene_fpfh);
+
+	sac.setMaximumIterations(5000);
+	// 设置每次迭代时使用的最小样本集（通常为3个点）
+	sac.setNumberOfSamples(3);
+
+	// 设置随机匹配的点数（默认为10个，通常为3到5个足够）
+	sac.setCorrespondenceRandomness(10);
+
+	sac.setSimilarityThreshold(0.8f);
+	sac.setMaxCorrespondenceDistance(0.2f);
+	sac.setInlierFraction(0.6f);
+
+	pcl::PointCloud<pcl::PointXYZ>::Ptr sac_aligned(new pcl::PointCloud<pcl::PointXYZ>);
+	sac.align(*sac_aligned);
+
+	if (!sac.hasConverged()) {
+		return -1.0f;  // 配准失败
+	}
+
+	Eigen::Matrix4f init_transformation = sac.getFinalTransformation();
+
+	{
+		visualizePointCloudWithNormals("点云二维法向量", model_keypoints, model_normals);
+
+		// 对模型点云进行变换
+		pcl::PointCloud<pcl::PointXYZ>::Ptr model_keypoints_tran(new pcl::PointCloud<pcl::PointXYZ>);
+		pcl::transformPointCloud(*model_keypoints, *model_keypoints_tran, init_transformation);
+
+		// 可视化
+		visualizePointClouds("粗配准", {}, scene_keypoints, model_keypoints_tran);
+	}
+
+	// 6. 精配准 - ICP
+	pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
+	icp.setInputSource(model_downsampled);
+	icp.setInputTarget(scene_downsampled);
+	icp.setMaxCorrespondenceDistance(dis_thre);
+	icp.setMaximumIterations(max_iter_num);
+	icp.setTransformationEpsilon(1e-8);
+	icp.setEuclideanFitnessEpsilon(1e-6);
+
+	pcl::PointCloud<pcl::PointXYZ> icp_result;
+	icp.align(icp_result, init_transformation);
+
+	if (!icp.hasConverged()) {
+		return -1.0f;
+	}
+
+	tran_mat_m2s_best = icp.getFinalTransformation();
+
+	{
+		// 对模型点云进行变换
+		pcl::PointCloud<pcl::PointXYZ>::Ptr model_downsampled_tran(new pcl::PointCloud<pcl::PointXYZ>);
+		pcl::transformPointCloud(*model_downsampled, *model_downsampled_tran, tran_mat_m2s_best);
+
+		// 可视化
+		visualizePointClouds("精配准", {}, scene_downsampled, model_downsampled_tran);
+	}
+
+	return static_cast<float>(icp.getFitnessScore());
+}
+
+
+
 
 PCLCloudPtr RoadMarkingClassifier::get_hull_cloud(PCLCloudPtr cloud)
 {
@@ -672,11 +1082,11 @@ void RoadMarkingClassifier::align_cloud_to_x_axis(const PCLCloudPtr& cloud, Eige
 
 bool RoadMarkingClassifier::is_line_cloud_and_get_direction(PCLCloudPtr cloud, RoadMarkings& roadmarkings)
 {
-	// 1. 计算原地旋转变换，使点云的主要方向对齐到 X 轴
+	// 1. 计算将点云主方向对齐到 X 轴的变换矩阵
 	Eigen::Matrix4f T;
 	align_cloud_to_x_axis(cloud, T);
 
-	// 2. 将点云旋转到主成分坐标系（对齐到 X 轴）
+	// 2. 将点云旋转到主成分坐标系（X 轴对齐）
 	PCLCloudPtr rotated_cloud(new PCLCloud);
 	pcl::transformPointCloud(*cloud, *rotated_cloud, T);
 
@@ -689,46 +1099,43 @@ bool RoadMarkingClassifier::is_line_cloud_and_get_direction(PCLCloudPtr cloud, R
 	float length = std::max(dx, dy);
 	float width = std::min(dx, dy);
 
-	// 4. 根据条件判断是否为线形点云
+	// 4. 判断是否为线形点云（宽度小于 0.35，长度大于 0.8）
 	if (width < 0.35f && length > 0.8f)
 	{
-		// 将当前道路标线添加到 roadmarkings 中
-		roadmarkings.push_back({});
+		// 新建一个 RoadMarking 条目
+		roadmarkings.emplace_back();
+		RoadMarking& rm = roadmarkings.back();
+		rm.category = SIDE_LINE;  // 标记为线形
 
+		// 5. 计算包围盒在旋转空间中的四个顶点（Z 取平均值）
+		float avg_z = (minPt.z + maxPt.z) * 0.5f;
+		Eigen::Vector4f c1(minPt.x, minPt.y, avg_z, 1.0f); // 左下
+		Eigen::Vector4f c2(minPt.x, maxPt.y, avg_z, 1.0f); // 左上
+		Eigen::Vector4f c3(maxPt.x, maxPt.y, avg_z, 1.0f); // 右上
+		Eigen::Vector4f c4(maxPt.x, minPt.y, avg_z, 1.0f); // 右下
 
-
-		roadmarkings.back().category = SIDE_LINE;  // SIDE_LINE 表示线形点云
-
-		// 计算包围盒在旋转空间中的四个角点（XY 平面），Z 取平均值
-		float avg_z = (minPt.z + maxPt.z) / 2.0f;
-		// 四角点（局部：旋转后的坐标）
-		Eigen::Vector4f corner1(minPt.x, minPt.y, avg_z, 1.0f); // 左下
-		Eigen::Vector4f corner2(minPt.x, maxPt.y, avg_z, 1.0f); // 左上
-		Eigen::Vector4f corner3(maxPt.x, maxPt.y, avg_z, 1.0f); // 右上
-		Eigen::Vector4f corner4(maxPt.x, minPt.y, avg_z, 1.0f); // 右下
-		// 5. 计算 T 的逆矩阵，用于将角点转换回原始坐标系
+		// 6. 反变换到原始坐标系
 		Eigen::Matrix4f T_inv = T.inverse();
-		Eigen::Vector4f orig_corner1 = T_inv * corner1;
-		Eigen::Vector4f orig_corner2 = T_inv * corner2;
-		Eigen::Vector4f orig_corner3 = T_inv * corner3;
-		Eigen::Vector4f orig_corner4 = T_inv * corner4;
+		Eigen::Vector4f o1 = T_inv * c1;
+		Eigen::Vector4f o2 = T_inv * c2;
+		Eigen::Vector4f o3 = T_inv * c3;
+		Eigen::Vector4f o4 = T_inv * c4;
 
-		// 6. 将转换后的四个顶点保存到 roadmarkings.back().ctrolPoints
-		//roadmarkings.back().ctrolPoints.push_back(pcl::PointXYZ(orig_corner1.x(), orig_corner1.y(), orig_corner1.z()));
-		//roadmarkings.back().ctrolPoints.push_back(pcl::PointXYZ(orig_corner2.x(), orig_corner2.y(), orig_corner2.z()));
-		//roadmarkings.back().ctrolPoints.push_back(pcl::PointXYZ(orig_corner3.x(), orig_corner3.y(), orig_corner3.z()));
-		//roadmarkings.back().ctrolPoints.push_back(pcl::PointXYZ(orig_corner4.x(), orig_corner4.y(), orig_corner4.z()));
-		// 闭合
-		//roadmarkings.back().ctrolPoints.push_back(pcl::PointXYZ(orig_corner1.x(), orig_corner1.y(), orig_corner1.z()));
+		// 7. 计算中心线的两个端点（沿 Y 方向中线）
+		Eigen::Vector4f mid_bottom = (o1 + o2) * 0.5f;
+		Eigen::Vector4f mid_top = (o3 + o4) * 0.5f;
 
-		// 从左到右(沿记录的方向)
-		Eigen::Vector4f mid_bottom = (orig_corner1 + orig_corner2) / 2.0f;
-		Eigen::Vector4f mid_top = (orig_corner3 + orig_corner4) / 2.0f;
+		// 8. 将方向向量和这一条“直线折线”保存到 rm 中
+		rm.direction = (mid_top - mid_bottom).head<4>(); // 四维向量
 
-		//roadmarkings.back().direction = T.col(0); // 旋转后的 X 轴方向, 就是点云的方向
-		roadmarkings.back().direction = mid_top - mid_bottom;
-		roadmarkings.back().polyline.push_back(pcl::PointXYZ(mid_bottom.x(), mid_bottom.y(), mid_bottom.z()));
-		roadmarkings.back().polyline.push_back(pcl::PointXYZ(mid_top.x(), mid_top.y(), mid_top.z()));
+		// 这里把两个端点作为一条折线，插入到 polylines 列表里
+		std::vector<pcl::PointXYZ> oneLine;
+		oneLine.emplace_back(pcl::PointXYZ(mid_bottom.x(), mid_bottom.y(), mid_bottom.z()));
+		oneLine.emplace_back(pcl::PointXYZ(mid_top.x(), mid_top.y(), mid_top.z()));
+
+		rm.polylines.clear();
+		rm.polylines.push_back(std::move(oneLine));
+
 		return true;
 	}
 	else
@@ -737,145 +1144,210 @@ bool RoadMarkingClassifier::is_line_cloud_and_get_direction(PCLCloudPtr cloud, R
 	}
 }
 
-// 主函数：将符合条件的侧线段进行组合
-void RoadMarkingClassifier::combine_side_lines(const RoadMarkings& roadmarkings, double combine_length, RoadMarkings& combine_sideline_markings)
+void RoadMarkingClassifier::combine_side_lines(const RoadMarkings& roadmarkings,
+	double combine_length,
+	RoadMarkings& combine_sideline_markings)
 {
-	// 存储所有侧线段的起始和结束点
-	vector<pair<pcl::PointXYZ, pcl::PointXYZ>> sidelines;
-	vector<Eigen::Vector3f> direction;
-	vector<int> sidelines_index_in_roadmarkings;  // 存储每条线段在原始路标中的索引
+	// 存储所有侧线段的起始和结束点（来自 polylines）
+	std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>> sidelines;
+	std::vector<Eigen::Vector3f> direction;
+	std::vector<int> sidelines_index_in_roadmarkings;  // 存储每条线段在原始 roadmarkings 中的索引
 
-	// 遍历所有路标，找出所有类别为SIDE_LINE的侧线段
-	for (int i = 0; i < roadmarkings.size(); i++)
+	// 1. 遍历所有 roadmarkings，找出 category == SIDE_LINE 的那些标记
+	for (int i = 0; i < static_cast<int>(roadmarkings.size()); ++i)
 	{
-		if (roadmarkings[i].category == SIDE_LINE)
+		const RoadMarking& rm = roadmarkings[i];
+		if (rm.category == SIDE_LINE)
 		{
-			pair<pcl::PointXYZ, pcl::PointXYZ> sideline;
-			sideline.first = roadmarkings[i].polyline[0];
-			sideline.second = roadmarkings[i].polyline[1];
-			sidelines.push_back(sideline);
-			direction.push_back(roadmarkings[i].direction.head<3>());
-			sidelines_index_in_roadmarkings.push_back(i);
+			// 如果一个 RoadMarking 包含多条折线，这里假设只取第一条折线进行合并。
+			// 如果你需要把同一个 rm.polylines 中的所有折线都提取出来，可以再加一个内循环：
+			//
+			//    for (const auto& oneLine : rm.polylines) { …相同逻辑… }
+			//
+			// 但通常 SIDE_LINE 在前面 vectorize 阶段已经只存了一条中线折线在 polylines[0]。
+			if (!rm.polylines.empty() && rm.polylines[0].size() >= 2)
+			{
+				// 取出这一条折线的前两个点，作为 “一个线段”
+				const pcl::PointXYZ& p0 = rm.polylines[0][0];
+				const pcl::PointXYZ& p1 = rm.polylines[0][1];
+
+				sidelines.emplace_back(p0, p1);
+				direction.push_back(rm.direction.head<3>()); // 只用前三维表示方向
+				sidelines_index_in_roadmarkings.push_back(i);
+			}
 		}
 	}
 
-	int sideline_number = sidelines.size();  // 侧线段的数量
-
-	vector<vector<PCLPoint>> combinelines;
-	vector<bool> line_used(sideline_number);
-
-	auto len2 = [](PCLPoint& a, PCLPoint& b)
+	int sideline_number = static_cast<int>(sidelines.size());
+	if (sideline_number == 0)
 	{
-		return std::pow(b.x - a.x, 2) + std::pow(b.y - a.y, 2) + std::pow(b.z - a.z, 2);
+		// 如果没有任何 SIDE_LINE，直接返回空
+		return;
+	}
+
+	// 用于存储最终合并后的多段折线（每个元素本身就是一条由若干 PCLPoint 组成的折线）
+	std::vector<std::vector<pcl::PointXYZ>> combinelines;
+	std::vector<bool> line_used(sideline_number, false);
+
+	// 计算两点间距离平方的 lambda
+	auto len2 = [](const pcl::PointXYZ& a, const pcl::PointXYZ& b)
+	{
+		return std::pow(b.x - a.x, 2) +
+			std::pow(b.y - a.y, 2) +
+			std::pow(b.z - a.z, 2);
 	};
 
+	// 计算两向量夹角的 lambda（返回弧度）
 	auto calculateAngleBetweenVectors = [](const Eigen::Vector3f& v1, const Eigen::Vector3f& v2)
 	{
-		// 计算点积
 		double dotProduct = v1.dot(v2);
-
-		// 计算向量的模长
 		double magnitude1 = v1.norm();
 		double magnitude2 = v2.norm();
-
-		// 计算夹角的余弦值
 		double cosTheta = dotProduct / (magnitude1 * magnitude2);
-
-		double temp = std::acos(cosTheta);
-		// 通过反余弦计算夹角（返回值单位为弧度）
+		// 数值安全：裁剪 cosTheta 到 [-1,1]
+		cosTheta = std::min(1.0, std::max(-1.0, cosTheta));
 		return std::acos(cosTheta);
 	};
 
 	const double threshold_length2 = combine_length * combine_length;
-	const double threshold_angle = 5.0 * M_PI / 180.0;
+	const double threshold_angle = 5.0 * M_PI / 180.0; // 5° 的阈值
 
-	/// <summary>
-	/// dfs搜索
-	/// </summary>
-	/// <param name="roadmarkings">当前搜索的线段索引</param>
-	/// <param name="combine_length">是否为线段的右端</param>
-	/// <param name="combine_sideline_markings">是否前向</param>
-	function<void(int, bool, bool)> dfs = [&](int pos, bool is_r, bool is_forward)
+	// 2. DFS 搜索函数：从当前线段 pos 的某端开始，沿前向（is_forward=true）或后向（is_forward=false）扩展
+	std::function<void(int pos, bool is_r, bool is_forward)> dfs =
+		[&](int pos, bool is_r, bool is_forward)
 	{
-		PCLPoint point = sidelines[pos].first;
-		if (is_r)
-		{
-			point = sidelines[pos].second;
-		}
+		// is_r == false 表示取 sidelines[pos].first 作为当前端点，
+		// is_r == true  表示取 sidelines[pos].second 作为当前端点。
+		pcl::PointXYZ point = (is_r ? sidelines[pos].second : sidelines[pos].first);
 
+		// 如果是“前向搜索”，则把当前点加到 combinelines.back() 的尾部
 		if (is_forward)
 		{
 			combinelines.back().push_back(point);
 		}
 
-		for (int i = 0; i < sideline_number; i++)
+		// 遍历所有线段，寻找与当前端点相连且方向一致的下一个线段
+		for (int i = 0; i < sideline_number; ++i)
 		{
-			if (i == pos)continue;
-			int len1 = len2(point, sidelines[i].first);
-			int len11 = len2(point, sidelines[i].second);
-			if (!line_used[i] && len2(point, sidelines[i].first) < threshold_length2)
+			if (i == pos || line_used[i])
+				continue;
+
+			// 检查：下一个线段的哪个端点与当前 point 距离在阈值以内
+			bool next_is_r = false;
+			double  d0 = len2(point, sidelines[i].first);
+			double  d1 = len2(point, sidelines[i].second);
+
+			// 只有当距离平方 < threshold_length2 时，才进一步判断方向
+			if (d0 < threshold_length2)
 			{
-				Eigen::Vector3f dir(sidelines[i].first.x - point.x,
-					sidelines[i].first.y - point.y,
-					sidelines[i].first.z - point.z);
-				if (calculateAngleBetweenVectors(is_r ? direction[pos] : -direction[pos], dir) < threshold_angle
-					&& calculateAngleBetweenVectors(dir, direction[i]) < threshold_angle
-					&& calculateAngleBetweenVectors(is_r ? direction[pos] : -direction[pos], direction[i]) < threshold_angle
-					)
-				{
-					line_used[i] = true;
-					if (is_forward)combinelines.back().push_back(sidelines[i].first);
-					dfs(i, true, is_forward);
-					if (!is_forward)combinelines.back().push_back(sidelines[i].first);
-					break;
-				}
+				next_is_r = false; // 用 sidelines[i].first 作为连接点
+			}
+			else if (d1 < threshold_length2)
+			{
+				next_is_r = true; // 用 sidelines[i].second 作为连接点
+			}
+			else
+			{
+				continue; // 两个端点都太远，跳过
 			}
 
-			if (!line_used[i] && len2(point, sidelines[i].second) < threshold_length2)
+			// 计算 v_curr：如果 is_r=true，说明我们是从 sidelines[pos].second 出发，
+			// 那么当前方向向量用 direction[pos]；否则取 -direction[pos]
+			Eigen::Vector3f v_curr = is_r ? direction[pos] : -direction[pos];
+
+			// 计算 v_next：如果 next_is_r=false，说明用 sidelines[i].first 作为连接点，
+			// 那么下一个线段的方向起点应当是 first，方向向量要用 direction[i]
+			// 如果 next_is_r=true，则方向向量需取 -direction[i]
+			Eigen::Vector3f v_to_next;     // 从 point 指向下一个线段的连接端
+			Eigen::Vector3f v_next_dir;    // 下一个线段指向其第二个端点的方向
+
+			if (!next_is_r)
 			{
-				Eigen::Vector3f dir(sidelines[i].second.x - point.x,
+				// 连接到 sidelines[i].first
+				v_to_next = Eigen::Vector3f(
+					sidelines[i].first.x - point.x,
+					sidelines[i].first.y - point.y,
+					sidelines[i].first.z - point.z);
+				v_next_dir = direction[i]; // 从 first 指向 second
+			}
+			else
+			{
+				// 连接到 sidelines[i].second
+				v_to_next = Eigen::Vector3f(
+					sidelines[i].second.x - point.x,
 					sidelines[i].second.y - point.y,
 					sidelines[i].second.z - point.z);
-				if (calculateAngleBetweenVectors(is_r ? direction[pos] : -direction[pos], dir) < threshold_angle
-					&& calculateAngleBetweenVectors(dir, -direction[i]) < threshold_angle
-					&& calculateAngleBetweenVectors(is_r ? direction[pos] : -direction[pos], -direction[i]) < threshold_angle
-					)
+				v_next_dir = -direction[i]; // 从 second 指向 first
+			}
+
+			// 判断三个方向夹角是否都在阈值以内：v_curr 与 v_to_next、v_to_next 与 v_next_dir、v_curr 与 v_next_dir
+			double ang1 = calculateAngleBetweenVectors(v_curr, v_to_next);
+			double ang2 = calculateAngleBetweenVectors(v_to_next, v_next_dir);
+			double ang3 = calculateAngleBetweenVectors(v_curr, v_next_dir);
+
+			if (ang1 < threshold_angle && ang2 < threshold_angle && ang3 < threshold_angle)
+			{
+				// 符合方向连续性，标记 i 为已使用
+				line_used[i] = true;
+
+				// 如果是“前向”，先把下一个线段的连接端 push 到尾部
+				if (is_forward)
 				{
-					line_used[i] = true;
-					if (is_forward)combinelines.back().push_back(sidelines[i].second);
-					dfs(i, false, is_forward);
-					if (!is_forward)combinelines.back().push_back(sidelines[i].second);
-					break;
+					if (!next_is_r)
+						combinelines.back().push_back(sidelines[i].first);
+					else
+						combinelines.back().push_back(sidelines[i].second);
 				}
+
+				// 继续 DFS，下一个线段成为新的 pos，端点由 next_is_r 决定
+				dfs(i, next_is_r, is_forward);
+
+				// 如果是“后向”（is_forward == false），则在回溯时把连接端 push 到尾部
+				if (!is_forward)
+				{
+					if (!next_is_r)
+						combinelines.back().push_back(sidelines[i].first);
+					else
+						combinelines.back().push_back(sidelines[i].second);
+				}
+
+				// 找到并处理一个满足条件的线段后，就跳出 for 循环（只取一条连续分支）
+				break;
 			}
 		}
 
+		// 如果是“后向”搜索，当所有可扩展分支处理完后，把当前端点 point push 到尾部
 		if (!is_forward)
 		{
 			combinelines.back().push_back(point);
 		}
 	};
 
-	for (int i = 0; i < sidelines.size(); i++)
+	// 3. 对每条未被使用的侧线段调用 dfs，生成两端的延伸结果
+	for (int i = 0; i < sideline_number; ++i)
 	{
 		if (!line_used[i])
 		{
-			combinelines.push_back({});
-
-			// 索引，是否为右端，是否为前方
-			dfs(i, false, false);
-			dfs(i, true, true);
+			// 为每个新的组合折线申请一个空的向量
+			combinelines.emplace_back();
+			// 先“后向”搜一遍，填充 combinelines.back() 的前半部分
+			dfs(i, /*is_r=*/false, /*is_forward=*/false);
+			// 再“前向”搜一遍，填充 combinelines.back() 的后半部分
+			dfs(i, /*is_r=*/true,  /*is_forward=*/true);
 		}
 	}
 
-	// 初始化组合后的侧线标记
-	combine_sideline_markings.resize(combinelines.size());
+	// 4. 将 combinelines 转换为最终的 combine_sideline_markings（带类别标记 COMBINE_SIDE_LINES）
+	combine_sideline_markings.clear();
+	combine_sideline_markings.resize(static_cast<int>(combinelines.size()));
 
-	// 将组合后的线段添加到最终的组合标记中
-	for (int i = 0; i < combinelines.size(); i++)
+	for (int i = 0; i < static_cast<int>(combinelines.size()); ++i)
 	{
-		combine_sideline_markings[i].category = COMBINE_SIDE_LINES;
-		combine_sideline_markings[i].polyline.insert(combine_sideline_markings[i].polyline.end(),
-			combinelines[i].begin(), combinelines[i].end());
+		RoadMarking& rm_comb = combine_sideline_markings[i];
+		rm_comb.category = COMBINE_SIDE_LINES;
+
+		// 把一条组合好的折线插入到 rm_comb.polylines 中
+		rm_comb.polylines.clear();
+		rm_comb.polylines.push_back(std::move(combinelines[i]));
 	}
 }

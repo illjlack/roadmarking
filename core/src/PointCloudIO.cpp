@@ -24,7 +24,7 @@ ccCloudPtr PointCloudIO::get_selected_cloud_from_DB(ccMainAppInterface* p_app)
 	return nullptr;
 }
 
-ccCloudPtr PointCloudIO::get_ptr_from_front(ccPointCloud* p_cloud)
+ccCloudPtr PointCloudIO::convert_to_ccCloudPtr(ccPointCloud* p_cloud)
 {
 	// 生命周期归前端管理, 使用空的析构函数
 	return ccCloudPtr(static_cast<ccPointCloud*>(p_cloud), [](ccPointCloud*) {});

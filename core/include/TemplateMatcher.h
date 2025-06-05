@@ -38,7 +38,7 @@ namespace roadmarking
 	{
 		int category;
 
-		std::vector<pcl::PointXYZ> polyline; //For vectorization
+		std::vector<std::vector<pcl::PointXYZ>> polylines; //For vectorization
 
 		Eigen::Matrix4f localization_tranmat_m2s;
 
