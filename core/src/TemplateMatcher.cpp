@@ -847,6 +847,9 @@ float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloud
 }
 
 */
+
+
+
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
 #include <pcl/filters/voxel_grid.h>
@@ -856,6 +859,84 @@ float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloud
 #include <pcl/features/fpfh.h>
 #include <pcl/surface/concave_hull.h>
 #include <pcl/features/normal_3d.h>
+
+// 可视化RANSAC配准过程的函数
+void visualize_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr& model_keypoints,
+	pcl::PointCloud<pcl::PointXYZ>::Ptr& scene_keypoints,
+	pcl::PointCloud<pcl::FPFHSignature33>::Ptr& model_fpfh,
+	pcl::PointCloud<pcl::FPFHSignature33>::Ptr& scene_fpfh)
+{
+	pcl::visualization::PCLVisualizer viewer("PCL Viewer");
+
+	// 添加源点云和目标点云
+	viewer.addPointCloud<pcl::PointXYZ>(model_keypoints, "model_keypoints");
+	viewer.addPointCloud<pcl::PointXYZ>(scene_keypoints, "scene_keypoints");
+
+	// 初始化 SampleConsensusPrerejective
+	pcl::SampleConsensusPrerejective<pcl::PointXYZ, pcl::PointXYZ, pcl::FPFHSignature33> sac;
+	sac.setInputSource(model_keypoints);
+	sac.setInputTarget(scene_keypoints);
+
+	sac.setSourceFeatures(model_fpfh);
+	sac.setTargetFeatures(scene_fpfh);
+
+	sac.setMaximumIterations(1);
+	sac.setNumberOfSamples(3);
+	sac.setCorrespondenceRandomness(10);
+	sac.setSimilarityThreshold(0.8f);
+	sac.setMaxCorrespondenceDistance(0.2f);
+	sac.setInlierFraction(0.6f);
+
+	pcl::PointCloud<pcl::PointXYZ>::Ptr aligned(new pcl::PointCloud<pcl::PointXYZ>);
+
+	std::string text;
+
+	float lowest_error = std::numeric_limits<float>::max();
+	// 每次迭代后进行更新
+	for (int i = 0; i < 5000; ++i) {
+		// 执行配准步骤
+		sac.align(*aligned);
+	
+		// 获取内点索引
+		const pcl::Indices& inliers = sac.getInliers();
+
+		// 清除当前点云，并重新添加对齐后的点云
+		viewer.removeAllPointClouds();
+		viewer.removeAllShapes();
+
+		// 使用不同的颜色来显示每个点云
+		viewer.addPointCloud<pcl::PointXYZ>(scene_keypoints, "scene_keypoints");
+		viewer.addPointCloud<pcl::PointXYZ>(model_keypoints, "model_keypoints");  // 显示原始点云
+		viewer.addPointCloud<pcl::PointXYZ>(aligned, "aligned_cloud");            // 显示已对齐的点云
+
+		// 设置不同的颜色
+		viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 0.0, 0.0, "scene_keypoints"); // 红色表示目标点云
+		viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 1.0, 1.0, "model_keypoints"); // 白色表示源点云
+		viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0.0, 0.0, 1.0, "aligned_cloud"); // 蓝色表示已对齐的点云
+
+		// 可视化内点（绿色表示内点）
+		for (size_t j = 0; j < inliers.size(); ++j) {
+			// 根据内点索引可视化源点云内点
+			viewer.addSphere<pcl::PointXYZ>(aligned->points[inliers[j]], 0.01, 0.0, 1.0, 0.0, "sphere_valid_" + std::to_string(j)); // 绿色球体表示有效点（内点）
+		}
+
+		// 更新文本框，显示迭代次数和配准得分
+		
+		text = "Iteration: " + std::to_string(i) + " Score: " + std::to_string(sac.getFitnessScore());
+		viewer.addText(text, 10, 10, "iteration_text");
+
+		// 更新可视化界面
+		viewer.spinOnce(10);  // 更新可视化界面
+
+		// 因为align会init，所以保存迭代后的状态(手动模拟比较最低得分的迭代)
+		if (sac.getFitnessScore() < lowest_error)
+		{
+			lowest_error = sac.getFitnessScore();
+			sac.setInputSource(aligned);
+		}
+	}
+}
+
 
 float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloudPtr& sceneCloud,
 	Eigen::Matrix4f& tran_mat_m2s_best, float heading_step_d, int max_iter_num, float dis_thre) {
@@ -942,6 +1023,7 @@ float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloud
 	fpfh.compute(*scene_fpfh);
 
 	// 5. 粗配准 - RANSAC
+	visualize_registration(model_keypoints, scene_keypoints, model_fpfh, scene_fpfh);
 	pcl::SampleConsensusPrerejective<pcl::PointXYZ, pcl::PointXYZ, pcl::FPFHSignature33> sac;
 	sac.setInputSource(model_keypoints);
 	sac.setInputTarget(scene_keypoints);
@@ -970,7 +1052,8 @@ float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloud
 	Eigen::Matrix4f init_transformation = sac.getFinalTransformation();
 
 	{
-		visualizePointCloudWithNormals("点云二维法向量", model_keypoints, model_normals);
+		visualizePointCloudWithNormals("model点云二维法向量", model_keypoints, model_normals);
+		visualizePointCloudWithNormals("scene点云二维法向量", scene_keypoints, scene_normals);
 
 		// 对模型点云进行变换
 		pcl::PointCloud<pcl::PointXYZ>::Ptr model_keypoints_tran(new pcl::PointCloud<pcl::PointXYZ>);

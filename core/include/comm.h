@@ -190,7 +190,7 @@ inline void visualizePointCloudWithNormals(
 	viewer.addPointCloud(cloud, color, cloud_id);
 
 	// 添加法向量
-	viewer.addPointCloudNormals<pcl::PointXYZ, pcl::Normal>(cloud, normals, 10, 0.05, normals_id);
+	viewer.addPointCloudNormals<pcl::PointXYZ, pcl::Normal>(cloud, normals, 1, 0.05, normals_id);
 
 	// 计算点云的中心
 	Eigen::Vector4f centroid;
