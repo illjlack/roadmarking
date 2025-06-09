@@ -860,6 +860,58 @@ float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloud
 #include <pcl/surface/concave_hull.h>
 #include <pcl/features/normal_3d.h>
 
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/kdtree/kdtree_flann.h>
+#include <vector>
+#include <limits>
+
+template <typename PointSource, typename PointTarget>
+double calculateFitnessScore(const pcl::PointCloud<PointSource>& source_cloud,
+	const pcl::PointCloud<PointTarget>& target_cloud,
+	double max_range)
+{
+	double fitness_score = 0.0;
+	int nr = 0;  // 有效内点的数量
+
+	// 创建一个 KD-Tree，用于加速目标点云的最近邻搜索
+	pcl::KdTreeFLANN<PointTarget> tree;
+	tree.setInputCloud(target_cloud.makeShared());  // 将目标点云设置为 KD-Tree 的输入
+
+	max_range *= max_range;
+
+	// 对源点云的每个点进行遍历
+	for (std::size_t i = 0; i < source_cloud.size(); ++i) {
+		const auto& point = source_cloud[i];
+
+		// 如果点是无效的（NaN 或无穷大），则跳过
+		if (!pcl::isFinite(point)) {
+			continue;
+		}
+
+		// 找到该点在目标点云中的最近邻
+		std::vector<int> nn_indices(1);
+		std::vector<float> nn_dists(1);
+		if (tree.nearestKSearch(point, 1, nn_indices, nn_dists) > 0) {
+			// 如果最近邻点的距离小于等于最大阈值，则认为该点是内点
+			if (nn_dists[0] <= max_range) {
+				// 累加该点到目标点云的距离
+				fitness_score += nn_dists[0];
+				nr++;  // 统计有效点
+			}
+		}
+	}
+
+	// 如果有有效内点，则返回平均得分（平均最近邻距离）
+	if (nr > 0) {
+		return fitness_score / nr;
+	}
+
+	// 如果没有有效内点，则返回最大得分值（表示配准失败）
+	return std::numeric_limits<double>::max();
+}
+
+
 // 可视化RANSAC配准过程的函数
 void visualize_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr& model_keypoints,
 	pcl::PointCloud<pcl::PointXYZ>::Ptr& scene_keypoints,
@@ -884,35 +936,57 @@ void visualize_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr& model_keypoints
 	sac.setNumberOfSamples(3);
 	sac.setCorrespondenceRandomness(10);
 	sac.setSimilarityThreshold(0.8f);
-	sac.setMaxCorrespondenceDistance(0.2f);
-	sac.setInlierFraction(0.6f);
+	sac.setMaxCorrespondenceDistance(0.1f); // 最大匹配距离。
+	sac.setInlierFraction(0.6f); // 内点比例。
 
-	pcl::PointCloud<pcl::PointXYZ>::Ptr aligned(new pcl::PointCloud<pcl::PointXYZ>);
-
-	std::string text;
+	pcl::PointCloud<pcl::PointXYZ>::Ptr aligned(new pcl::PointCloud<pcl::PointXYZ>(*model_keypoints));
+	pcl::PointCloud<pcl::PointXYZ>::Ptr best_aligned(new pcl::PointCloud<pcl::PointXYZ>(*model_keypoints));
 
 	float lowest_error = std::numeric_limits<float>::max();
-	// 每次迭代后进行更新
+	float inliers_ = 0;
+
+	std::string text1 = "Iteration: " + std::to_string(0);
+	viewer.addText(text1, 10, 30, "iteration_num");
+
 	for (int i = 0; i < 5000; ++i) {
 		// 执行配准步骤
 		sac.align(*aligned);
-	
+
 		// 获取内点索引
 		const pcl::Indices& inliers = sac.getInliers();
 
+
+
+		if (inliers.size() < aligned->size() * 0.6)
+		{
+			text1 = "Iteration: " + std::to_string(i);
+			viewer.updateText(text1, 10, 30, "iteration_num");
+
+			if (viewer.wasStopped()) {
+				break;
+			}
+			viewer.spinOnce(10);  // 更新可视化界面
+			continue;
+		}
+		
 		// 清除当前点云，并重新添加对齐后的点云
 		viewer.removeAllPointClouds();
 		viewer.removeAllShapes();
+		text1 = "Iteration: " + std::to_string(i);
+		viewer.addText(text1, 10, 30, "iteration_num");
 
 		// 使用不同的颜色来显示每个点云
 		viewer.addPointCloud<pcl::PointXYZ>(scene_keypoints, "scene_keypoints");
 		viewer.addPointCloud<pcl::PointXYZ>(model_keypoints, "model_keypoints");  // 显示原始点云
 		viewer.addPointCloud<pcl::PointXYZ>(aligned, "aligned_cloud");            // 显示已对齐的点云
+		viewer.addPointCloud<pcl::PointXYZ>(best_aligned, "best_aligned_cloud");            // 显示已对齐的点云
 
 		// 设置不同的颜色
 		viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 0.0, 0.0, "scene_keypoints"); // 红色表示目标点云
 		viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 1.0, 1.0, "model_keypoints"); // 白色表示源点云
 		viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0.0, 0.0, 1.0, "aligned_cloud"); // 蓝色表示已对齐的点云
+		viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 0.843, 0.0, "best_aligned_cloud"); // 金色表示最好对齐
+
 
 		// 可视化内点（绿色表示内点）
 		for (size_t j = 0; j < inliers.size(); ++j) {
@@ -920,21 +994,30 @@ void visualize_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr& model_keypoints
 			viewer.addSphere<pcl::PointXYZ>(aligned->points[inliers[j]], 0.01, 0.0, 1.0, 0.0, "sphere_valid_" + std::to_string(j)); // 绿色球体表示有效点（内点）
 		}
 
+		// 每次迭代后进行更新
+		viewer.addText("Red indicates the target point cloud\nWhite indicates the source point cloud\nBlue indicates the currently mapped aligned point cloud\nGolden indicates the best alignment", 10, 50, "introduce");
+
 		// 更新文本框，显示迭代次数和配准得分
-		
-		text = "Iteration: " + std::to_string(i) + " Score: " + std::to_string(sac.getFitnessScore());
+		std::string text = "\nScore&inliers_: " + std::to_string(sac.getFitnessScore()) + " \t" + std::to_string(1.0f * inliers.size() / aligned->size()) + "\nlowest_error&inliers_:  " + std::to_string(lowest_error)+ " \t" + std::to_string(inliers_);
 		viewer.addText(text, 10, 10, "iteration_text");
 
+		if (viewer.wasStopped()) {
+			break;
+		}
 		// 更新可视化界面
 		viewer.spinOnce(10);  // 更新可视化界面
-
+		
 		// 因为align会init，所以保存迭代后的状态(手动模拟比较最低得分的迭代)
-		if (sac.getFitnessScore() < lowest_error)
-		{
-			lowest_error = sac.getFitnessScore();
+		double score = calculateFitnessScore(*aligned, *scene_keypoints, 0.1f);
+
+		if (score < lowest_error) {
+			lowest_error = score;
+			inliers_ = 1.0f * inliers.size() / aligned->size();
+			*best_aligned = *aligned;
 			sac.setInputSource(aligned);
 		}
 	}
+	viewer.spin();
 }
 
 
@@ -1023,7 +1106,7 @@ float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloud
 	fpfh.compute(*scene_fpfh);
 
 	// 5. 粗配准 - RANSAC
-	visualize_registration(model_keypoints, scene_keypoints, model_fpfh, scene_fpfh);
+	//visualize_registration(model_keypoints, scene_keypoints, model_fpfh, scene_fpfh);
 	pcl::SampleConsensusPrerejective<pcl::PointXYZ, pcl::PointXYZ, pcl::FPFHSignature33> sac;
 	sac.setInputSource(model_keypoints);
 	sac.setInputTarget(scene_keypoints);
@@ -1039,7 +1122,7 @@ float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloud
 	sac.setCorrespondenceRandomness(10);
 
 	sac.setSimilarityThreshold(0.8f);
-	sac.setMaxCorrespondenceDistance(0.2f);
+	sac.setMaxCorrespondenceDistance(0.1f);
 	sac.setInlierFraction(0.6f);
 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr sac_aligned(new pcl::PointCloud<pcl::PointXYZ>);
@@ -1051,17 +1134,17 @@ float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloud
 
 	Eigen::Matrix4f init_transformation = sac.getFinalTransformation();
 
-	{
-		visualizePointCloudWithNormals("model点云二维法向量", model_keypoints, model_normals);
-		visualizePointCloudWithNormals("scene点云二维法向量", scene_keypoints, scene_normals);
+	//{
+	//	visualizePointCloudWithNormals("model点云二维法向量", model_keypoints, model_normals);
+	//	visualizePointCloudWithNormals("scene点云二维法向量", scene_keypoints, scene_normals);
 
-		// 对模型点云进行变换
-		pcl::PointCloud<pcl::PointXYZ>::Ptr model_keypoints_tran(new pcl::PointCloud<pcl::PointXYZ>);
-		pcl::transformPointCloud(*model_keypoints, *model_keypoints_tran, init_transformation);
+	//	// 对模型点云进行变换
+	//	pcl::PointCloud<pcl::PointXYZ>::Ptr model_keypoints_tran(new pcl::PointCloud<pcl::PointXYZ>);
+	//	pcl::transformPointCloud(*model_keypoints, *model_keypoints_tran, init_transformation);
 
-		// 可视化
-		visualizePointClouds("粗配准", {}, scene_keypoints, model_keypoints_tran);
-	}
+	//	// 可视化
+	//	visualizePointClouds("粗配准", {}, scene_keypoints, model_keypoints_tran);
+	//}
 
 	// 6. 精配准 - ICP
 	pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
@@ -1081,14 +1164,14 @@ float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloud
 
 	tran_mat_m2s_best = icp.getFinalTransformation();
 
-	{
-		// 对模型点云进行变换
-		pcl::PointCloud<pcl::PointXYZ>::Ptr model_downsampled_tran(new pcl::PointCloud<pcl::PointXYZ>);
-		pcl::transformPointCloud(*model_downsampled, *model_downsampled_tran, tran_mat_m2s_best);
+	//{
+	//	// 对模型点云进行变换
+	//	pcl::PointCloud<pcl::PointXYZ>::Ptr model_downsampled_tran(new pcl::PointCloud<pcl::PointXYZ>);
+	//	pcl::transformPointCloud(*model_downsampled, *model_downsampled_tran, tran_mat_m2s_best);
 
-		// 可视化
-		visualizePointClouds("精配准", {}, scene_downsampled, model_downsampled_tran);
-	}
+	//	// 可视化
+	//	visualizePointClouds("精配准", {}, scene_downsampled, model_downsampled_tran);
+	//}
 
 	return static_cast<float>(icp.getFitnessScore());
 }

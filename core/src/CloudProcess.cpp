@@ -364,6 +364,11 @@ PCLCloudPtr CloudProcess::match_roadmarking(PCLCloudPtr pclCloud)
 	return nullptr;
 }
 
+ccHObject* CloudProcess::apply_roadmarking_vectorization(ccPointCloud* cloud)
+{
+	return apply_roadmarking_vectorization(PointCloudIO::convert_to_ccCloudPtr(cloud));
+}
+
 ccHObject* CloudProcess::apply_roadmarking_vectorization(ccCloudPtr cloud)
 {
 	std::vector<PCLCloudPtr>pclCloud;
@@ -519,112 +524,14 @@ PCLCloudPtr CloudProcess::extract_outline(const PCLCloudPtr& inputCloud, float a
 	return hullCloud;
 }
 
-std::vector<PCLPoint> CloudProcess::draw_polyline_on_cloud_by_pcl_view(const PCLCloudPtr& inputCloud) {
-	// 创建可视化器并设置窗口名称
-	pcl::visualization::PCLVisualizer viewer("Point Cloud Polyline Drawer");
 
-	// 计算点云中心并居中显示
-	Eigen::Vector4f centroid;
-	pcl::compute3DCentroid(*inputCloud, centroid);
-	PCLCloudPtr centeredCloud(new pcl::PointCloud<PCLPoint>);
-	Eigen::Affine3f transform = Eigen::Affine3f::Identity();
-	transform.translation() = -centroid.head(3);  // 设置平移向量
-	pcl::transformPointCloud(*inputCloud, *centeredCloud, transform);  // 使用变换矩阵
-
-	// 添加点云并设置渲染属性
-	viewer.addPointCloud(centeredCloud, "cloud");
-	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "cloud");
-	viewer.addCoordinateSystem(0.5);  // 添加坐标系参考
-
-	// 存储绘制数据
-	std::vector<PCLPoint> polylinePoints;
-	bool exit_flag = false;
-	bool draw_mode = false;  // 绘制模式标志
-
-	// 定义点拾取回调函数
-	auto point_picking_cb = [&](const pcl::visualization::PointPickingEvent& event) {
-		if (event.getPointIndex() == -1) return;
-
-		// 获取点击点的坐标（基于居中后的坐标系）
-		PCLPoint clickedPoint;
-		event.getPoint(clickedPoint.x, clickedPoint.y, clickedPoint.z);
-
-		// 转换回原始坐标系
-		clickedPoint.x += centroid.x();
-		clickedPoint.y += centroid.y();
-		clickedPoint.z += centroid.z();
-
-		// 如果已有点且新点与上一个点相同，则不添加
-		if (!polylinePoints.empty()) {
-			const auto& lastPoint = polylinePoints.back();
-			if (clickedPoint.getVector3fMap() == lastPoint.getVector3fMap()) {
-				return;
-			}
-		}
-
-		// 添加到折线点集
-		polylinePoints.push_back(clickedPoint);
-
-		// 绘制线段（当有至少两个点时）
-		if (polylinePoints.size() > 1) {
-			std::string line_id = "line_" + std::to_string(polylinePoints.size() - 1);
-			const auto& pt1 = polylinePoints[polylinePoints.size() - 2];
-			const auto& pt2 = polylinePoints.back();
-
-			// 将点转换回居中坐标系用于显示
-			PCLPoint display_pt1, display_pt2;
-			display_pt1.getVector3fMap() = pt1.getVector3fMap() - centroid.head<3>();
-			display_pt2.getVector3fMap() = pt2.getVector3fMap() - centroid.head<3>();
-
-			viewer.addLine<PCLPoint>(display_pt1, display_pt2, 0, 1, 0, line_id);
-		}
-	};
-
-	// 撤销最后一条线段
-	auto undo_last_action = [&]() {
-		if (polylinePoints.size() < 2) return;  // 至少需要两个点才能绘制线段
-
-		// 删除最后添加的点和线段
-		polylinePoints.pop_back();
-		viewer.removeShape("line_" + std::to_string(polylinePoints.size()));
-
-		// 如果还有点，则删除最后一条线段
-		if (polylinePoints.size() > 1) {
-			const auto& pt1 = polylinePoints[polylinePoints.size() - 2];
-			const auto& pt2 = polylinePoints.back();
-
-			// 将点转换回居中坐标系用于显示
-			PCLPoint display_pt1, display_pt2;
-			display_pt1.getVector3fMap() = pt1.getVector3fMap() - centroid.head<3>();
-			display_pt2.getVector3fMap() = pt2.getVector3fMap() - centroid.head<3>();
-
-			std::string line_id = "line_" + std::to_string(polylinePoints.size() - 1);
-			viewer.addLine<PCLPoint>(display_pt1, display_pt2, 0, 1, 0, line_id);
-		}
-	};
-
-	// 注册点选取回调函数
-	viewer.registerPointPickingCallback(point_picking_cb);
-
-	// 注册键盘事件回调，用来触发撤销操作
-	viewer.registerKeyboardCallback([&](const pcl::visualization::KeyboardEvent& event) {
-		if (event.getKeySym() == "z" && event.keyDown() && event.isCtrlPressed()) {
-			undo_last_action();  // 按下 Ctrl + Z 撤销
-		}
-		if (event.getKeySym() == "BackSpace" && event.keyDown()) {
-			undo_last_action();  // 按下 BackSpace 键撤销
-		}
-		});
-
-	while (!viewer.wasStopped() && !exit_flag) {
-		viewer.spinOnce(100); // 必须调用以处理事件
-		std::this_thread::sleep_for(std::chrono::milliseconds(50));
-	}
-
-	// 清除所有图形对象
-	viewer.removeAllShapes();
-	return polylinePoints;
+void CloudProcess::crop_cloud_with_polygon(ccPointCloud* cloud, const std::vector<CCVector3d>& polygon_points, ccPointCloud* cloud_cropped)
+{
+	std::vector<ccPointCloud*> clouds;
+	clouds.push_back(cloud);
+	crop_cloud_with_polygon(clouds, polygon_points, cloud_cropped);
 }
+
 
 void CloudProcess::crop_cloud_with_polygon(
 	const std::vector<ccPointCloud*>& clouds,

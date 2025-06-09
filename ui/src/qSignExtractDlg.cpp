@@ -647,7 +647,26 @@ void qSignExtractDlg::onMatchTemplateByBox()
 			std::vector<CCVector3d> polyline;
 			m_pointCloudSelector->getPoints(polyline);
 
+			std::vector <ccPointCloud*> clouds;
+			m_objectTree->getAllPointClouds(clouds);
 
+			ccPointCloud* cloud = new ccPointCloud;
+			CloudProcess::crop_cloud_with_polygon(clouds, polyline, cloud);
+			
+			auto markings = CloudProcess::apply_roadmarking_vectorization(cloud);
+
+			if (p_select_cloud)
+			{
+				p_select_cloud->addChild(markings);
+			}
+			else
+			{
+				cloud->setName("cloud_cropped");
+				m_glWindow->addToOwnDB(cloud);
+				m_objectTree->refresh();
+				cloud->addChild(markings);
+			}
+			m_objectTree->refresh();
 		});
 }
 

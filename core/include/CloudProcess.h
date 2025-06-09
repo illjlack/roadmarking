@@ -35,15 +35,13 @@ namespace roadmarking
 
 		static PCLCloudPtr match_roadmarking(PCLCloudPtr pclCloud);
 
+		static ccHObject* apply_roadmarking_vectorization(ccPointCloud* cloud);
 		static ccHObject* apply_roadmarking_vectorization(ccCloudPtr cloud);
-
 		static ccHObject* apply_roadmarking_vectorization(std::vector<PCLCloudPtr> clouds);
 
 		static PCLCloudPtr extract_outline(const PCLCloudPtr& inputCloud, float alpha = 0.05);
 
-		static std::vector<PCLPoint> draw_polyline_on_cloud_by_pcl_view(const PCLCloudPtr& inputCloud);
-
-
+		static void crop_cloud_with_polygon(ccPointCloud* cloud, const std::vector<CCVector3d>& polygon_points, ccPointCloud* cloud_cropped);
 		static void crop_cloud_with_polygon(const std::vector<ccPointCloud*>& clouds, const std::vector<CCVector3d>& polygon_points, ccPointCloud* cloud_cropped);
 
 		template<typename PointT>

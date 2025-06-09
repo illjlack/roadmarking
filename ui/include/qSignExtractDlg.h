@@ -99,6 +99,8 @@ private:
 
 	cc_interact::PointCloudSelector* m_pointCloudSelector; // 前景折线编辑器
 	cc_drawing::PointCloudDrawer* m_pointCloudDrawer;
+
+	std::function<void(ccHObject*, unsigned, int, int)> m_pick_callback; // 选点任务的回调函数
 };
 
 /// <summary>
