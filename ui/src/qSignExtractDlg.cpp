@@ -58,8 +58,13 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	histogramWidget->setWindowFlag(Qt::Window);
 	histogramWidget -> hide();
 	connect(histogramWidget, &ThresholdHistogramWidget::addCloudToDB, this, &qSignExtractDlg::addCloudToDB);
+
+	// 允许目录区域上下收缩
+	QSplitter* directorySplitter = new QSplitter(Qt::Vertical);
 	// ==================================== 对象目录
+
 	{
+		
 		QGroupBox* objectGroup = new QGroupBox("对象目录", this);
 		m_objectTree = new CloudObjectTreeWidget(objectGroup);
 		m_objectTree->initialize(m_glWindow, m_app, &p_select_cloud, {});
@@ -67,9 +72,11 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		QVBoxLayout* objectLayout = new QVBoxLayout(objectGroup);
 		objectLayout->addWidget(m_objectTree);
 		objectGroup->setLayout(objectLayout);
-		leftLayout->addWidget(objectGroup);
+		directorySplitter->addWidget(objectGroup);
 	}
 
+	
+	QVBoxLayout* leftLayout_button = new QVBoxLayout();
 	// ==================================== 视图切换
 	{
 		QGroupBox* viewGroup = new QGroupBox("视图切换", this);
@@ -93,7 +100,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		addViewButton(viewLayout, "底部视图", CC_BOTTOM_VIEW);
 
 		viewGroup->setLayout(viewLayout);
-		leftLayout->addWidget(viewGroup);
+		leftLayout_button->addWidget(viewGroup);
 
 		QToolButton* btn = new QToolButton(viewGroup);  // 设置 parent 为 viewGroup
 		btn->setText("1:1");
@@ -155,7 +162,6 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	}
 
 
-
 	std::vector<QButtonGroup*> allGroups;
 	// ==================================== 功能按钮组工具函数
 	auto addGroupedButton = [&](const QString& text,
@@ -183,7 +189,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		addGroupedButton("选择高程阈值过滤点云", [this]() { onFilteCloudByZ(); }, filterGroup, filterLayout, filterButtonGroup);
 
 		filterGroup->setLayout(filterLayout);
-		leftLayout->addWidget(filterGroup);
+		leftLayout_button->addWidget(filterGroup);
 	}
 
 	// ==================================== 功能按钮组：剪切类
@@ -199,7 +205,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		addGroupedButton("模型制作", [this]() {onMakeModel(); }, clipGroup, clipLayout, clipButtonGroup);
 
 		clipGroup->setLayout(clipLayout);
-		leftLayout->addWidget(clipGroup);
+		leftLayout_button->addWidget(clipGroup);
 	}
 
 	// ==================================== 功能按钮组：提取类
@@ -216,7 +222,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		addGroupedButton("框选斑马线提取", [this]() { onZebraExtract(); }, extractGroup, extractLayout, extractButtonGroup);
 
 		extractGroup->setLayout(extractLayout);
-		leftLayout->addWidget(extractGroup);
+		leftLayout_button->addWidget(extractGroup);
 	}
 
 	// ==================================== 功能按钮组：匹配类（新增）
@@ -232,8 +238,14 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		addGroupedButton("点击匹配模板", [this]() { onMatchTemplateByClick(); }, matchGroup, matchLayout, matchButtonGroup);
 
 		matchGroup->setLayout(matchLayout);
-		leftLayout->addWidget(matchGroup);
+		leftLayout_button->addWidget(matchGroup);
 	}
+
+	QWidget* buttonPanel = new QWidget(this);
+	buttonPanel->setLayout(leftLayout_button);
+	directorySplitter->addWidget(buttonPanel);
+
+	leftLayout->addWidget(directorySplitter);
 
 
 	// ==================================== 启用/禁用控制（所有组按钮）
@@ -271,10 +283,10 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 			});
 	}
 
-
-
-	leftLayout->addStretch();
-	mainLayout->addLayout(leftLayout, 2);
+	QSplitter* horizontalSplitter = new QSplitter(Qt::Horizontal, this);
+	QWidget* leftPanel = new QWidget(this);
+	leftPanel->setLayout(leftLayout);
+	horizontalSplitter->addWidget(leftPanel);  // 左侧面板（目录 + 按钮）
 
 	// ==================================== GL窗口区域
 	{
@@ -284,10 +296,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 
 		glLayout->addWidget(m_glWidget);
 		glFrame->setLayout(glLayout);
-		mainLayout->addWidget(glFrame, 8);
-		setLayout(mainLayout);
-
-
+		horizontalSplitter->addWidget(glFrame);
 		/*
 		enum PICKING_MODE {
 			NO_PICKING,                           // 禁用拾取功能，用户无法选择任何物体
@@ -311,7 +320,9 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 			m_glWindow->setPickingMode(ccGLWindowInterface::ENTITY_PICKING);
 		}
 	}
-
+	horizontalSplitter->setStretchFactor(1, 2);
+	mainLayout->addWidget(horizontalSplitter);
+	setLayout(mainLayout);
 	// ==================================== 一些信号
 
 	connect(m_pointCloudSelector, &PointCloudSelector::update_tree, m_objectTree, [=]() { m_objectTree->refresh(); });
