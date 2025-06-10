@@ -2720,3 +2720,77 @@ void CloudProcess::extract_zebra_by_projection(
 		}
 	}
 }
+
+#include <ccOctree.h>  // CloudCompare 中的 Octree 头文件
+#include <stack>
+
+void CloudProcess::cluster_points_around_pos(ccPointCloud* select_cloud, unsigned idx,
+	float radius, ccPointCloud& clustered_cloud)
+{
+	// 将 ccPointCloud 转换为 PCLCloudPtr
+	PCLCloudPtr pcl_select_cloud = PointCloudIO::convert_to_PCLCloudPtr(select_cloud);
+
+	if (!select_cloud->getOctree())
+	{
+		ccProgressDialog progressDlg(false);
+		progressDlg.setWindowTitle("构建八叉树");
+		progressDlg.setAutoClose(true);
+		if (!select_cloud->computeOctree(&progressDlg))
+		{
+			// 构建失败
+			QMessageBox::critical(nullptr,
+				QStringLiteral("错误"),
+				QStringLiteral("八叉树构建失败！"));
+			return;
+		}
+	}
+
+	ccOctree::Shared octree = select_cloud->getOctree();
+
+	// 创建一个访问标志和存储连通区域点的索引
+	std::vector<bool> visited(select_cloud->size(), false);
+	std::vector<int> cluster_indices;
+
+	// 使用 DFS 查找邻域点并进行区域生长
+
+	int level = octree->findBestLevelForAGivenNeighbourhoodSizeExtraction(radius);
+	auto dfs = [&](int start_idx)
+	{
+		// 创建一个栈来实现 DFS
+		std::stack<int> stack;
+		stack.push(start_idx);
+
+		while (!stack.empty())
+		{
+			int current_idx = stack.top();
+			stack.pop();
+
+			if (visited[current_idx]) continue;
+
+			// 标记该点为已访问
+			visited[current_idx] = true;
+			cluster_indices.push_back(current_idx);
+
+			CCCoreLib::DgmOctree::NeighboursSet neighbours;
+			
+			octree->getPointsInSphericalNeighbourhood(*select_cloud->getPoint(current_idx), radius, neighbours, level);
+
+			for (auto x : neighbours)
+			{
+				if (!visited[x.pointIndex])
+				{
+					stack.push(x.pointIndex);
+				}
+			}
+		}
+	};
+
+	// 启动 DFS 区域生长
+	dfs(idx);
+
+	// 将所有聚类点加入 clustered_cloud
+	for (int cluster_idx : cluster_indices)
+	{
+		clustered_cloud.addPoint(*select_cloud->getPoint(cluster_idx));
+	}
+}

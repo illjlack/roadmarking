@@ -670,11 +670,6 @@ void qSignExtractDlg::onMatchTemplateByBox()
 		});
 }
 
-void qSignExtractDlg::onMatchTemplateByClick()
-{
-	
-}
-
 void qSignExtractDlg::onRectClip()
 {
 	m_pointCloudSelector->startDraw();
@@ -873,10 +868,46 @@ void qSignExtractDlg::addCloudToDB(ccPointCloud* cloud)
 	onEntitySelectionChanged(cloud);
 }
 
-
-void qSignExtractDlg::onItemPicked(ccHObject* entity, unsigned itemIdx, int x, int y, const CCVector3&, const CCVector3d&)
+void qSignExtractDlg::onMatchTemplateByClick()
 {
+	// 回调，点击后在本点击的点云中搜索周围（围绕这个点聚类）,创建点云， 并执行匹配
+	m_pick_callback = [&](ccHObject* select_cloud, unsigned idx)
+	{
 
+		ccPointCloud* p_select_cloud = dynamic_cast<ccPointCloud*>(select_cloud);
+		if (!p_select_cloud)
+		{
+			QMessageBox::critical(nullptr, "错误", "未选择点云");
+		}
+		else
+		{
+			ccPointCloud* clustered_cloud = new ccPointCloud;
+			CloudProcess::cluster_points_around_pos(p_select_cloud, idx, 0.2, *clustered_cloud);
+			auto markings = CloudProcess::apply_roadmarking_vectorization(clustered_cloud);
+			p_select_cloud->addChild(clustered_cloud);
+			p_select_cloud->addChild(markings);
+		}
+		m_objectTree->async_refresh();
+	};
+
+	m_glWindow->setPickingMode(ccGLWindowInterface::POINT_PICKING);
+}
+
+
+void qSignExtractDlg::onItemPicked(ccHObject* entity, unsigned itemIdx, int x, int y, const CCVector3& pos, const CCVector3d&)
+{
+	// ui是阻塞的，应该不用额外冻结
+	if (m_pick_callback)
+	{
+		// 恢复普通的交互,实体选择
+		m_glWindow->setPickingMode(ccGLWindowInterface::ENTITY_PICKING);
+
+		// 执行
+		m_pick_callback(entity, itemIdx);
+
+		// 清空回调函数的指针,防止再调用
+		m_pick_callback = nullptr;
+	}
 }
 
 void qSignExtractDlg::onItemPickedFast(ccHObject* entity, int subEntityID, int x, int y)

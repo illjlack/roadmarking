@@ -112,6 +112,9 @@ namespace roadmarking
 			std::vector<CCVector3>& centers
 		);
 
+		static void cluster_points_around_pos(ccPointCloud* select_cloud, unsigned idx,
+			float radius, ccPointCloud& clustered_cloud);
+
 	private:
 		static ccPointCloud* rotate_cloud(ccPointCloud* P, const CCVector3& now_v, const CCVector3& new_v);
 		static PCLCloudPtr rotate_cloud(PCLCloudPtr pclCloud, const Eigen::Vector3f& now_v, const Eigen::Vector3f& new_v);
