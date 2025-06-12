@@ -376,21 +376,10 @@ ccHObject* CloudProcess::apply_roadmarking_vectorization(ccCloudPtr cloud)
 	return apply_roadmarking_vectorization(pclCloud);
 }
 
-ccHObject* CloudProcess::apply_roadmarking_vectorization(std::vector<PCLCloudPtr> pclClouds)
+ccHObject* visualizeRoadMarkings(const RoadMarkings& roadmarkings)
 {
-	// 创建分类器对象
-	RoadMarkingClassifier classifier;
-
-	// 用于保存分类结果
-	RoadMarkings roadmarkings;
-
 	ccHObject* allLinesContainer = new ccHObject();
-
-	// 目前硬编码了 model.json 路径
-	QString model_path = "F:\\RoadMarking\\install\\CloudCompare_debug\\model\\model.json";
-
-	// 调用分类函数，得到 roadmarkings（其中每个 RoadMarking 现在包含 polylines 而非 polyline）
-	classifier.ClassifyRoadMarkings(pclClouds, roadmarkings, model_path.toStdString());
+	allLinesContainer->setName("RoadMarkings");
 
 	// 遍历分类结果中的每个 roadmarking
 	for (const auto& roadmarking : roadmarkings)
@@ -398,6 +387,9 @@ ccHObject* CloudProcess::apply_roadmarking_vectorization(std::vector<PCLCloudPtr
 		// 跳过非折线类型（假设只有 polylines 里有内容才处理）
 		if (roadmarking.polylines.empty())
 			continue;
+
+		MetaRoadmarking* meta = new MetaRoadmarking;
+		meta->setName(QString::fromStdString(roadmarking.name + " 准确率（重叠率）:" + std::to_string(roadmarking.accuracy * 100) + "%"));
 
 		// 对 roadmarking.polylines 中的每一条折线都创建一个 ccPolyline
 		for (const auto& singlePolyline : roadmarking.polylines)
@@ -415,7 +407,6 @@ ccHObject* CloudProcess::apply_roadmarking_vectorization(std::vector<PCLCloudPtr
 			}
 
 			// 创建 ccPolyline，并将所有点索引加入
-			// 注意这里直接把 release() 后的裸指针传给 ccPolyline，ccPolyline 会接管销毁
 			ccPolyline* polylineObj = new ccPolyline(polylineCloud.release());
 
 			// 把 ccPointCloud 注册为 ccPolyline 的子节点，以便在场景里一起删除
@@ -432,18 +423,39 @@ ccHObject* CloudProcess::apply_roadmarking_vectorization(std::vector<PCLCloudPtr
 
 			// 设置可见性和颜色
 			polylineObj->setVisible(true);
-			polylineObj->setColor(ccColor::redRGB);
+			polylineObj->setColor(ccColor::orangeRGB);
 			polylineObj->showColors(true);
 
-			// 将折线加入到 allLinesContainer
-			allLinesContainer->addChild(polylineObj);
+			// 将折线加入到 meta 中
+			meta->addChild(polylineObj);
 		}
+		// 将 meta 添加到 allLinesContainer
+		allLinesContainer->addChild(meta);
 	}
 
 	allLinesContainer->setVisible(true);
 	return allLinesContainer;
 }
 
+ccHObject* CloudProcess::apply_roadmarking_vectorization(std::vector<PCLCloudPtr> pclClouds)
+{
+	// 创建分类器对象
+	RoadMarkingClassifier classifier;
+
+	// 用于保存分类结果
+	RoadMarkings roadmarkings;
+
+	// 目前硬编码了 model.json 路径
+	QString model_path = "F:\\RoadMarking\\install\\CloudCompare_debug\\model\\model.json";
+
+	// 调用分类函数，得到 roadmarkings（其中每个 RoadMarking 现在包含 polylines 而非 polyline）
+	classifier.ClassifyRoadMarkings(pclClouds, roadmarkings, model_path.toStdString());
+
+	// 可视化分类结果
+	ccHObject* allLinesContainer = visualizeRoadMarkings(roadmarkings);
+
+	return allLinesContainer;
+}
 
 template <typename PointT>
 void CloudProcess::extract_euclidean_clusters(
@@ -2190,6 +2202,89 @@ void auto_match_best_stripe(const std::map<int, std::vector<int>>& bins, double 
 	std::cout << "Best Score: " << bestGlobalScore << "\n";
 }
 
+// 制作斑马线模板（avgWidth是斑马线的宽，medianStripeLength，medianGapLength分别是白条，间隔的宽）
+// 制作5~20个模板（分别这么多白条数）
+// 0,0是起点，轮廓的点云是0.1一个点，把白条围起来
+// raw点云（用来匹配重叠率，每0.1*0.1一个点，把白条铺满）
+// 用折线把白条围起来
+
+//class Model
+
+//std::vector<std::vector<PCLPoint>> vectorized_polylines;  // 向量化点的列表
+//std::string name;
+//PCLCloudPtr outline_point_cloud;
+//PCLCloudPtr raw_point_cloud;
+
+// 辅助函数：在两点之间生成并填充点
+void fillEdgeWithPoints(const Eigen::Vector3f& start, const Eigen::Vector3f& end, PCLCloudPtr& cloud)
+{
+	// 计算边的长度
+	float length = (end - start).norm();
+
+	// 计算需要的点数
+	int numPoints = static_cast<int>(length / 0.1f);  // 以0.1为间隔生成点
+
+	// 计算边的方向向量
+	Eigen::Vector3f direction = (end - start).normalized();
+
+	// 在边上按间隔填充点
+	for (int i = 0; i <= numPoints; ++i)
+	{
+		Eigen::Vector3f point = start + direction * (i * 0.1f);
+		cloud->push_back(PCLPoint(point.x(), point.y(), point.z()));
+	}
+}
+
+void createModelPointCloud(roadmarking::Model& model, float avgWidth, float medianStripeLength, float medianGapLength, int numStripes)
+{
+	// 清空现有点云
+	model.outline_point_cloud->clear();
+	model.raw_point_cloud->clear();
+
+	// 从原点(0, 0)开始生成斑马线模板
+	float currentX = 0.0f;  // X轴起点
+	for (int i = 0; i < numStripes; ++i)
+	{
+		// 每条白条的长度和间隔
+		float stripeLength = medianStripeLength;// + (rand() % 2 ? 1 : -1) * 0.1f;  // 随机略微变化(多个可能有效果，代价大了)
+		float gapLength = medianGapLength;// + (rand() % 2 ? 1 : -1) * 0.1f;      // 随机略微变化
+
+		// 白条的坐标：通过X轴方向和宽度生成矩形
+		// 包含周围0.1的间隔
+		Eigen::Vector3f topLeft(currentX - 0.1f, avgWidth / 2.0f + 0.1f, 0.0f);   // 左上点（加上0.1的间隔）
+		Eigen::Vector3f topRight(currentX + stripeLength + 0.1f, avgWidth / 2.0f + 0.1f, 0.0f);  // 右上点
+		Eigen::Vector3f bottomRight(currentX + stripeLength + 0.1f, -avgWidth / 2.0f - 0.1f, 0.0f); // 右下点
+		Eigen::Vector3f bottomLeft(currentX - 0.1f, -avgWidth / 2.0f - 0.1f, 0.0f);  // 左下点
+
+		// 填充每条边上的点
+		fillEdgeWithPoints(topLeft, topRight, model.outline_point_cloud);
+		fillEdgeWithPoints(topRight, bottomRight, model.outline_point_cloud);
+		fillEdgeWithPoints(bottomRight, bottomLeft, model.outline_point_cloud);
+		fillEdgeWithPoints(bottomLeft, topLeft, model.outline_point_cloud);
+
+		// 生成原始点云（每个0.1*0.1小点填充）
+		for (float x = topLeft.x(); x < topRight.x(); x += 0.1f) {
+			for (float y = bottomLeft.y(); y < topLeft.y(); y += 0.1f) {
+				model.raw_point_cloud->push_back(PCLPoint(x, y, 0.0f));  // 添加点到原始点云
+			}
+		}
+
+		// 创建折线包围每个白条
+		std::vector<PCLPoint> stripePolyline = {
+			PCLPoint(topLeft.x(), topLeft.y(), topLeft.z()),        // 左上点
+			PCLPoint(topRight.x(), topRight.y(), topRight.z()),    // 右上点
+			PCLPoint(bottomRight.x(), bottomRight.y(), bottomRight.z()),  // 右下点
+			PCLPoint(bottomLeft.x(), bottomLeft.y(), bottomLeft.z()),    // 左下点
+			PCLPoint(topLeft.x(), topLeft.y(), topLeft.z())        // 闭合折线
+		};
+
+		model.vectorized_polylines.push_back(stripePolyline);
+
+		// 更新下一个白条的起始位置
+		currentX += stripeLength + gapLength;
+	}
+}
+
 void CloudProcess::extract_zebra_by_struct(ccPointCloud* inputCloud, ccGLWindowInterface* m_glWindow)
 {
 	if (!inputCloud)
@@ -2213,85 +2308,24 @@ void CloudProcess::extract_zebra_by_struct(ccPointCloud* inputCloud, ccGLWindowI
 
 	std::map<int, std::vector<int>> bins;
 	std::map<int, float> binPosMap;
-	
+	float min_proj = std::numeric_limits<float>::max();
+	float max_proj = std::numeric_limits<float>::min();
+
 	for (unsigned i = 0; i < inputCloud->size(); ++i)
 	{
 		Eigen::Vector3f p(inputCloud->getPoint(i)->x, inputCloud->getPoint(i)->y, inputCloud->getPoint(i)->z);
 		float proj = (p - Eigen::Vector3f(centroid[0], centroid[1], centroid[2])).dot(axis);
+		min_proj = std::min(min_proj, proj);
+		max_proj = std::max(max_proj, proj);
 		int binId = static_cast<int>(proj / binWidth);
 		bins[binId].push_back(i);
 		binPosMap[binId] = proj;
 	}
 
-	// 2.简单确定阈值，是一个中位数 / 平均值 / 最大类间方差
-	int baseThreshold;
-	{
-		// 统计所有bin中的点数作为密度
-		std::vector<int> densityValues;
-		for (const auto& [binId, pts] : bins)
-			densityValues.push_back(static_cast<int>(pts.size()));
-
-		// --------------------------
-		// 方法一：中位数阈值
-		// --------------------------
-		
-		//std::nth_element(densityValues.begin(), densityValues.begin() + densityValues.size() / 2, densityValues.end());
-		//baseThreshold = densityValues[densityValues.size() / 2];
-		
-
-		// --------------------------
-		// 方法二：平均值阈值
-		// --------------------------
-
-		int sum = std::accumulate(densityValues.begin(), densityValues.end(), 0);
-		baseThreshold = static_cast<int>(sum / densityValues.size());
-		
-
-		// --------------------------
-		// 方法三：最大类间方差(阈值大了)
-		// --------------------------
-		/*
-		const int maxValue = *std::max_element(densityValues.begin(), densityValues.end());
-		std::vector<int> histogram(maxValue + 1, 0);
-		for (int v : densityValues)
-			histogram[v]++;
-
-		int totalPoints = static_cast<int>(densityValues.size());
-		double sumAll = 0;
-		for (int t = 0; t <= maxValue; ++t)
-			sumAll += t * histogram[t];
-
-		int threshold = 0;
-		double maxVariance = -1.0;
-		int wB = 0;
-		double sumB = 0;
-
-		for (int t = 0; t <= maxValue; ++t) {
-			wB += histogram[t];
-			if (wB == 0) continue;
-
-			int wF = totalPoints - wB;
-			if (wF == 0) break;
-
-			sumB += t * histogram[t];
-			double mB = sumB / wB;
-			double mF = (sumAll - sumB) / wF;
-
-			double betweenVar = static_cast<double>(wB) * wF * (mB - mF) * (mB - mF);
-			if (betweenVar > maxVariance) {
-				maxVariance = betweenVar;
-				threshold = t;
-			}
-		}
-		baseThreshold = threshold;
-		*/
-	}
-
-
-	// 3.计算线区域
+	// 2.滑动窗口计算阈值， 3.计算线区域
 	std::vector<std::vector<int>> stripes;
-	int medianStripeLength = 0;
-	int medianGapLength = 0;
+	double medianStripeLength = 0;
+	double medianGapLength = 0;
 	{
 		int windowSize = 17;
 		std::vector<int> currentStripe;
@@ -2371,11 +2405,96 @@ void CloudProcess::extract_zebra_by_struct(ccPointCloud* inputCloud, ccGLWindowI
 				return vec[mid];
 		};
 
-		medianStripeLength = median(stripeLengths);
-		medianGapLength = median(gapLengths);
+		medianStripeLength = median(stripeLengths)* binWidth;
+		medianGapLength = median(gapLengths)* binWidth;
+	}
 
-		// ========================= 修复stripes
-		// (首尾两段的stripe往两边补切)
+	double avgWidth = 0.0f;
+	{
+		float totalLength = 0.0f;
+		float totalWidth = 0.0f;
+		size_t validStripes = 0;
+
+		// 遍历每个stripe
+		for (size_t i = 0; i < stripes.size(); ++i)
+		{
+			std::vector<Eigen::Vector3f> stripePoints;
+
+			// 收集当前stripe的所有点
+			for (int binId : stripes[i])
+			{
+				for (int ptIdx : bins[binId])
+				{
+					const CCVector3* pt = inputCloud->getPoint(ptIdx);
+					stripePoints.emplace_back(pt->x, pt->y, pt->z);
+				}
+			}
+
+			if (stripePoints.size() < 10)
+				continue; // 点数太少，跳过
+
+			// 使用已知主轴 axis 和垂直方向构造斑马线
+			Eigen::Vector3f stripeDir = Eigen::Vector3f(-axis.y(), axis.x(), 0);  // 条纹方向，垂直于axis
+			Eigen::Vector3f stripePerp = axis;  // 沿着主轴的方向用于计算宽度
+
+			// 投影到 stripeDir，计算长度
+			std::vector<float> projAlong;
+			for (const auto& pt : stripePoints)
+			{
+				Eigen::Vector3f d = pt;
+				projAlong.push_back(d.dot(stripeDir));
+			}
+
+			auto minmaxAlong = std::minmax_element(projAlong.begin(), projAlong.end());
+			float stripeLength = (*minmaxAlong.second - *minmaxAlong.first);
+
+			// 累加长度和宽度
+			totalLength += stripeLength;
+			++validStripes;
+		}
+
+		// 计算平均长宽
+		if (validStripes > 0) {
+			avgWidth = totalLength / validStripes;
+		}
+	}
+
+
+	{
+		// 生成模板
+		std::vector<Model>models;
+		int estimation_num = (max_proj - min_proj)/(medianStripeLength + medianGapLength);
+
+		for (int i = estimation_num -1; i <= estimation_num + 1; i++)
+		{
+			models.push_back({});
+			createModelPointCloud(models.back(), avgWidth, medianStripeLength,medianGapLength, i);
+		}
+
+		// 匹配
+		PCLCloudPtr points(new PCLCloud);
+		// 遍历每个stripe
+		for (size_t i = 0; i < stripes.size(); ++i)
+		{
+			// 收集当前stripe的所有点
+			for (int binId : stripes[i])
+			{
+				for (int ptIdx : bins[binId])
+				{
+					const CCVector3* pt = inputCloud->getPoint(ptIdx);
+					points->push_back({ pt->x, pt->y, pt->z });
+				}
+			}
+		}
+		const std::vector<PCLCloudPtr>clouds{points};
+		RoadMarkings roadMarkings;
+		RoadMarkingClassifier classifier;
+		classifier.ClassifyRoadMarkings(clouds, roadMarkings, models);
+
+
+		ccHObject* allLinesContainer = visualizeRoadMarkings(roadMarkings);
+
+		debug->addChild(allLinesContainer);
 	}
 
 	
@@ -2479,12 +2598,11 @@ void CloudProcess::extract_zebra_by_struct(ccPointCloud* inputCloud, ccGLWindowI
 			ccPolyline* rect = new ccPolyline(rectCloud);
 			for (unsigned j = 0; j < 5; ++j)
 				rect->addPointIndex(j);
-			rect->setColor(ccColor::yellow);
+			rect->setColor(ccColor::redRGB);
 			rect->showColors(true);
 			rect->setName(QString("Stripe_Rect_%1").arg(i));
 			debug->addChild(rect);
 		}
-
 	}
 }
 
@@ -2727,9 +2845,6 @@ void CloudProcess::extract_zebra_by_projection(
 void CloudProcess::cluster_points_around_pos(ccPointCloud* select_cloud, unsigned idx,
 	float radius, ccPointCloud& clustered_cloud)
 {
-	// 将 ccPointCloud 转换为 PCLCloudPtr
-	PCLCloudPtr pcl_select_cloud = PointCloudIO::convert_to_PCLCloudPtr(select_cloud);
-
 	if (!select_cloud->getOctree())
 	{
 		ccProgressDialog progressDlg(false);

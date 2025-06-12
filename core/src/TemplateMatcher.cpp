@@ -11,8 +11,7 @@
 
 using namespace std;
 #include <pcl/visualization/pcl_visualizer.h>
-#include <nlohmann/json.hpp>
-#include <fstream>
+
 
 enum ROADMARKING_TYPE
 {
@@ -22,7 +21,6 @@ enum ROADMARKING_TYPE
 
 
 using namespace roadmarking;
-using json = nlohmann::json;
 
 inline int l(int pos)
 {
@@ -34,207 +32,19 @@ inline int r(int pos)
 	return pos << 1 | 1;
 }
 
-class Model
-{
-public:
-	// 成员变量
-	std::string outline_point_cloud_path;  // 轮廓点云
-	std::string raw_point_cloud_path;      // 原始点云路径
-	std::vector<std::vector<PCLPoint>> vectorized_polylines;  // 向量化点的列表
-
-	std::string name;
-
-	PCLCloudPtr outline_point_cloud;
-	PCLCloudPtr raw_point_cloud;
-
-	// 主成分分析结果
-	Eigen::Vector3f raw_pca_values;      // 原始点云的特征值
-	Eigen::Matrix3f raw_pca_matrix;      // 原始点云的特征向量矩阵
-
-	Eigen::Vector3f centroid;			 // 质心
-	Eigen::Vector4f min_bounding_box;    // 最小旋转包围盒（xmin, xmax, ymin, ymax）
-	// 构造函数
-	Model(const std::string& name,
-		const std::string& outline_path,
-		const std::string& raw_path,
-		const std::vector<std::vector<PCLPoint>>& polylines)
-		: name(name)
-		, outline_point_cloud_path(outline_path)
-		, raw_point_cloud_path(raw_path)
-		, vectorized_polylines(polylines)
-	{
-		// 加载轮廓点云
-		outline_point_cloud = loadPointCloud(outline_path);
-		// 加载原始点云
-		raw_point_cloud = loadPointCloud(raw_path);
-
-		if (!outline_point_cloud || outline_point_cloud->empty()
-			|| !raw_point_cloud || raw_point_cloud->empty())
-		{
-			// 如果任一条点云加载失败，则直接返回
-			return;
-		}
-
-		calculatePCA();
-		calculateCentroid();
-		calculateBoundingBox();
-	}
-
-	static std::vector<Model> loadFromJson(const std::string& filename)
-	{
-		std::ifstream input(filename);
-		if (!input.is_open()) {
-			std::cerr << "Could not open file " << filename << std::endl;
-			return {};
-		}
-
-		json j;
-		input >> j;
-
-		std::vector<Model> models;
-		// 顶层键名应为 "models"（注意与旧代码中 "model" 不同）
-		if (!j.contains("models") || !j["models"].is_array()) {
-			std::cerr << "Invalid JSON format: no \"models\" array found." << std::endl;
-			return {};
-		}
-
-		// 遍历 JSON 中的每一个 model 对象
-		for (const auto& model_data : j["models"])
-		{
-			// 读取基本字段
-			std::string name = model_data.value("name", "");
-			std::string outline_path = model_data.value("outline_point_cloud_path", "");
-			std::string raw_path = model_data.value("raw_point_cloud_path", "");
-
-			// 用于存储该 model 对应的多条折线
-			std::vector<std::vector<PCLPoint>> polylines;
-
-			// 如果存在 "graph_elements"，就逐条解析
-			if (model_data.contains("graph_elements") && model_data["graph_elements"].is_array())
-			{
-				for (const auto& elem : model_data["graph_elements"])
-				{
-					// 只处理 type == "polyline" 的元素
-					if (elem.value("type", "") == "polyline"
-						&& elem.contains("points") && elem["points"].is_array())
-					{
-						std::vector<PCLPoint> onePolyline;
-						for (const auto& ptArr : elem["points"])
-						{
-							// 每个 ptArr 应该是 [x, y, z] 这样的数组
-							if (ptArr.is_array() && ptArr.size() == 3)
-							{
-								float x = ptArr[0].get<float>();
-								float y = ptArr[1].get<float>();
-								float z = ptArr[2].get<float>();
-								onePolyline.emplace_back(x, y, z);
-							}
-						}
-						// 将这一条折线加入到 polylines 中
-						polylines.push_back(std::move(onePolyline));
-					}
-				}
-			}
-
-			// 创建 Model 对象并加入到返回列表
-			models.emplace_back(name, outline_path, raw_path, polylines);
-		}
-
-		return models;
-	}
-
-	static PCLCloudPtr loadPointCloud(const std::string& file_path) {
-		PCLCloudPtr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-		if (pcl::io::loadPCDFile<pcl::PointXYZ>(file_path, *cloud) == -1) {
-			std::cerr << "Couldn't read file " << file_path << std::endl;
-			return nullptr;
-		}
-
-		// 清除源点云中的 NaN Inf点
-		PCLCloudPtr cleaned_cloud(new PCLCloud);
-		cleaned_cloud->reserve(cloud->size());
-		for (const auto& pt : cloud->points)
-		{
-			if (pcl::isFinite(pt))  // PCL 提供的检查点是否是有限数（非 NaN 且非 Inf）
-			{
-				cleaned_cloud->push_back(pt);
-			}
-		}
-
-		return cleaned_cloud;
-	}
-
-	void calculatePCA()
-{
-		if (!raw_point_cloud || raw_point_cloud->empty()) {
-			std::cerr << "Point cloud is empty or not valid." << std::endl;
-			return;
-		}
-
-		// 使用PCA计算主成分
-		pcl::PCA<pcl::PointXYZ> pca;
-		pca.setInputCloud(raw_point_cloud);
-
-		raw_pca_matrix = pca.getEigenVectors();
-		raw_pca_values = pca.getEigenValues();
-	}
-
-	void calculateCentroid()
-	{
-		centroid = { 0.0f, 0.0f, 0.0f };
-		for (const auto& point : raw_point_cloud->points) {
-			centroid[0] += point.x;
-			centroid[1] += point.y;
-			centroid[2] += point.z;
-		}
-		centroid /= static_cast<float>(raw_point_cloud->points.size());  // 计算质心
-	}
-
-	// 计算最小旋转包围盒（XY平面）
-	void calculateBoundingBox() {
-		if (!raw_point_cloud || raw_point_cloud->empty()) {
-			std::cerr << "Point cloud is empty or not valid." << std::endl;
-			return;
-		}
-
-		// 使用主成分矩阵旋转点云到新的坐标系
-		Eigen::Matrix3f rotation_matrix = raw_pca_matrix;
-
-		// 转换点到主成分坐标系
-		std::vector<Eigen::Vector3f> projected_points;
-		for (const auto& point : raw_point_cloud->points) {
-			Eigen::Vector3f transformed_point(point.x, point.y, point.z);
-			// 旋转到主成分坐标系
-			projected_points.push_back(rotation_matrix.transpose() * (transformed_point - centroid));
-		}
-
-		// 计算最小包围盒（XY平面上的包围盒）
-		float min_x = std::numeric_limits<float>::max(), max_x = std::numeric_limits<float>::lowest();
-		float min_y = std::numeric_limits<float>::max(), max_y = std::numeric_limits<float>::lowest();
-
-		for (const auto& projected_point : projected_points) {
-			min_x = std::min(min_x, projected_point.x());
-			max_x = std::max(max_x, projected_point.x());
-			min_y = std::min(min_y, projected_point.y());
-			max_y = std::max(max_y, projected_point.y());
-		}
-
-		// 存储最小包围盒的4个参数：xmin, xmax, ymin, ymax
-		min_bounding_box[0] = min_x;  // xmin
-		min_bounding_box[1] = max_x;  // xmax
-		min_bounding_box[2] = min_y;  // ymin
-		min_bounding_box[3] = max_y;  // ymax
-	}
-};
-
-
 void RoadMarkingClassifier::ClassifyRoadMarkings(const std::vector<PCLCloudPtr>& clouds,
 	RoadMarkings& roadmarkings,
 	const std::string& model_path)
 {
 	std::vector<Model> models = Model::loadFromJson(model_path);
-	model_match(models, clouds, roadmarkings);
+	ClassifyRoadMarkings(clouds, roadmarkings, models);
+}
 
+void RoadMarkingClassifier::ClassifyRoadMarkings(const std::vector<PCLCloudPtr>& clouds,
+	RoadMarkings& roadmarkings,
+	std::vector<Model>& models)
+{
+	model_match(models, clouds, roadmarkings);
 	vectorize_roadmarking(models, roadmarkings);
 }
 
@@ -251,6 +61,7 @@ void RoadMarkingClassifier::vectorize_roadmarking(std::vector<Model>& models, Ro
 		{
 			continue;
 		}
+		roadmarking.name = models[roadmarking.category].name;
 
 		// 找到对应类别的模型
 		Model& model = models[roadmarking.category];
@@ -367,7 +178,7 @@ bool RoadMarkingClassifier::model_match(const std::vector<Model>& models, const 
 			Eigen::Matrix4f tran_mat_m2s_temp; // 临时的变换矩阵
 
 			// 执行ICP匹配，得到临时匹配拟合度和变换矩阵
-			temp_match_fitness = reg_pca_then_icp(models[j], sceneCloud, tran_mat_m2s_temp, heading_increment, iter_num, correct_match_fitness_thre);
+			temp_match_fitness = fpfh_ransac(models[j], sceneCloud, tran_mat_m2s_temp, heading_increment, iter_num, correct_match_fitness_thre);
 
 			if (temp_match_fitness < 0)continue;
 
@@ -407,6 +218,7 @@ bool RoadMarkingClassifier::model_match(const std::vector<Model>& models, const 
 			roadmarkings.push_back({});
 			// 为当前道路标线分配最佳模型类别
 			roadmarkings.back().category = best_model_index;
+			roadmarkings.back().accuracy = best_overlapping_ratio;
 			roadmarkings.back().localization_tranmat_m2s = tran_mat_m2s_best_match;
 
 			//std::vector<QString> dynamic_text = { t("最佳匹配模板点云：") + QString::fromStdString(models[best_model_index].name),t("重叠率：") + QString::number(best_overlapping_ratio),t("得分：") + QString::number(match_fitness_best) };
@@ -579,277 +391,6 @@ void RoadMarkingClassifier::align_with_PCA(const PCLCloudPtr& ModelCloud,
 	transformation.block<3, 1>(0, 3) = scene_centroid.head<3>() - rotation_matrix * model_centroid.head<3>();
 }
 
-/*
-#include <pcl/features/fpfh.h>
-#include <pcl/point_types.h>
-#include <pcl/kdtree/kdtree_flann.h>
-#include <pcl/registration/icp.h>
-#include <pcl/registration/sample_consensus_prerejective.h>
-// 特征点配准
-float feature_based_registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr& model_cloud,
-	const pcl::PointCloud<pcl::PointXYZ>::Ptr& scene_cloud,
-	Eigen::Matrix4f& transformation_matrix)
-{
-	// Step 1: 提取源点云的 FPFH 特征
-	pcl::FPFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::FPFHSignature33> fpfh_estimation;
-	pcl::PointCloud<pcl::FPFHSignature33>::Ptr model_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>);
-	pcl::PointCloud<pcl::FPFHSignature33>::Ptr scene_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>);
-
-	fpfh_estimation.setInputCloud(model_cloud);
-	fpfh_estimation.setRadiusSearch(0.05);
-	fpfh_estimation.compute(*model_fpfh);
-
-	fpfh_estimation.setInputCloud(scene_cloud);
-	fpfh_estimation.compute(*scene_fpfh);
-
-	// Step 2: 使用 Kd-Tree 进行最近邻匹配
-	pcl::KdTreeFLANN<pcl::FPFHSignature33> kdtree;
-	kdtree.setInputCloud(model_fpfh);
-
-	std::vector<int> match_indices;
-	std::vector<float> match_distances;
-	float total_distance = 0.0f;
-	int match_count = 0;
-
-	for (size_t i = 0; i < scene_fpfh->size(); ++i)
-	{
-		if (kdtree.nearestKSearch(scene_fpfh->points[i], 1, match_indices, match_distances) > 0)
-		{
-			total_distance += match_distances[0];
-			match_count++;
-		}
-	}
-
-	// Step 3: 判断特征匹配质量
-	float average_distance = total_distance / match_count;
-	if (average_distance > 0.1f)  // 假设阈值
-	{
-		// 如果匹配的误差较大，说明可能存在较大方向偏差
-		return -1.0f;
-	}
-
-	// Step 4: 计算变换矩阵
-	// 这里可以用简单的 **SVD** 或其他方法来计算点云之间的变换
-	pcl::registration::CorrespondenceEstimation<pcl::FPFHSignature33, pcl::FPFHSignature33> corr_estimation;
-	corr_estimation.setInputSource(model_fpfh);
-	corr_estimation.setInputTarget(scene_fpfh);
-
-	pcl::registration::SampleConsensusPrerejective<pcl::PointXYZ, pcl::PointXYZ, pcl::FPFHSignature33> reg;
-	reg.setInputSource(model_cloud);
-	reg.setInputTarget(scene_cloud);
-	reg.setMinSampleDistance(0.05);
-	reg.setMaxCorrespondenceDistance(0.1);
-	reg.setMaximumIterations(1000);
-	reg.align(*model_cloud);
-
-	// 返回配准后的变换矩阵
-	transformation_matrix = reg.getFinalTransformation();
-	return 0.0f; // 匹配成功
-}
-
-float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloudPtr& sceneCloud,
-	Eigen::Matrix4f& tran_mat_m2s_best, float heading_step_d, int max_iter_num, float dis_thre)
-{
-	// 1. 使用PCA进行初步对齐
-	Eigen::Matrix4f initial_transformation;
-	align_with_PCA(model.raw_point_cloud, sceneCloud, initial_transformation);
-
-	PCLCloudPtr outline_scene_cloud = get_hull_cloud(sceneCloud);
-
-	// 2. 使用ICP进行精细匹配
-	Eigen::Matrix4f final_transformation;
-	// 使用icp_reg进行精细匹配，传递必要的参数（初始变换、最大迭代次数、距离阈值等）
-	float fitness_score = icp_reg(model.outline_point_cloud, outline_scene_cloud, initial_transformation, final_transformation,
-		max_iter_num, dis_thre);
-
-	tran_mat_m2s_best = final_transformation;
-
-	//// 3. 反射
-	//{
-	//	// 反射模型并重新计算PCA和ICP
-	//	PCLCloudPtr reflect_model(new PCLCloud);
-	//	Eigen::Matrix4f reflect_mat;
-	//	reflect_mat.setIdentity();
-
-	//	reflect_mat(0, 0) = -1.0;  // 反射矩阵，沿模板主方向对称
-
-	//	PCLCloudPtr reflect_raw_model(new PCLCloud);
-
-	//	// 对模型进行反射变换
-	//	pcl::transformPointCloud(*model.outline_point_cloud, *reflect_model, reflect_mat);
-	//	pcl::transformPointCloud(*model.raw_point_cloud, *reflect_raw_model, reflect_mat);
-
-
-	//	// 使用PCA对反射后的模型进行初步对齐
-	//	Eigen::Matrix4f reflect_initial_transformation;
-	//	alignWithPCA(reflect_raw_model, sceneCloud, reflect_initial_transformation);
-
-	//	// 使用icp_reg进行精细配准
-	//	Eigen::Matrix4f reflect_final_transformation;
-	//	float fitness_score2 = icp_reg(reflect_model, outline_scene_cloud, reflect_initial_transformation, reflect_final_transformation,
-	//		max_iter_num, dis_thre);
-
-	//	if (fitness_score2 < fitness_score)
-	//	{
-	//		fitness_score = fitness_score2;
-	//		tran_mat_m2s_best = reflect_final_transformation;
-	//	}
-	//}
-	return fitness_score;
-}
-*/
-
-
-/*
-#include <pcl/features/fpfh.h>
-#include <pcl/kdtree/kdtree_flann.h>
-#include <pcl/registration/icp.h>
-#include <pcl/registration/sample_consensus_prerejective.h>
-#include <pcl/features/normal_3d.h>
-
-// 使用特征配准代替 PCA
-float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloudPtr& sceneCloud,
-	Eigen::Matrix4f& tran_mat_m2s_best, float heading_step_d, int max_iter_num, float dis_thre)
-{
-	// ----- 第零步：异常值滤除（可选） -----
-	pcl::PointCloud<pcl::PointXYZ>::Ptr scene_filtered(new pcl::PointCloud<pcl::PointXYZ>);
-	{
-		pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor;
-		sor.setInputCloud(sceneCloud);
-		sor.setMeanK(50);
-		sor.setStddevMulThresh(0.5);  // 调低标准差阈值
-		sor.filter(*scene_filtered);
-	}
-
-	// ----- 第一步：体素下采样（可选，但一般推荐） -----
-	float voxel_size = 0.05f; // 增大体素大小
-	pcl::PointCloud<pcl::PointXYZ>::Ptr model_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
-	pcl::PointCloud<pcl::PointXYZ>::Ptr scene_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
-
-	{
-		pcl::VoxelGrid<pcl::PointXYZ> vg;
-		vg.setLeafSize(voxel_size, voxel_size, voxel_size);
-
-		vg.setInputCloud(model.raw_point_cloud);
-		vg.filter(*model_downsampled);
-
-		vg.setInputCloud(scene_filtered);
-		vg.filter(*scene_downsampled);
-	}
-
-	// ----- 第二步：法向量估计 -----
-	pcl::PointCloud<pcl::Normal>::Ptr model_normals(new pcl::PointCloud<pcl::Normal>);
-	pcl::PointCloud<pcl::Normal>::Ptr scene_normals(new pcl::PointCloud<pcl::Normal>);
-
-	{
-		pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne;
-		pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
-
-		ne.setInputCloud(model_downsampled);
-		ne.setSearchMethod(tree);
-		ne.setRadiusSearch(0.2);  // 增大法向量估计半径
-		ne.compute(*model_normals);
-
-		ne.setInputCloud(scene_downsampled);
-		ne.compute(*scene_normals);
-	}
-
-	// ----- 第三步：FPFH 特征计算 -----
-	pcl::PointCloud<pcl::FPFHSignature33>::Ptr model_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>);
-	pcl::PointCloud<pcl::FPFHSignature33>::Ptr scene_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>);
-
-	{
-		pcl::FPFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::FPFHSignature33> fpfh;
-		pcl::search::KdTree<pcl::PointXYZ>::Ptr fpfh_tree(new pcl::search::KdTree<pcl::PointXYZ>);
-		fpfh.setSearchMethod(fpfh_tree);
-		fpfh.setRadiusSearch(0.2);  // 增大特征半径
-
-		fpfh.setInputCloud(model_downsampled);
-		fpfh.setInputNormals(model_normals);
-		fpfh.compute(*model_fpfh);
-
-		fpfh.setInputCloud(scene_downsampled);
-		fpfh.setInputNormals(scene_normals);
-		fpfh.compute(*scene_fpfh);
-	}
-
-	// ----- 第四步：基于 RANSAC 的粗配准（SampleConsensusPrerejective） -----
-	pcl::SampleConsensusPrerejective<pcl::PointXYZ, pcl::PointXYZ, pcl::FPFHSignature33> sac;
-	sac.setInputSource(model_downsampled);
-	sac.setInputTarget(scene_downsampled);
-	sac.setSourceFeatures(model_fpfh);
-	sac.setTargetFeatures(scene_fpfh);
-
-	sac.setMaximumIterations(10000);  // 增加 RANSAC 迭代次数
-	sac.setNumberOfSamples(3);
-	sac.setCorrespondenceRandomness(5);
-	sac.setSimilarityThreshold(0.9f);
-	sac.setMaxCorrespondenceDistance(0.08f);  // 调整最大对应距离
-	sac.setInlierFraction(0.4f);  // 增加内点比例
-
-	pcl::PointCloud<pcl::PointXYZ>::Ptr sac_aligned(new pcl::PointCloud<pcl::PointXYZ>);
-	sac.align(*sac_aligned);
-
-	if (!sac.hasConverged()) {
-		return -1.0f;  // 特征配准失败
-	}
-
-	Eigen::Matrix4f init_transformation = sac.getFinalTransformation();
-
-	// ----- 第五步：ICP 精细配准 -----
-	// 如果想使用轮廓点云，可从 outline_point_cloud 获取，否则直接用下采样的完整场景点云
-	pcl::PointCloud<pcl::PointXYZ>::Ptr target_for_icp = get_hull_cloud(sceneCloud);
-	if (target_for_icp->empty())
-	{
-		// 如果 hull 云为空，就退回到下采样后的完整场景云
-		target_for_icp = scene_downsampled;
-	}
-
-	// 同样，对目标 ICP 云进行下采样或滤波以提高效率（可选）
-	pcl::PointCloud<pcl::PointXYZ>::Ptr target_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
-	{
-		pcl::VoxelGrid<pcl::PointXYZ> vg2;
-		vg2.setLeafSize(voxel_size, voxel_size, voxel_size);
-		vg2.setInputCloud(target_for_icp);
-		vg2.filter(*target_downsampled);
-	}
-
-	// 也可以对 sac_aligned 做一次下采样，保证与 target_downsampled 点数相近
-	pcl::PointCloud<pcl::PointXYZ>::Ptr source_for_icp(new pcl::PointCloud<pcl::PointXYZ>);
-	{
-		pcl::VoxelGrid<pcl::PointXYZ> vg3;
-		vg3.setLeafSize(voxel_size, voxel_size, voxel_size);
-		vg3.setInputCloud(sac_aligned);
-		vg3.filter(*source_for_icp);
-	}
-
-	pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
-	icp.setInputSource(source_for_icp);
-	icp.setInputTarget(target_downsampled);
-	icp.setMaxCorrespondenceDistance(dis_thre);   // 点到点最大对应距离阈值
-	icp.setMaximumIterations(max_iter_num);      // 最大迭代次数
-	icp.setTransformationEpsilon(1e-8);          // 变换矩阵收敛阈值
-	icp.setEuclideanFitnessEpsilon(1e-6);        // 坐标误差收敛阈值
-
-	pcl::PointCloud<pcl::PointXYZ> icp_result;
-	icp.align(icp_result, init_transformation);
-
-	if (!icp.hasConverged())
-	{
-		// ICP 未收敛
-		return -1.0f;
-	}
-
-	tran_mat_m2s_best = icp.getFinalTransformation();
-	float fitness_score = static_cast<float>(icp.getFitnessScore());
-
-	return fitness_score;
-}
-
-*/
-
-
-
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
 #include <pcl/filters/voxel_grid.h>
@@ -924,6 +465,14 @@ void visualize_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr& model_keypoints
 	viewer.addPointCloud<pcl::PointXYZ>(model_keypoints, "model_keypoints");
 	viewer.addPointCloud<pcl::PointXYZ>(scene_keypoints, "scene_keypoints");
 
+	// 计算目标点云（scene_keypoints）的质心
+	Eigen::Vector4f scene_centroid;
+	pcl::compute3DCentroid(*scene_keypoints, scene_centroid);  // 计算质心
+	// 将质心作为视图目标
+	viewer.setCameraPosition(scene_centroid[0], scene_centroid[1], scene_centroid[2],   // 目标点的坐标
+		scene_centroid[0], scene_centroid[1], scene_centroid[2] + 1.0f,   // 摄像机位置 (稍微偏移以获得视角)
+		0.0, 1.0, 0.0);  // 上方向
+
 	// 初始化 SampleConsensusPrerejective
 	pcl::SampleConsensusPrerejective<pcl::PointXYZ, pcl::PointXYZ, pcl::FPFHSignature33> sac;
 	sac.setInputSource(model_keypoints);
@@ -932,12 +481,12 @@ void visualize_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr& model_keypoints
 	sac.setSourceFeatures(model_fpfh);
 	sac.setTargetFeatures(scene_fpfh);
 
-	sac.setMaximumIterations(1);
+	sac.setMaximumIterations(500);
 	sac.setNumberOfSamples(3);
-	sac.setCorrespondenceRandomness(10);
+	sac.setCorrespondenceRandomness(3);
 	sac.setSimilarityThreshold(0.8f);
-	sac.setMaxCorrespondenceDistance(0.1f); // 最大匹配距离。
-	sac.setInlierFraction(0.6f); // 内点比例。
+	sac.setMaxCorrespondenceDistance(0.2f); // 最大匹配距离
+	sac.setInlierFraction(0.6f); // 内点比例
 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr aligned(new pcl::PointCloud<pcl::PointXYZ>(*model_keypoints));
 	pcl::PointCloud<pcl::PointXYZ>::Ptr best_aligned(new pcl::PointCloud<pcl::PointXYZ>(*model_keypoints));
@@ -948,7 +497,7 @@ void visualize_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr& model_keypoints
 	std::string text1 = "Iteration: " + std::to_string(0);
 	viewer.addText(text1, 10, 30, "iteration_num");
 
-	for (int i = 0; i < 5000; ++i) {
+	for (int i = 0; i < 1; ++i) {
 		// 执行配准步骤
 		sac.align(*aligned);
 
@@ -1005,7 +554,7 @@ void visualize_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr& model_keypoints
 			break;
 		}
 		// 更新可视化界面
-		viewer.spinOnce(10);  // 更新可视化界面
+		viewer.spinOnce(2);  // 更新可视化界面
 		
 		// 因为align会init，所以保存迭代后的状态(手动模拟比较最低得分的迭代)
 		double score = calculateFitnessScore(*aligned, *scene_keypoints, 0.1f);
@@ -1021,12 +570,12 @@ void visualize_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr& model_keypoints
 }
 
 
-float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloudPtr& sceneCloud,
+float RoadMarkingClassifier::fpfh_ransac(const Model& model, const PCLCloudPtr& sceneCloud,
 	Eigen::Matrix4f& tran_mat_m2s_best, float heading_step_d, int max_iter_num, float dis_thre) {
 
 	max_iter_num = 50;
 	// 1. 体素下采样
-	float voxel_size = 0.05f;
+	float voxel_size = 0.1f;
 	pcl::PointCloud<pcl::PointXYZ>::Ptr model_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::PointCloud<pcl::PointXYZ>::Ptr scene_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::VoxelGrid<pcl::PointXYZ> vg;
@@ -1057,6 +606,31 @@ float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloud
 		return -1.0f;
 	}
 
+	// 2.5 粗对齐
+	{
+		// 1. 使用PCA进行初步对齐
+		Eigen::Matrix4f initial_transformation;
+		align_with_PCA(model_downsampled, scene_downsampled, initial_transformation);
+
+		// 2. 使用ICP进行精细匹配
+		Eigen::Matrix4f final_transformation;
+		// 使用icp_reg进行精细匹配，传递必要的参数（初始变换、最大迭代次数、距离阈值等）
+		float fitness_score = icp_reg(model_keypoints, scene_keypoints, initial_transformation, final_transformation,
+			max_iter_num, dis_thre);
+
+		tran_mat_m2s_best = final_transformation;
+
+		//{
+		//	// 对模型点云进行变换
+		//	pcl::PointCloud<pcl::PointXYZ>::Ptr model_downsampled_tran(new pcl::PointCloud<pcl::PointXYZ>);
+		//	pcl::transformPointCloud(*model_downsampled, *model_downsampled_tran, tran_mat_m2s_best);
+
+		//	// 可视化
+		//	visualizePointClouds("预对齐", {}, scene_downsampled, model_downsampled_tran);
+		//}
+	}
+
+
 	// 3. 计算法向量
 	pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne;
 	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
@@ -1085,7 +659,7 @@ float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloud
 	};
 
 	ne.setSearchMethod(tree);
-	ne.setRadiusSearch(0.1);
+	ne.setRadiusSearch(0.2);
 
 	pcl::PointCloud<pcl::Normal>::Ptr model_normals = getXYNormal(model_keypoints);
 	pcl::PointCloud<pcl::Normal>::Ptr scene_normals = getXYNormal(scene_keypoints);
@@ -1105,8 +679,13 @@ float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloud
 	fpfh.setInputNormals(scene_normals);
 	fpfh.compute(*scene_fpfh);
 
+	//{
+	//	visualizePointCloudWithNormals("model点云二维法向量", model_keypoints, model_normals);
+	//	visualizePointCloudWithNormals("scene点云二维法向量", scene_keypoints, scene_normals);
+	//}
+
 	// 5. 粗配准 - RANSAC
-	//visualize_registration(model_keypoints, scene_keypoints, model_fpfh, scene_fpfh);
+	// visualize_registration(model_keypoints, scene_keypoints, model_fpfh, scene_fpfh);
 	pcl::SampleConsensusPrerejective<pcl::PointXYZ, pcl::PointXYZ, pcl::FPFHSignature33> sac;
 	sac.setInputSource(model_keypoints);
 	sac.setInputTarget(scene_keypoints);
@@ -1118,15 +697,15 @@ float RoadMarkingClassifier::reg_pca_then_icp(const Model& model, const PCLCloud
 	// 设置每次迭代时使用的最小样本集（通常为3个点）
 	sac.setNumberOfSamples(3);
 
-	// 设置随机匹配的点数（默认为10个，通常为3到5个足够）
-	sac.setCorrespondenceRandomness(10);
+	// 设置随机匹配的点数（默认为3个，通常为3到5个足够）
+	sac.setCorrespondenceRandomness(3);
 
 	sac.setSimilarityThreshold(0.8f);
 	sac.setMaxCorrespondenceDistance(0.1f);
 	sac.setInlierFraction(0.6f);
 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr sac_aligned(new pcl::PointCloud<pcl::PointXYZ>);
-	sac.align(*sac_aligned);
+	sac.align(*sac_aligned, tran_mat_m2s_best);
 
 	if (!sac.hasConverged()) {
 		return -1.0f;  // 配准失败
@@ -1301,6 +880,10 @@ bool RoadMarkingClassifier::is_line_cloud_and_get_direction(PCLCloudPtr cloud, R
 
 		rm.polylines.clear();
 		rm.polylines.push_back(std::move(oneLine));
+
+		rm.name = "sideline";
+
+		rm.accuracy = 1;
 
 		return true;
 	}
@@ -1510,6 +1093,8 @@ void RoadMarkingClassifier::combine_side_lines(const RoadMarkings& roadmarkings,
 	for (int i = 0; i < static_cast<int>(combinelines.size()); ++i)
 	{
 		RoadMarking& rm_comb = combine_sideline_markings[i];
+		rm_comb.name = "sideline";
+		rm_comb.accuracy = 1;
 		rm_comb.category = COMBINE_SIDE_LINES;
 
 		// 把一条组合好的折线插入到 rm_comb.polylines 中

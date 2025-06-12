@@ -5,6 +5,11 @@
 
 namespace roadmarking
 {
+	// 用于区别是图元
+	class MetaRoadmarking : public ccHObject
+	{
+	};
+
 	class CloudProcess
 	{
 	public:

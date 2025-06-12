@@ -60,19 +60,23 @@ if (PLUGIN_STANDARD_QROADMAKING)
 
     # 第三方库
     find_package(PCL REQUIRED)
-    include_directories(${PCL_INCLUDE_DIRS})
-    add_definitions(${PCL_DEFINITIONS})
+    #include_directories(${PCL_INCLUDE_DIRS})
+    #add_definitions(${PCL_DEFINITIONS})
     target_link_libraries(${PROJECT_NAME} ${PCL_LIBRARIES})
 
     find_package(OpenGL REQUIRED)
     include_directories(${OPENGL_INCLUDE_DIR})
     target_link_libraries(${PROJECT_NAME} ${OPENGL_LIBRARIES})
-
+	
     # OpenCV
     find_package(OpenCV REQUIRED)
     include_directories(${OpenCV_INCLUDE_DIRS})
     target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS})
 
+    # 查找 yaml-cpp 库
+    find_package(yaml-cpp CONFIG REQUIRED)
+    target_link_libraries(${PROJECT_NAME} yaml-cpp)
+    
     # ====================================================== CGAL
     find_package(CGAL REQUIRED)
     include_directories(${CGAL_INCLUDE_DIRS})

@@ -387,7 +387,33 @@ bool qSignExtractDlg::setCloud(std::vector<ccHObject*>cloud)
 
 void qSignExtractDlg::onAutoExtract()
 {
-	RoadMarkingExtract::automaticExtraction(PointCloudIO::convert_to_ccCloudPtr(p_select_cloud), m_app);
+	SettingsDialog settingsDialog;
+	settingsDialog.setDescription("参数：\n"
+		"滤波密度(m)：点云越密处理时间越长，对于道路边沿的区分越清晰\n"
+		"聚类半径(m)：需大于滤波密度\n"
+		"曲率阈值：曲率基础值，用于判断表面平坦度\n"
+		"角度阈值(度)：允许的法向量夹角（自动转余弦）\n"
+		"搜索半径(m)：邻域搜索范围");
+
+	settingsDialog.registerComponent<float>("滤波密度", "targetVoxelSize", 0.2);
+	settingsDialog.registerComponent<float>("聚类半径", "euclideanClusterRadius", 0.3);
+	settingsDialog.registerComponent<float>("曲率阈值", "curvatureBaseThreshold", 0.01);
+	settingsDialog.registerComponent<float>("角度阈值", "angleThresholdDegrees", 5.0);
+	settingsDialog.registerComponent<float>("搜索半径", "searchRadius", 0.3);
+	settingsDialog.registerComponent<float>("网格大小", "gridSize", (double)0.05);
+
+	if (settingsDialog.exec() != QDialog::Accepted)
+		return;
+	QMap<QString, QVariant> parameters = settingsDialog.getParameters();
+	float targetVoxelSize = parameters["targetVoxelSize"].toFloat();
+	float euclideanClusterRadius = parameters["euclideanClusterRadius"].toFloat();
+	float curvatureBaseThreshold = parameters["curvatureBaseThreshold"].toFloat();
+	float angleDegrees = parameters["angleThresholdDegrees"].toFloat();
+	float angleThreshold = cos(angleDegrees * M_PI / 180.0);  // 角度转弧度再计算余弦
+	float searchRadius = parameters["searchRadius"].toFloat();
+	float gridSize = parameters["gridSize"].toFloat();
+
+	RoadMarkingExtract::automaticExtraction(PointCloudIO::convert_to_ccCloudPtr(p_select_cloud), m_app, targetVoxelSize, euclideanClusterRadius, curvatureBaseThreshold, angleThreshold, searchRadius);
 	m_objectTree->refresh();
 }
 
@@ -885,18 +911,17 @@ void qSignExtractDlg::onMatchTemplateByClick()
 	m_pick_callback = [&](ccHObject* select_cloud, unsigned idx)
 	{
 
-		ccPointCloud* p_select_cloud = dynamic_cast<ccPointCloud*>(select_cloud);
-		if (!p_select_cloud)
+		ccPointCloud* select_cloud_ = dynamic_cast<ccPointCloud*>(select_cloud);
+		if (!select_cloud_)
 		{
 			QMessageBox::critical(nullptr, "错误", "未选择点云");
 		}
 		else
 		{
 			ccPointCloud* clustered_cloud = new ccPointCloud;
-			CloudProcess::cluster_points_around_pos(p_select_cloud, idx, 0.2, *clustered_cloud);
+			CloudProcess::cluster_points_around_pos(select_cloud_, idx, 0.2, *clustered_cloud);
 			auto markings = CloudProcess::apply_roadmarking_vectorization(clustered_cloud);
-			p_select_cloud->addChild(clustered_cloud);
-			p_select_cloud->addChild(markings);
+			select_cloud_->addChild(markings);
 		}
 		m_objectTree->async_refresh();
 	};
@@ -1201,26 +1226,38 @@ void CloudObjectTreeWidget::refresh()
 	blockSignals(false);
 }
 
-void CloudObjectTreeWidget::loadTreeItem(ccHObject* object, QTreeWidgetItem* parentItem)
+void CloudObjectTreeWidget::loadTreeItem(ccHObject* object, QTreeWidgetItem* parentItem, bool isFold)
 {
-	// 创建树项
-	QTreeWidgetItem* item = new QTreeWidgetItem(parentItem);
-	item->setText(0, object->getName());  // 设置项的文本为对象的名称
-	item->setCheckState(0, object->isVisible() ? Qt::Checked : Qt::Unchecked);  // 设置复选框状态
-	item->setData(0, Qt::UserRole, QVariant::fromValue<void*>(object));  // 将对象绑定到该项
 
-	// 设置项标志，使其支持用户勾选
-	item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-	// 如果有父项，就将当前项作为父项的子项添加
-	if (parentItem)
+	QTreeWidgetItem* item = nullptr;
+	if (!isFold)
 	{
-		parentItem->addChild(item);
+		// 创建树项
+		item = new QTreeWidgetItem(parentItem);
+		item->setText(0, object->getName());  // 设置项的文本为对象的名称
+		item->setCheckState(0, object->isVisible() ? Qt::Checked : Qt::Unchecked);  // 设置复选框状态
+		item->setData(0, Qt::UserRole, QVariant::fromValue<void*>(object));  // 将对象绑定到该项
+
+		// 设置项标志，使其支持用户勾选
+		item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+		// 如果有父项，就将当前项作为父项的子项添加
+
+		if (parentItem)
+		{
+			parentItem->addChild(item);
+		}
+		else
+		{
+			addTopLevelItem(item);  // 如果没有父项，作为根项添加
+		}
+		item->setSelected(object->isSelected());
 	}
-	else
+
+	// 如果是图元，后面的内容在目录中不显示
+	if (dynamic_cast<MetaRoadmarking*>(object))
 	{
-		addTopLevelItem(item);  // 如果没有父项，作为根项添加
+		isFold = true;
 	}
-	item->setSelected(object->isSelected());
 
 	// 递归加载子项
 	for (int i = 0; i < object->getChildrenNumber(); ++i)
@@ -1229,7 +1266,7 @@ void CloudObjectTreeWidget::loadTreeItem(ccHObject* object, QTreeWidgetItem* par
 		if (child)
 		{
 			child->setDisplay(object->getDisplay()); // 在同窗口显示
-			loadTreeItem(child, item);  // 将子节点递归挂载到当前项下
+			loadTreeItem(child, item, isFold);  // 将子节点递归挂载到当前项下
 		}
 	}
 }

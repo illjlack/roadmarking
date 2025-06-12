@@ -70,6 +70,7 @@ private slots:
 	void onMakeModel();
 	void onFilteCloudByIntensity();         // 过滤点云
 	void onFilteCloudByZ();
+	//void onFilteGround();
 	void onZebraExtract();
 
 	void onItemPicked(ccHObject* entity, unsigned itemIdx, int x, int y, const CCVector3&, const CCVector3d&);
@@ -131,11 +132,11 @@ public slots:
 	void refresh();
 
 protected:
+	void loadTreeItem(ccHObject* object, QTreeWidgetItem* parentItem, bool isFold = false);
+
 	void contextMenuEvent(QContextMenuEvent* event) override;
 
 	void getAllPointCloudsRecursive(ccHObject* object, std::vector<ccPointCloud*>& pointClouds); // 递归获取所有点云
-
-	void loadTreeItem(ccHObject* object, QTreeWidgetItem* parentItem); // 加载树节点
 
 private:
 	ccHObject* root = nullptr;  // 根节点
