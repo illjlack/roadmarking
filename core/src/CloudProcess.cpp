@@ -371,9 +371,9 @@ ccHObject* CloudProcess::apply_roadmarking_vectorization(ccPointCloud* cloud)
 
 ccHObject* CloudProcess::apply_roadmarking_vectorization(ccCloudPtr cloud)
 {
-	std::vector<PCLCloudPtr>pclCloud;
-	pclCloud.push_back(PointCloudIO::convert_to_PCLCloudPtr(cloud));
-	return apply_roadmarking_vectorization(pclCloud);
+	std::vector<PCLCloudPtr> clouds;
+	extract_euclidean_clusters<PCLPoint>(PointCloudIO::convert_to_PCLCloudPtr(cloud), clouds, 0.2);
+	return apply_roadmarking_vectorization(clouds);
 }
 
 ccHObject* visualizeRoadMarkings(const RoadMarkings& roadmarkings)
@@ -395,7 +395,7 @@ ccHObject* visualizeRoadMarkings(const RoadMarkings& roadmarkings)
 		for (const auto& singlePolyline : roadmarking.polylines)
 		{
 			if (singlePolyline.size() < 2)
-				continue; // 至少要两个点才算“折线”
+				continue; // 至少要两个点才算"折线"
 
 			// 创建一个 ccPointCloud 来存储这一条折线的点
 			ccCloudPtr polylineCloud(new ccPointCloud);
@@ -723,12 +723,12 @@ void CloudProcess::filter_cloud_by_intensity(
 	if (!inCloud || !cloud_filtered)
 		return;
 
-	// 为输出点云创建一个“intensity”标量场
+	// 为输出点云创建一个"intensity"标量场
 	cloud_filtered->addScalarField("intensity");
 	int outSfIdx = cloud_filtered->getScalarFieldIndexByName("intensity");
 	auto sfOut = cloud_filtered->getScalarField(outSfIdx);
 
-	// 找到输入点云的“intensity”标量场索引
+	// 找到输入点云的"intensity"标量场索引
 	int inSfIdx = PointCloudIO::get_intensity_idx(inCloud);
 	if (inSfIdx < 0)return;
 
@@ -771,12 +771,12 @@ void CloudProcess::filter_cloud_by_z(
 	if (!inCloud || !cloud_filtered)
 		return;
 
-	// 为输出点云创建一个“intensity”标量场
+	// 为输出点云创建一个"intensity"标量场
 	cloud_filtered->addScalarField("intensity");
 	int outSfIdx = cloud_filtered->getScalarFieldIndexByName("intensity");
 	auto sfOut = cloud_filtered->getScalarField(outSfIdx);
 
-	// 找到输入点云的“intensity”标量场索引
+	// 找到输入点云的"intensity"标量场索引
 	int inSfIdx = PointCloudIO::get_intensity_idx(inCloud);
 	if (inSfIdx < 0)return;
 
@@ -1177,7 +1177,7 @@ void fitLineByRANSAC(
 }
 
 /// <summary>
-/// 从固定起点 start_point 沿 dir 大致方向，用“矩形走廊”方法搜索 ±30° 扫描，
+/// 从固定起点 start_point 沿 dir 大致方向，用"矩形走廊"方法搜索 ±30° 扫描，
 /// 选出最大 inliers 对应的精确方向。
 /// </summary>
 void fitLineByBox(
@@ -1196,11 +1196,11 @@ void fitLineByBox(
 	Eigen::Vector3f d0 = dir.normalized();
 	float half_w = distance_threshold;
 
-	// 2. 准备“上下浮动”范围：±30°
+	// 2. 准备"上下浮动"范围：±30°
 	constexpr float maxAngleRad = 30.0f * static_cast<float>(M_PI) / 180.0f;
 	const int   numSteps = 61;  // 扫描粒度：每度一次
 
-	// 3. 确定“摆动轴”：取 d0 与全局“上”（0,0,1）做叉乘，如果平行再换 (1,0,0)
+	// 3. 确定"摆动轴"：取 d0 与全局"上"（0,0,1）做叉乘，如果平行再换 (1,0,0)
 	Eigen::Vector3f up(0, 0, 1);
 	if (std::fabs(d0.dot(up)) > 0.99f) up = Eigen::Vector3f(1, 0, 0);
 	Eigen::Vector3f swingAxis = d0.cross(up).normalized();
@@ -2908,4 +2908,161 @@ void CloudProcess::cluster_points_around_pos(ccPointCloud* select_cloud, unsigne
 	{
 		clustered_cloud.addPoint(*select_cloud->getPoint(cluster_idx));
 	}
+}
+
+// // 计算局部二维法向量
+// void CloudProcess::computeLocalNormal2D(const PCLCloudPtr& cloud, float radius, pcl::PointCloud<pcl::Normal>::Ptr normals)
+// {
+//     // 创建KD树
+//     pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+//     kdtree.setInputCloud(cloud);
+
+//     normals->resize(cloud->size());
+
+//     #pragma omp parallel for schedule(dynamic, 1)
+//     for (int i = 0; i < cloud->size(); i++)
+//     {
+//         const auto& point = cloud->points[i];
+        
+//         // 查找邻域点
+//         std::vector<int> pointIdxRadiusSearch;
+//         std::vector<float> pointRadiusSquaredDistance;
+//         kdtree.radiusSearch(point, radius, pointIdxRadiusSearch, pointRadiusSquaredDistance);
+
+//         // 如果邻域点太少，跳过
+//         if (pointIdxRadiusSearch.size() < 3)
+//         {
+//             normals->points[i].normal_x = 0;
+//             normals->points[i].normal_y = 0;
+//             normals->points[i].normal_z = 1;  // 默认Z轴向上
+//             normals->points[i].curvature = 0;
+//             continue;
+//         }
+
+//         // 计算邻域点的质心
+//         float center_x = 0, center_y = 0;
+//         for (int idx : pointIdxRadiusSearch)
+//         {
+//             center_x += cloud->points[idx].x;
+//             center_y += cloud->points[idx].y;
+//         }
+//         center_x /= pointIdxRadiusSearch.size();
+//         center_y /= pointIdxRadiusSearch.size();
+
+//         // 计算协方差矩阵
+//         float cov_xx = 0, cov_xy = 0, cov_yy = 0;
+//         for (int idx : pointIdxRadiusSearch)
+//         {
+//             float dx = cloud->points[idx].x - center_x;
+//             float dy = cloud->points[idx].y - center_y;
+//             cov_xx += dx * dx;
+//             cov_xy += dx * dy;
+//             cov_yy += dy * dy;
+//         }
+//         cov_xx /= pointIdxRadiusSearch.size();
+//         cov_xy /= pointIdxRadiusSearch.size();
+//         cov_yy /= pointIdxRadiusSearch.size();
+
+//         // 计算协方差矩阵的特征值和特征向量
+//         float trace = cov_xx + cov_yy;
+//         float det = cov_xx * cov_yy - cov_xy * cov_xy;
+//         float delta = std::sqrt(trace * trace - 4 * det);
+        
+//         // 计算较小的特征值对应的特征向量（法向量）
+//         float lambda = (trace - delta) / 2;
+//         float a = cov_xx - lambda;
+//         float b = cov_xy;
+        
+//         // 归一化法向量
+//         float norm = std::sqrt(a * a + b * b);
+//         if (norm > 1e-6)
+//         {
+//             normals->points[i].normal_x = a / norm;
+//             normals->points[i].normal_y = b / norm;
+//             normals->points[i].normal_z = 0;  // XY平面的法向量，Z分量为0
+//             normals->points[i].curvature = lambda / (lambda + (trace - lambda));  // 计算曲率
+//         }
+//         else
+//         {
+//             normals->points[i].normal_x = 0;
+//             normals->points[i].normal_y = 0;
+//             normals->points[i].normal_z = 1;  // 默认Z轴向上
+//             normals->points[i].curvature = 0;
+//         }
+//     }
+// }
+
+
+// 计算局部二维法向量
+void CloudProcess::computeLocalNormal2D(const PCLCloudPtr& cloud, float radius, pcl::PointCloud<pcl::Normal>::Ptr normals)
+{
+    // 创建KD树
+    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+    kdtree.setInputCloud(cloud);
+
+    normals->resize(cloud->size());
+
+    #pragma omp parallel for schedule(dynamic, 1)
+    for (int i = 0; i < cloud->size(); i++)
+    {
+        const auto& point = cloud->points[i];
+        
+        // 查找最近的两个点（包括当前点）
+        std::vector<int> pointIdxNKNSearch(2);
+        std::vector<float> pointNKNSquaredDistance(2);
+        kdtree.nearestKSearch(point, 2, pointIdxNKNSearch, pointNKNSquaredDistance);
+
+        // 如果找不到足够的点，跳过
+        if (pointIdxNKNSearch.size() < 2)
+        {
+            normals->points[i].normal_x = 0;
+            normals->points[i].normal_y = 0;
+            normals->points[i].normal_z = 1;  // 默认Z轴向上
+            normals->points[i].curvature = 0;
+            continue;
+        }
+
+        // 获取最近的点（跳过当前点）
+        int nearest_idx = (pointIdxNKNSearch[0] == i) ? pointIdxNKNSearch[1] : pointIdxNKNSearch[0];
+
+        // 计算连线方向
+        float dir_x = cloud->points[nearest_idx].x - point.x;
+        float dir_y = cloud->points[nearest_idx].y - point.y;
+        float dir_norm = std::sqrt(dir_x * dir_x + dir_y * dir_y);
+
+        if (dir_norm > 1e-6)
+        {
+            // 计算法向量（垂直于连线）
+            float normal_x = -dir_y / dir_norm;  // 旋转90度并归一化
+            float normal_y = dir_x / dir_norm;
+
+            // 确保法向量指向线的外部
+            // 计算质心
+            float center_x = (point.x + cloud->points[nearest_idx].x) / 2;
+            float center_y = (point.y + cloud->points[nearest_idx].y) / 2;
+
+            // 计算质心到当前点的向量
+            float to_point_x = point.x - center_x;
+            float to_point_y = point.y - center_y;
+
+            // 如果法向量与质心到点的向量方向相反，则翻转法向量
+            if (normal_x * to_point_x + normal_y * to_point_y < 0)
+            {
+                normal_x = -normal_x;
+                normal_y = -normal_y;
+            }
+
+            normals->points[i].normal_x = normal_x;
+            normals->points[i].normal_y = normal_y;
+            normals->points[i].normal_z = 0;  // XY平面的法向量，Z分量为0
+            normals->points[i].curvature = 0;  // 暂时不计算曲率
+        }
+        else
+        {
+            normals->points[i].normal_x = 0;
+            normals->points[i].normal_y = 0;
+            normals->points[i].normal_z = 1;
+            normals->points[i].curvature = 0;
+        }
+    }
 }

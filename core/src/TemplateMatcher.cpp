@@ -9,6 +9,8 @@
 #include "CloudProcess.h"
 #include "comm.h"
 
+#include "ConfigManager.h"
+
 using namespace std;
 #include <pcl/visualization/pcl_visualizer.h>
 
@@ -72,7 +74,7 @@ void RoadMarkingClassifier::vectorize_roadmarking(std::vector<Model>& models, Ro
 		// 获取对应的变换矩阵
 		const Eigen::Matrix4f& transform = roadmarking.localization_tranmat_m2s;
 
-		// 遍历该模型下的每一条“原始折线”
+		// 遍历该模型下的每一条"原始折线"
 		for (const auto& singlePolyline : model.vectorized_polylines)
 		{
 			// 先把这一条折线的所有顶点装到一个 PCL 点云里
@@ -120,94 +122,110 @@ void RoadMarkingClassifier::vectorize_roadmarking(std::vector<Model>& models, Ro
 	result.swap(roadmarkings);
 }
 
-bool RoadMarkingClassifier::model_match(const std::vector<Model>& models, const vector<PCLCloudPtr>& sceneClouds, RoadMarkings& roadmarkings)
+bool RoadMarkingClassifier::model_match(const std::vector<Model>& models, const std::vector<PCLCloudPtr>& scenePointClouds, RoadMarkings& roadmarkings)
 {
-	int iter_num_ = 12;							// 迭代次数
-	float correct_match_fitness_thre_ = 0.1;	// ICP 适配度阈值（越小，匹配要求越严格）
-	float overlapDis_ = 0.1;					// 允许的点云重叠距离（决定匹配点云的贴合程度）
-	float tolerantMinOverlap_ = 0.70;			// 最小重叠比例
-	float heading_increment_ = 20.0;			// 旋转角度步长（单位：度），用于旋转匹配
+	// 获取配置管理器实例
+	auto& config = ConfigManager::getInstance();
+	
+	// 从配置中获取参数
+	float normal_radius = config.get<float>("cloud_processing", "normal_radius");
+	float correct_match_fitness_thre = config.get<float>("template_matching", "correct_match_fitness_thre");
+	float overlap_dis = config.get<float>("template_matching", "overlap_dis");
+	float tolerant_min_overlap = config.get<float>("template_matching", "tolerant_min_overlap");
+	float heading_increment = config.get<float>("template_matching", "heading_increment");
 
-	float correct_match_fitness_thre = correct_match_fitness_thre_;
-	float overlapping_dist_thre = overlapDis_;
-	float heading_increment = heading_increment_;
-	int iter_num = iter_num_;
+	// 预分配结果空间
+	std::vector<RoadMarking> temp_roadmarkings(scenePointClouds.size());
+	std::vector<bool> valid_matches(scenePointClouds.size(), false);
 
-	//modeldatas.resize(scenePointClouds.size());
-	//is_rights.resize(scenePointClouds.size());
+	// 预清理所有点云并计算法向量
+	std::vector<PCLCloudPtr> cleaned_clouds(scenePointClouds.size());
 
-	int min_point_num_for_match = 50;
-	int i;
-	// #pragma omp parallel for private(i)  // roadmarkings的push有竞争
-	for (i = 0; i < sceneClouds.size(); i++)
+	// 设置OpenMP参数
+	int num_threads = omp_get_max_threads();
+	omp_set_num_threads(num_threads);
+	omp_set_nested(true);
+	omp_set_dynamic(false);  // 禁用动态线程数调整
+
+	// 清理点云
+	#pragma omp parallel for schedule(dynamic, 1)
+	for (int i = 0; i < scenePointClouds.size(); i++)
 	{
-		if (is_line_cloud_and_get_direction(sceneClouds[i], roadmarkings))
+		// 清理点云
+		cleaned_clouds[i].reset(new PCLCloud);
+		cleaned_clouds[i]->reserve(scenePointClouds[i]->size());
+		for (const auto& pt : scenePointClouds[i]->points)
+		{
+			if (pcl::isFinite(pt))
+			{
+				cleaned_clouds[i]->push_back(pt);
+			}
+		}
+	}
+
+	// 预先判断每个场景点云是否为直线
+	std::vector<bool> is_line_cloud(scenePointClouds.size(), false);
+	for (int i = 0; i < scenePointClouds.size(); i++)
+	{
+		if (is_line_cloud_and_get_direction(cleaned_clouds[i], roadmarkings))
+		{
+			is_line_cloud[i] = true;
+		}
+	}
+
+	// 为每个模型创建局部变量，避免竞争
+	std::vector<std::vector<float>> local_overlapping_ratios(scenePointClouds.size(), std::vector<float>(models.size()));
+	std::vector<std::vector<float>> local_match_fitness(scenePointClouds.size(), std::vector<float>(models.size()));
+	std::vector<std::vector<Eigen::Matrix4f>> local_transforms(scenePointClouds.size(), std::vector<Eigen::Matrix4f>(models.size()));
+	std::vector<std::vector<bool>> local_valid_matches(scenePointClouds.size(), std::vector<bool>(models.size(), false));
+
+	// 使用单层并行，避免嵌套问题
+	#pragma omp parallel for schedule(dynamic, 1)
+	for (int i = 0; i < scenePointClouds.size() * models.size(); i++)
+	{
+		int scene_idx = i / models.size();
+		int model_idx = i % models.size();
+
+		// 如果场景点云是直线，跳过匹配
+		if (is_line_cloud[scene_idx])
 		{
 			continue;
 		}
 
+		float temp_match_fitness, overlapping_ratio;
+		Eigen::Matrix4f tran_mat_m2s_temp;
 
-		// 清除源点云中的 NaN  Inf点 (应该来自高程图没有完全插值)
-		PCLCloudPtr sceneCloud(new PCLCloud);
-		sceneCloud->reserve(sceneClouds[i]->size());
-		for (const auto& pt : sceneClouds[i]->points)
+		// 执行匹配，得到临时匹配拟合度和变换矩阵
+		if (!fpfh_ransac(models[model_idx], cleaned_clouds[scene_idx], tran_mat_m2s_temp, heading_increment, 50, 
+					   correct_match_fitness_thre, temp_match_fitness, overlapping_ratio))
 		{
-			if (pcl::isFinite(pt))  // PCL 提供的检查点是否是有限数（非 NaN 且非 Inf）
-			{
-				sceneCloud->push_back(pt);
-			}
+			continue;
 		}
 
-		// 初始化最佳重叠比率为一个容忍的最小重叠比率
-		float best_overlapping_ratio = tolerantMinOverlap_;
-		float match_fitness_best; // 最佳拟合度
-		Eigen::Matrix4f tran_mat_m2s_best_match; // 最佳变换矩阵
-		int best_model_index = -1; // 最佳模型索引
+		// 保存局部结果
+		local_overlapping_ratios[scene_idx][model_idx] = overlapping_ratio;
+		local_match_fitness[scene_idx][model_idx] = temp_match_fitness;
+		local_transforms[scene_idx][model_idx] = tran_mat_m2s_temp;
+		local_valid_matches[scene_idx][model_idx] = true;
+	}
 
-		// 创建场景点云的 KdTree 用于最近邻查找
-		pcl::KdTreeFLANN<pcl::PointXYZ> scene_kdtree;
-		scene_kdtree.setInputCloud(sceneCloud);
+	// 在串行部分选择最佳匹配
+	for (int i = 0; i < scenePointClouds.size(); i++)
+	{
+		float best_overlapping_ratio = tolerant_min_overlap;
+		float match_fitness_best;
+		Eigen::Matrix4f tran_mat_m2s_best_match;
+		int best_model_index = -1;
 
-		// 遍历所有的模型点云进行匹配
 		for (int j = 0; j < models.size(); j++)
 		{
-			float temp_match_fitness, overlapping_ratio;
-
-			// 为变换后的模型点云创建新指针
-			PCLCloudPtr modelPointClouds_tran(new PCLCloud);
-			Eigen::Matrix4f tran_mat_m2s_temp; // 临时的变换矩阵
-
-			// 执行ICP匹配，得到临时匹配拟合度和变换矩阵
-			temp_match_fitness = fpfh_ransac(models[j], sceneCloud, tran_mat_m2s_temp, heading_increment, iter_num, correct_match_fitness_thre);
-
-			if (temp_match_fitness < 0)continue;
-
-			// 对模型点云进行变换
-			pcl::transformPointCloud(*models[j].raw_point_cloud, *modelPointClouds_tran, tran_mat_m2s_temp);
-
-			// 计算变换后模型与场景点云的重叠比率
-			overlapping_ratio = cal_overlap_ratio(modelPointClouds_tran, scene_kdtree.makeShared(), overlapping_dist_thre);
-
-			// 如果重叠比率大于阈值，则计算场景点云与变换后模型的重叠比率
-			if (overlapping_ratio > tolerantMinOverlap_ - 0.05)
+			if (local_valid_matches[i][j] && 
+				local_overlapping_ratios[i][j] > best_overlapping_ratio && 
+				local_match_fitness[i][j] < correct_match_fitness_thre)
 			{
-				// 使用预先构建的模型 KD 树
-				pcl::KdTreeFLANN<pcl::PointXYZ> model_kdtree;
-				model_kdtree.setInputCloud(modelPointClouds_tran);
-				// 计算并取两个重叠比率的平均值
-				overlapping_ratio = 0.5 * (overlapping_ratio +
-					cal_overlap_ratio(sceneCloud, model_kdtree.makeShared(), overlapping_dist_thre));
-			}
-
-			//std::vector<QString> dynamic_text = { "模板点云：" + QString::fromStdString(models[j].name),"重叠率：" + QString::number(overlapping_ratio),"得分：" + QString::number(temp_match_fitness) };
-			//visualizePointClouds("点云匹配", dynamic_text, sceneCloud, modelPointClouds_tran);
-
-			// 如果当前模型的重叠比率更好且拟合度小于阈值，则更新最佳匹配
-			if (overlapping_ratio > best_overlapping_ratio && temp_match_fitness < correct_match_fitness_thre)
-			{
-				best_overlapping_ratio = overlapping_ratio;
-				match_fitness_best = temp_match_fitness;
-				tran_mat_m2s_best_match = tran_mat_m2s_temp;
+				best_overlapping_ratio = local_overlapping_ratios[i][j];
+				match_fitness_best = local_match_fitness[i][j];
+				tran_mat_m2s_best_match = local_transforms[i][j];
 				best_model_index = j;
 			}
 		}
@@ -215,20 +233,21 @@ bool RoadMarkingClassifier::model_match(const std::vector<Model>& models, const 
 		// 如果找到了最佳匹配模型
 		if (best_model_index >= 0)
 		{
-			roadmarkings.push_back({});
-			// 为当前道路标线分配最佳模型类别
-			roadmarkings.back().category = best_model_index;
-			roadmarkings.back().accuracy = best_overlapping_ratio;
-			roadmarkings.back().localization_tranmat_m2s = tran_mat_m2s_best_match;
-
-			//std::vector<QString> dynamic_text = { t("最佳匹配模板点云：") + QString::fromStdString(models[best_model_index].name),t("重叠率：") + QString::number(best_overlapping_ratio),t("得分：") + QString::number(match_fitness_best) };
-
-			//pcXYZPtr modelPointClouds_tran(new pcXYZ);
-			//pcl::transformPointCloud(*models[best_model_index].raw_point_cloud, *modelPointClouds_tran, tran_mat_m2s_best_match);
-			//visualizePointClouds(t("点云匹配"), dynamic_text, sceneCloud, modelPointClouds_tran);
+			temp_roadmarkings[i].category = best_model_index;
+			temp_roadmarkings[i].accuracy = best_overlapping_ratio;
+			temp_roadmarkings[i].localization_tranmat_m2s = tran_mat_m2s_best_match;
+			valid_matches[i] = true;
 		}
 	}
 
+	roadmarkings.reserve(roadmarkings.size()+scenePointClouds.size());
+	for (size_t i = 0; i < valid_matches.size(); ++i)
+	{
+		if (valid_matches[i])
+		{
+			roadmarkings.push_back(std::move(temp_roadmarkings[i]));
+		}
+	}
 	return true;
 }
 
@@ -571,7 +590,8 @@ void visualize_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr& model_keypoints
 
 
 float RoadMarkingClassifier::fpfh_ransac(const Model& model, const PCLCloudPtr& sceneCloud,
-	Eigen::Matrix4f& tran_mat_m2s_best, float heading_step_d, int max_iter_num, float dis_thre) {
+	Eigen::Matrix4f& tran_mat_m2s_best, float heading_step_d, int max_iter_num, float dis_thre,
+	float& match_fitness, float& overlapping_ratio) {
 
 	max_iter_num = 50;
 	// 1. 体素下采样
@@ -603,7 +623,7 @@ float RoadMarkingClassifier::fpfh_ransac(const Model& model, const PCLCloudPtr& 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr scene_keypoints = extract_alpha_shape(scene_downsampled, 0.1f);
 
 	if (model_keypoints->empty() || scene_keypoints->empty()) {
-		return -1.0f;
+		return false;
 	}
 
 	// 2.5 粗对齐
@@ -630,39 +650,43 @@ float RoadMarkingClassifier::fpfh_ransac(const Model& model, const PCLCloudPtr& 
 		//}
 	}
 
-
 	// 3. 计算法向量
-	pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne;
-	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+	//pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne;
+	//pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
 
-	auto getXYNormal = [&](PCLCloudPtr cloud) {
-		// 创建新的点云集合，给每个点云加上多个不同Z值的“层”
-		pcl::PointCloud<pcl::PointXYZ>::Ptr cloudLayered(new pcl::PointCloud<pcl::PointXYZ>());
-		cloudLayered->reserve(cloud->points.size() * 15);  // 生成三个层次
+	//auto getXYNormal = [&](PCLCloudPtr cloud) {
+	//	// 创建新的点云集合，给每个点云加上多个不同Z值的"层"
+	//	pcl::PointCloud<pcl::PointXYZ>::Ptr cloudLayered(new pcl::PointCloud<pcl::PointXYZ>());
+	//	cloudLayered->reserve(cloud->points.size() * 15);  // 生成三个层次
 
-		// 创建多个不同Z值的“层”
-		for (float z_offset = -0.1f; z_offset <= 0.1f; z_offset += 0.02f) {
-			if (fabs(z_offset - 0.0f) < 0.01)continue;
-			for (const auto& point : cloud->points) {
-				pcl::PointXYZ new_point = point;
-				new_point.z += z_offset;  // 在Z轴上增加不同的偏移量
-				cloudLayered->push_back(new_point);
-			}
-		}
+	//	// 创建多个不同Z值的"层"
+	//	for (float z_offset = -0.1f; z_offset <= 0.1f; z_offset += 0.02f) {
+	//		if (fabs(z_offset - 0.0f) < 0.01)continue;
+	//		for (const auto& point : cloud->points) {
+	//			pcl::PointXYZ new_point = point;
+	//			new_point.z += z_offset;  // 在Z轴上增加不同的偏移量
+	//			cloudLayered->push_back(new_point);
+	//		}
+	//	}
 
-		ne.setInputCloud(cloudLayered);
-		pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
-		ne.compute(*normals);
+	//	ne.setInputCloud(cloudLayered);
+	//	pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
+	//	ne.compute(*normals);
 
-		normals->points.resize(cloud->points.size());
-		return normals;
-	};
+	//	normals->points.resize(cloud->points.size());
+	//	return normals;
+	//};
 
-	ne.setSearchMethod(tree);
-	ne.setRadiusSearch(0.2);
+	//ne.setSearchMethod(tree);
+	//ne.setRadiusSearch(0.2);
 
-	pcl::PointCloud<pcl::Normal>::Ptr model_normals = getXYNormal(model_keypoints);
-	pcl::PointCloud<pcl::Normal>::Ptr scene_normals = getXYNormal(scene_keypoints);
+	//pcl::PointCloud<pcl::Normal>::Ptr model_normals = getXYNormal(model_keypoints);
+	//pcl::PointCloud<pcl::Normal>::Ptr scene_normals = getXYNormal(scene_keypoints);
+
+	pcl::PointCloud<pcl::Normal>::Ptr model_normals(new pcl::PointCloud<pcl::Normal>);
+	pcl::PointCloud<pcl::Normal>::Ptr scene_normals(new pcl::PointCloud<pcl::Normal>);
+	CloudProcess::computeLocalNormal2D(model_keypoints, 0.3, model_normals);
+	CloudProcess::computeLocalNormal2D(scene_keypoints, 0.3, scene_normals);
 
 	// 4. 计算 FPFH 特征描述子
 	pcl::PointCloud<pcl::FPFHSignature33>::Ptr model_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>);
@@ -671,6 +695,7 @@ float RoadMarkingClassifier::fpfh_ransac(const Model& model, const PCLCloudPtr& 
 	pcl::FPFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::FPFHSignature33> fpfh;
 	fpfh.setInputCloud(model_keypoints);
 	fpfh.setInputNormals(model_normals);
+	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
 	fpfh.setSearchMethod(tree);
 	fpfh.setRadiusSearch(0.1);
 	fpfh.compute(*model_fpfh);
@@ -685,7 +710,7 @@ float RoadMarkingClassifier::fpfh_ransac(const Model& model, const PCLCloudPtr& 
 	//}
 
 	// 5. 粗配准 - RANSAC
-	// visualize_registration(model_keypoints, scene_keypoints, model_fpfh, scene_fpfh);
+	//visualize_registration(model_keypoints, scene_keypoints, model_fpfh, scene_fpfh);
 	pcl::SampleConsensusPrerejective<pcl::PointXYZ, pcl::PointXYZ, pcl::FPFHSignature33> sac;
 	sac.setInputSource(model_keypoints);
 	sac.setInputTarget(scene_keypoints);
@@ -708,7 +733,7 @@ float RoadMarkingClassifier::fpfh_ransac(const Model& model, const PCLCloudPtr& 
 	sac.align(*sac_aligned, tran_mat_m2s_best);
 
 	if (!sac.hasConverged()) {
-		return -1.0f;  // 配准失败
+		return false;
 	}
 
 	Eigen::Matrix4f init_transformation = sac.getFinalTransformation();
@@ -738,7 +763,7 @@ float RoadMarkingClassifier::fpfh_ransac(const Model& model, const PCLCloudPtr& 
 	icp.align(icp_result, init_transformation);
 
 	if (!icp.hasConverged()) {
-		return -1.0f;
+		return false;
 	}
 
 	tran_mat_m2s_best = icp.getFinalTransformation();
@@ -752,7 +777,10 @@ float RoadMarkingClassifier::fpfh_ransac(const Model& model, const PCLCloudPtr& 
 	//	visualizePointClouds("精配准", {}, scene_downsampled, model_downsampled_tran);
 	//}
 
-	return static_cast<float>(icp.getFitnessScore());
+	match_fitness = static_cast<float>(icp.getFitnessScore());
+	overlapping_ratio = 1.0f - match_fitness;
+
+	return true;
 }
 
 
@@ -870,7 +898,7 @@ bool RoadMarkingClassifier::is_line_cloud_and_get_direction(PCLCloudPtr cloud, R
 		Eigen::Vector4f mid_bottom = (o1 + o2) * 0.5f;
 		Eigen::Vector4f mid_top = (o3 + o4) * 0.5f;
 
-		// 8. 将方向向量和这一条“直线折线”保存到 rm 中
+		// 8. 将方向向量和这一条"直线折线"保存到 rm 中
 		rm.direction = (mid_top - mid_bottom).head<4>(); // 四维向量
 
 		// 这里把两个端点作为一条折线，插入到 polylines 列表里
@@ -916,7 +944,7 @@ void RoadMarkingClassifier::combine_side_lines(const RoadMarkings& roadmarkings,
 			// 但通常 SIDE_LINE 在前面 vectorize 阶段已经只存了一条中线折线在 polylines[0]。
 			if (!rm.polylines.empty() && rm.polylines[0].size() >= 2)
 			{
-				// 取出这一条折线的前两个点，作为 “一个线段”
+				// 取出这一条折线的前两个点，作为 "一个线段"
 				const pcl::PointXYZ& p0 = rm.polylines[0][0];
 				const pcl::PointXYZ& p1 = rm.polylines[0][1];
 
@@ -969,7 +997,7 @@ void RoadMarkingClassifier::combine_side_lines(const RoadMarkings& roadmarkings,
 		// is_r == true  表示取 sidelines[pos].second 作为当前端点。
 		pcl::PointXYZ point = (is_r ? sidelines[pos].second : sidelines[pos].first);
 
-		// 如果是“前向搜索”，则把当前点加到 combinelines.back() 的尾部
+		// 如果是"前向搜索"，则把当前点加到 combinelines.back() 的尾部
 		if (is_forward)
 		{
 			combinelines.back().push_back(point);
@@ -1039,7 +1067,7 @@ void RoadMarkingClassifier::combine_side_lines(const RoadMarkings& roadmarkings,
 				// 符合方向连续性，标记 i 为已使用
 				line_used[i] = true;
 
-				// 如果是“前向”，先把下一个线段的连接端 push 到尾部
+				// 如果是"前向"，先把下一个线段的连接端 push 到尾部
 				if (is_forward)
 				{
 					if (!next_is_r)
@@ -1051,7 +1079,7 @@ void RoadMarkingClassifier::combine_side_lines(const RoadMarkings& roadmarkings,
 				// 继续 DFS，下一个线段成为新的 pos，端点由 next_is_r 决定
 				dfs(i, next_is_r, is_forward);
 
-				// 如果是“后向”（is_forward == false），则在回溯时把连接端 push 到尾部
+				// 如果是"后向"（is_forward == false），则在回溯时把连接端 push 到尾部
 				if (!is_forward)
 				{
 					if (!next_is_r)
@@ -1065,7 +1093,7 @@ void RoadMarkingClassifier::combine_side_lines(const RoadMarkings& roadmarkings,
 			}
 		}
 
-		// 如果是“后向”搜索，当所有可扩展分支处理完后，把当前端点 point push 到尾部
+		// 如果是"后向"搜索，当所有可扩展分支处理完后，把当前端点 point push 到尾部
 		if (!is_forward)
 		{
 			combinelines.back().push_back(point);
@@ -1079,9 +1107,9 @@ void RoadMarkingClassifier::combine_side_lines(const RoadMarkings& roadmarkings,
 		{
 			// 为每个新的组合折线申请一个空的向量
 			combinelines.emplace_back();
-			// 先“后向”搜一遍，填充 combinelines.back() 的前半部分
+			// 先"后向"搜一遍，填充 combinelines.back() 的前半部分
 			dfs(i, /*is_r=*/false, /*is_forward=*/false);
-			// 再“前向”搜一遍，填充 combinelines.back() 的后半部分
+			// 再"前向"搜一遍，填充 combinelines.back() 的后半部分
 			dfs(i, /*is_r=*/true,  /*is_forward=*/true);
 		}
 	}

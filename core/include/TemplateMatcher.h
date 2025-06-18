@@ -1,5 +1,7 @@
 #pragma once
 
+#pragma execution_character_set("utf-8")
+
 #include <iostream>
 #include <vector>
 #include <limits>
@@ -38,32 +40,25 @@ namespace roadmarking
 	struct RoadMarking
 	{
 		int category;
-
-		std::string name; // ÓÃÓÚÇø·Ö½á¹û
-
-		double accuracy; // ×¼È·ÂÊ£¨ÒªÕÒµ½µÃ·ÖºÍ×¼È·ÂÊµÄ¹ØÏµ£¬Õâ¸öĞèÒªÍ³¼Æ£¬ËùÒÔÔİÊ±ÓÃÖØµşÂÊ±íÊ¾£©
-
-		std::vector<std::vector<pcl::PointXYZ>> polylines; //For vectorization
-
+		std::string name;        // é“è·¯æ ‡çº¿åç§°
+		double accuracy;         // å‡†ç¡®ç‡ï¼Œè¦æ‰¾åˆ°å¾—åˆ†å’Œå‡†ç¡®ç‡çš„å…³ç³»ï¼Œè¿™ä¸ªéœ€è¦ç»Ÿè®¡ï¼Œæš‚æ—¶ç”¨å¾—åˆ†è¡¨ç¤º
+		std::vector<std::vector<pcl::PointXYZ>> polylines;  // ç”¨äºçŸ¢é‡åŒ–
 		Eigen::Matrix4f localization_tranmat_m2s;
-
 		Eigen::Vector4f direction;
-
-		//Other semantic or topological information
-
+		// å…¶ä»–è¯­ä¹‰æˆ–æ‹“æ‰‘ä¿¡æ¯
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	};
 
 	class Model
 	{
 	public:
-		// ³ÉÔ±±äÁ¿
-		std::vector<std::vector<PCLPoint>> vectorized_polylines;  // ÏòÁ¿»¯µãµÄÁĞ±í
+		// æˆå‘˜å˜é‡
+		std::vector<std::vector<PCLPoint>> vectorized_polylines;  // çŸ¢é‡åŒ–æŠ˜çº¿åˆ—è¡¨
 		std::string name;
 		PCLCloudPtr outline_point_cloud;
 		PCLCloudPtr raw_point_cloud;
 
-		// ¹¹Ôìº¯Êı
+		// æ„é€ å‡½æ•°
 		inline Model(const std::string& name,
 			const std::string& outline_path,
 			const std::string& raw_path,
@@ -71,16 +66,15 @@ namespace roadmarking
 			: name(name)
 			, vectorized_polylines(polylines)
 		{
-			// ¼ÓÔØÂÖÀªµãÔÆ
+			// åŠ è½½è½®å»“ç‚¹äº‘
 			outline_point_cloud = loadPointCloud(outline_path);
-			// ¼ÓÔØÔ­Ê¼µãÔÆ
+			// åŠ è½½åŸå§‹ç‚¹äº‘
 			raw_point_cloud = loadPointCloud(raw_path);
-
 		}
 
 		inline Model(): outline_point_cloud(new PCLCloud), raw_point_cloud(new PCLCloud){}
 
-		// ¹¹Ôìº¯Êı
+		// æ„é€ å‡½æ•°
 		inline Model(const std::string& name,
 			PCLCloudPtr outline_point_cloud,
 			PCLCloudPtr raw_point_cloud,
@@ -96,43 +90,43 @@ namespace roadmarking
 		{
 			std::ifstream input(filename);
 			if (!input.is_open()) {
-				std::cerr << "Could not open file " << filename << std::endl;
+				std::cerr << "æ— æ³•æ‰“å¼€æ–‡ä»¶ " << filename << std::endl;
 				return {};
 			}
 			nlohmann::json j;
 			input >> j;
 
 			std::vector<Model> models;
-			// ¶¥²ã¼üÃûÓ¦Îª "models"£¨×¢ÒâÓë¾É´úÂëÖĞ "model" ²»Í¬£©
+			// æ ¹èŠ‚ç‚¹åº”ä¸º "models"ï¼Œæ³¨æ„ä¸è¦å†™æˆ "model" ä¸åŒ
 			if (!j.contains("models") || !j["models"].is_array()) {
-				std::cerr << "Invalid JSON format: no \"models\" array found." << std::endl;
+				std::cerr << "æ— æ•ˆçš„JSONæ ¼å¼ï¼šæœªæ‰¾åˆ° \"models\" æ•°ç»„" << std::endl;
 				return {};
 			}
 
-			// ±éÀú JSON ÖĞµÄÃ¿Ò»¸ö model ¶ÔÏó
+			// éå† JSON ä¸­çš„æ¯ä¸€ä¸ª model å¯¹è±¡
 			for (const auto& model_data : j["models"])
 			{
-				// ¶ÁÈ¡»ù±¾×Ö¶Î
+				// è·å–åŸºæœ¬å­—æ®µ
 				std::string name = model_data.value("name", "");
 				std::string outline_path = model_data.value("outline_point_cloud_path", "");
 				std::string raw_path = model_data.value("raw_point_cloud_path", "");
 
-				// ÓÃÓÚ´æ´¢¸Ã model ¶ÔÓ¦µÄ¶àÌõÕÛÏß
+				// ç”¨äºå­˜å‚¨è¯¥ model å¯¹åº”çš„æŠ˜çº¿åˆ—è¡¨
 				std::vector<std::vector<PCLPoint>> polylines;
 
-				// Èç¹û´æÔÚ "graph_elements"£¬¾ÍÖğÌõ½âÎö
+				// å¦‚æœå­˜åœ¨ "graph_elements"ï¼Œåˆ™å¤„ç†å®ƒ
 				if (model_data.contains("graph_elements") && model_data["graph_elements"].is_array())
 				{
 					for (const auto& elem : model_data["graph_elements"])
 					{
-						// Ö»´¦Àí type == "polyline" µÄÔªËØ
+						// åªå¤„ç† type == "polyline" çš„å…ƒç´ 
 						if (elem.value("type", "") == "polyline"
 							&& elem.contains("points") && elem["points"].is_array())
 						{
 							std::vector<PCLPoint> onePolyline;
 							for (const auto& ptArr : elem["points"])
 							{
-								// Ã¿¸ö ptArr Ó¦¸ÃÊÇ [x, y, z] ÕâÑùµÄÊı×é
+								// æ¯ä¸ª ptArr åº”è¯¥æ˜¯ [x, y, z] çš„æ•°ç»„
 								if (ptArr.is_array() && ptArr.size() == 3)
 								{
 									float x = ptArr[0].get<float>();
@@ -141,13 +135,13 @@ namespace roadmarking
 									onePolyline.emplace_back(x, y, z);
 								}
 							}
-							// ½«ÕâÒ»ÌõÕÛÏß¼ÓÈëµ½ polylines ÖĞ
+							// å°†ä¸€æ¡æŠ˜çº¿åŠ å…¥åˆ° polylines ä¸­
 							polylines.push_back(std::move(onePolyline));
 						}
 					}
 				}
 
-				// ´´½¨ Model ¶ÔÏó²¢¼ÓÈëµ½·µ»ØÁĞ±í
+				// åˆ›å»º Model å¯¹è±¡å¹¶åŠ å…¥åˆ°æ¨¡å‹åˆ—è¡¨
 				models.emplace_back(name, outline_path, raw_path, polylines);
 			}
 
@@ -157,16 +151,16 @@ namespace roadmarking
 		inline static PCLCloudPtr loadPointCloud(const std::string& file_path) {
 			PCLCloudPtr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 			if (pcl::io::loadPCDFile<pcl::PointXYZ>(file_path, *cloud) == -1) {
-				std::cerr << "Couldn't read file " << file_path << std::endl;
+				std::cerr << "æ— æ³•è¯»å–æ–‡ä»¶ " << file_path << std::endl;
 				return nullptr;
 			}
 
-			// Çå³ıÔ´µãÔÆÖĞµÄ NaN Infµã
+			// æ¸…ç†ç‚¹äº‘ä¸­çš„ NaN Inf
 			PCLCloudPtr cleaned_cloud(new PCLCloud);
 			cleaned_cloud->reserve(cloud->size());
 			for (const auto& pt : cloud->points)
 			{
-				if (pcl::isFinite(pt))  // PCL Ìá¹©µÄ¼ì²éµãÊÇ·ñÊÇÓĞÏŞÊı£¨·Ç NaN ÇÒ·Ç Inf£©
+				if (pcl::isFinite(pt))  // PCL æä¾›çš„æ£€æŸ¥æ˜¯å¦ä¸ºæœ‰é™ç‚¹çš„å‡½æ•°ï¼Œæ’é™¤ NaN å’Œ Inf
 				{
 					cleaned_cloud->push_back(pt);
 				}
@@ -176,9 +170,7 @@ namespace roadmarking
 		}
 	};
 
-
 	typedef std::vector<RoadMarking, Eigen::aligned_allocator<RoadMarking>> RoadMarkings;
-
 
 	class RoadMarkingClassifier
 	{
@@ -191,6 +183,10 @@ namespace roadmarking
 			RoadMarkings& roadmarkings,
 			std::vector<Model>& models);
 
+		float fpfh_ransac(const Model& model, const PCLCloudPtr& sceneCloud,
+			Eigen::Matrix4f& tran_mat_m2s_best, float heading_step_d, int max_iter_num, float dis_thre,
+			float& match_fitness, float& overlapping_ratio);
+
 	private:
 		void vectorize_roadmarking(std::vector<Model>& models, RoadMarkings& roadmarkings);
 
@@ -201,8 +197,6 @@ namespace roadmarking
 		float icp_reg(const PCLCloudPtr& SourceCloud, const PCLCloudPtr& TargetCloud, Eigen::Matrix4f& initial_guess, Eigen::Matrix4f& transformationS2T, int max_iter, float thre_dis);
 
 		void align_with_PCA(const PCLCloudPtr& ModelCloud, const PCLCloudPtr& SceneCloud, Eigen::Matrix4f& initial_transformation);
-
-		float fpfh_ransac(const  Model& model, const PCLCloudPtr& sceneCloud, Eigen::Matrix4f& tran_mat_m2s_best, float heading_step_d, int max_iter_num, float dis_thre);
 
 		PCLCloudPtr get_hull_cloud(PCLCloudPtr cloud);
 

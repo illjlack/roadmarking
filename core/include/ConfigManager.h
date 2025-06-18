@@ -1,55 +1,126 @@
-/*
-#pragma once
+ï»¿#pragma once
 
 #include <string>
-#include <yaml-cpp/yaml.h>
-#include <unordered_map>
+#include <map>
+#include <memory>
+#include <cassert>
+#include <stdexcept>
 
-class ConfigManager {
-public:
-	// ÅäÖÃÏîÊı¾İ½á¹¹£º°üº¬ÃèÊö¡¢µ±Ç°ÖµºÍÄ¬ÈÏÖµ
+namespace roadmarking {
+
+	// é…ç½®é¡¹ç»“æ„
 	struct ConfigItem {
-		std::string description;
-		YAML::Node value;
-		YAML::Node default_value;
+		std::string value;        // å½“å‰å€¼
+		std::string default_value;// é»˜è®¤å€¼
+		std::string description; // æè¿°
 	};
 
-	// Ä£¿éÊı¾İ½á¹¹£º°üº¬ÃèÊöºÍÒ»×éÅäÖÃÏî
+	// æ¨¡å—ç»“æ„
 	struct Module {
-		std::string description;
-		std::unordered_map<std::string, ConfigItem> items;
+		std::string description;                     // æ¨¡å—æè¿°
+		std::map<std::string, ConfigItem> items;    // é…ç½®é¡¹æ˜ å°„
 	};
 
-	// ¹¹Ôìº¯Êı£¬½ÓÊÜÅäÖÃÎÄ¼şÂ·¾¶
-	ConfigManager(const std::string& filePath);
+	class ConfigManager {
+	public:
+		// è·å–å•ä¾‹å®ä¾‹
+		static ConfigManager& getInstance() {
+			static ConfigManager instance;
+			static bool initialized = false;
+			if (!initialized) {
+				instance.initialize();
+				initialized = true;
+			}
+			return instance;
+		}
 
-	// ¼ÓÔØÅäÖÃÎÄ¼ş
-	void loadConfig();
+		// åˆ é™¤æ‹·è´æ„é€ å’Œèµ‹å€¼æ“ä½œ
+		ConfigManager(const ConfigManager&) = delete;
+		ConfigManager& operator=(const ConfigManager&) = delete;
 
-	// ´´½¨Ä¬ÈÏÅäÖÃÎÄ¼ş
-	void createDefaultConfig();
+		// åˆå§‹åŒ–é…ç½®ç®¡ç†å™¨
+		void initialize(const std::string& configPath = "config/config.properties");
 
-	// »ñÈ¡ÅäÖÃÏîµÄÖµ£¬·µ»ØÄ¬ÈÏÖµ£¨Èç¹ûÅäÖÃÏî²»´æÔÚ£©
-	template <typename T>
-	T get(const std::string& module, const std::string& key, T defaultValue);
+		// è·å–é…ç½®å€¼
+		template<typename T>
+		T get(const std::string& module, const std::string& key) {
+			if (!m_modules.count(module)) {
+				throw std::runtime_error("é…ç½®æ¨¡å—ä¸å­˜åœ¨: " + module);
+			}
+			if (!m_modules.at(module).items.count(key)) {
+				throw std::runtime_error("é…ç½®é¡¹ä¸å­˜åœ¨: " + module + "." + key);
+			}
+			const std::string& value = m_modules.at(module).items.at(key).value;
+			try {
+				if constexpr (std::is_same_v<T, int>) {
+					return std::stoi(value);
+				}
+				else if constexpr (std::is_same_v<T, float>) {
+					return std::stof(value);
+				}
+				else if constexpr (std::is_same_v<T, double>) {
+					return std::stod(value);
+				}
+				else if constexpr (std::is_same_v<T, bool>) {
+					return value == "true" || value == "1";
+				}
+				else if constexpr (std::is_same_v<T, std::string>) {
+					return value;
+				}
+				else {
+					static_assert(sizeof(T) == 0, "ä¸æ”¯æŒçš„é…ç½®å€¼ç±»å‹");
+				}
+			}
+			catch (const std::exception& e) {
+				throw std::runtime_error("é…ç½®å€¼è½¬æ¢å¤±è´¥ [" + module + "." + key + "]: " + e.what() + " (å€¼: " + value + ")");
+			}
+		}
 
-	// ÉèÖÃÅäÖÃÏîµÄÖµ
-	template <typename T>
-	void set(const std::string& module, const std::string& key, const T& value);
+		// è®¾ç½®é…ç½®å€¼
+		template<typename T>
+		void set(const std::string& module, const std::string& key, const T& value) {
+			auto modIt = m_modules.find(module);
+			if (modIt != m_modules.end()) {
+				auto& items = modIt->second.items;
+				auto itemIt = items.find(key);
+				if (itemIt != items.end()) {
+					if constexpr (std::is_same_v<T, bool>) {
+						itemIt->second.value = value ? "true" : "false";
+					}
+					else {
+						itemIt->second.value = std::to_string(value);
+					}
+				}
+			}
+		}
 
-	// ±£´æÅäÖÃµ½ÎÄ¼ş
-	void saveConfig();
+		// ä¿å­˜é…ç½®åˆ°æ–‡ä»¶
+		void saveConfig();
 
-	// »ñÈ¡ÅäÖÃÏîµÄÃèÊö
-	std::string getDescription(const std::string& module, const std::string& key);
+		// è·å–é…ç½®é¡¹æè¿°
+		std::string getDescription(const std::string& module, const std::string& key);
 
-	// ÏÔÊ¾ËùÓĞÅäÖÃÏî£¨ÓÃÓÚµ÷ÊÔ£©
-	void displayAllConfigs();
+		// æ˜¾ç¤ºæ‰€æœ‰é…ç½®
+		void displayAllConfigs();
 
-private:
-	std::string m_filePath;             // ÅäÖÃÎÄ¼şÂ·¾¶
-	YAML::Node m_config;                // ÅäÖÃÊı¾İ
-	std::unordered_map<std::string, Module> m_modules;  // ´æ´¢Ä£¿éºÍÅäÖÃÏî
-};
+		// é‡æ–°åŠ è½½é…ç½®
+		void reloadConfig();
 
-*/
+	private:
+		// ç§æœ‰æ„é€ å‡½æ•°
+		ConfigManager() = default;
+
+		// ç§æœ‰ææ„å‡½æ•°
+		~ConfigManager() = default;
+
+		// åŠ è½½é…ç½®
+		void loadConfig();
+
+		// åˆ›å»ºé»˜è®¤é…ç½®
+		void createDefaultConfig();
+
+		std::string m_filePath;                     // é…ç½®æ–‡ä»¶è·¯å¾„
+		std::map<std::string, Module> m_modules;    // æ¨¡å—æ˜ å°„
+	};
+
+} // namespace roadmarking

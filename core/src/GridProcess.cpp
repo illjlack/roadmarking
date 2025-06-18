@@ -1,4 +1,4 @@
-﻿#include "GridProcess.h"
+#include "GridProcess.h"
 #include <cmath>
 #include <algorithm>
 #include <PointCloudIO.h>

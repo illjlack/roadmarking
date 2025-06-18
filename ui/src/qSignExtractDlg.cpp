@@ -185,8 +185,10 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		allGroups.push_back(filterButtonGroup);
 		filterButtonGroup->setExclusive(true);
 
+		// 设置过滤类按钮
 		addGroupedButton("选择强度阈值过滤点云", [this]() { onFilteCloudByIntensity(); }, filterGroup, filterLayout, filterButtonGroup);
 		addGroupedButton("选择高程阈值过滤点云", [this]() { onFilteCloudByZ(); }, filterGroup, filterLayout, filterButtonGroup);
+		addGroupedButton("提取地面", [this]() { onFilteGround(); }, filterGroup, filterLayout, filterButtonGroup);
 
 		filterGroup->setLayout(filterLayout);
 		leftLayout_button->addWidget(filterGroup);
@@ -208,22 +210,58 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		leftLayout_button->addWidget(clipGroup);
 	}
 
-	// ==================================== 功能按钮组：提取类
+	// ==================================== 功能按钮组：自动流程提取
 	{
-		QGroupBox* extractGroup = new QGroupBox("特征提取", this);
-		QVBoxLayout* extractLayout = new QVBoxLayout(extractGroup);
-		QButtonGroup* extractButtonGroup = new QButtonGroup(this);
-		allGroups.push_back(extractButtonGroup);
-		extractButtonGroup->setExclusive(true);
+		QGroupBox* autoExtractGroup = new QGroupBox("自动流程提取", this);
+		QVBoxLayout* autoExtractLayout = new QVBoxLayout(autoExtractGroup);
+		QButtonGroup* autoExtractButtonGroup = new QButtonGroup(this);
+		allGroups.push_back(autoExtractButtonGroup);
+		autoExtractButtonGroup->setExclusive(true);
 
-		addGroupedButton("全自动提取", [this]() { onAutoExtract(); }, extractGroup, extractLayout, extractButtonGroup);
-		addGroupedButton("框选提取", [this]() { onBoxSelectExtract(); }, extractGroup, extractLayout, extractButtonGroup);
-		addGroupedButton("点选生长提取", [this]() { onPointGrowExtract(); }, extractGroup, extractLayout, extractButtonGroup);
-		addGroupedButton("框选斑马线提取", [this]() { onZebraExtract(); }, extractGroup, extractLayout, extractButtonGroup);
+		// 自动提取相关按钮
+		addGroupedButton("全部提取", [this]() { onAutoExtract(); }, autoExtractGroup, autoExtractLayout, autoExtractButtonGroup);
+		addGroupedButton("框选提取", [this]() { onBoxSelectExtract(); }, autoExtractGroup, autoExtractLayout, autoExtractButtonGroup);
 
-		extractGroup->setLayout(extractLayout);
-		leftLayout_button->addWidget(extractGroup);
+		autoExtractGroup->setLayout(autoExtractLayout);
+		autoExtractGroup->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed); // 改为固定高度，扩展宽度
+		leftLayout_button->addWidget(autoExtractGroup);
 	}
+
+	// ==================================== 功能按钮组：按形态提取
+	{
+		QGroupBox* shapeExtractGroup = new QGroupBox("按形态提取", this);
+		QVBoxLayout* shapeExtractLayout = new QVBoxLayout(shapeExtractGroup);
+		QButtonGroup* shapeExtractButtonGroup = new QButtonGroup(this);
+		allGroups.push_back(shapeExtractButtonGroup);
+		shapeExtractButtonGroup->setExclusive(true);
+
+		// 按形态提取相关按钮
+		addGroupedButton("边线提取（按形态）", [this]() { onPointGrowExtract(); }, shapeExtractGroup, shapeExtractLayout, shapeExtractButtonGroup);
+		addGroupedButton("斑马线提取（按形态）", [this]() { onZebraExtract(); }, shapeExtractGroup, shapeExtractLayout, shapeExtractButtonGroup);
+		addGroupedButton("箭头等提取（按形态）", [this]() { onMatchTemplate(); }, shapeExtractGroup, shapeExtractLayout, shapeExtractButtonGroup);
+
+		shapeExtractGroup->setLayout(shapeExtractLayout);
+		shapeExtractGroup->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed); // 改为固定高度，扩展宽度
+		leftLayout_button->addWidget(shapeExtractGroup);
+	}
+
+	//// ==================================== 功能按钮组：按强度提取
+	//{
+	//	QGroupBox* intensityExtractGroup = new QGroupBox("按强度提取", this);
+	//	QVBoxLayout* intensityExtractLayout = new QVBoxLayout(intensityExtractGroup);
+	//	QButtonGroup* intensityExtractButtonGroup = new QButtonGroup(this);
+	//	allGroups.push_back(intensityExtractButtonGroup);
+	//	intensityExtractButtonGroup->setExclusive(true);
+
+	//	// 按强度提取相关按钮
+	//	addGroupedButton("边线提取（按强度）", [this]() { onPointGrowExtractByIntensity(); }, intensityExtractGroup, intensityExtractLayout, intensityExtractButtonGroup);
+	//	addGroupedButton("斑马线提取（按强度）", [this]() { onZebraExtract(); }, intensityExtractGroup, intensityExtractLayout, intensityExtractButtonGroup);
+	//	addGroupedButton("箭头等提取（按强度）", [this]() { onMatchTemplate(); }, intensityExtractGroup, intensityExtractLayout, intensityExtractButtonGroup);
+
+	//	intensityExtractGroup->setLayout(intensityExtractLayout);
+	//	intensityExtractGroup->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed); // 改为固定高度，扩展宽度
+	//	leftLayout_button->addWidget(intensityExtractGroup);
+	//}
 
 	// ==================================== 功能按钮组：匹配类（新增）
 	{
@@ -235,7 +273,6 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 
 		addGroupedButton("直接匹配模板", [this]() { onMatchTemplateDirect(); }, matchGroup, matchLayout, matchButtonGroup);
 		addGroupedButton("框选匹配模板", [this]() { onMatchTemplateByBox();   }, matchGroup, matchLayout, matchButtonGroup);
-		addGroupedButton("点击匹配模板", [this]() { onMatchTemplateByClick(); }, matchGroup, matchLayout, matchButtonGroup);
 
 		matchGroup->setLayout(matchLayout);
 		leftLayout_button->addWidget(matchGroup);
@@ -640,6 +677,28 @@ void qSignExtractDlg::onFilteCloudByZ()
 	m_objectTree->refresh();
 }
 
+void qSignExtractDlg::onFilteGround()
+{
+	if (!p_select_cloud || !dynamic_cast<ccPointCloud*>(p_select_cloud))
+	{
+		ccLog::Error("未选择点云");
+		return;
+	}
+
+	ccPointCloud* cloud = dynamic_cast<ccPointCloud*>(p_select_cloud);
+
+	if (p_select_cloud)
+	{
+		p_select_cloud->setSelected(false);
+		p_select_cloud->setVisible(false);
+	}
+	ccPointCloud* ground = PointCloudIO::get_ground_cloud(cloud);
+	p_select_cloud = ground;
+	ground->setSelected(true);
+
+	m_objectTree->refresh();
+}
+
 void qSignExtractDlg::onBoxClip()
 {
 	m_pointCloudSelector->startDraw();
@@ -905,7 +964,7 @@ void qSignExtractDlg::addCloudToDB(ccPointCloud* cloud)
 	onEntitySelectionChanged(cloud);
 }
 
-void qSignExtractDlg::onMatchTemplateByClick()
+void qSignExtractDlg::onMatchTemplate()
 {
 	// 回调，点击后在本点击的点云中搜索周围（围绕这个点聚类）,创建点云， 并执行匹配
 	m_pick_callback = [&](ccHObject* select_cloud, unsigned idx)

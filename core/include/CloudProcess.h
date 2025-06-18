@@ -1,11 +1,11 @@
-#pragma once
+ï»¿#pragma once
 
 #include "PointCloudIO.h"
 //#include <opencv2/opencv.hpp>
 
 namespace roadmarking
 {
-	// ÓÃÓÚÇø±ğÊÇÍ¼Ôª
+	// é“è·¯æ ‡çº¿å…ƒæ•°æ®
 	class MetaRoadmarking : public ccHObject
 	{
 	};
@@ -63,22 +63,22 @@ namespace roadmarking
 		static void filter_cloud_by_z(ccPointCloud* inCloud, double lowerThreshold, double upperThreshold, ccPointCloud* cloud_filtered);
 
 		/// <summary>
-		/// ´ÓÖÖ×Óµã¿ªÊ¼Éú³¤Ò»ÌõÏß¶Î£¬ÑØÖ¸¶¨·½Ïò²»¶ÏÀ©Õ¹²¢ÌáÈ¡µãÔÆÖĞµÄÏß×´²¿·Ö¡£
+		/// ä»ç§å­ç‚¹å¼€å§‹ï¼Œæ²¿ä¸€æ¡çº¿æ®µï¼ŒæŒ‰æŒ‡å®šæ–¹å‘ä¸æ–­æ‰©å±•ï¼Œæå–å…¶ä¸­çš„çº¿çŠ¶éƒ¨åˆ†ã€‚
 		/// </summary>
-		/// <param name="P">ÊäÈëµãÔÆ¶ÔÏó¡£</param>
-		/// <param name="p0">ÖÖ×ÓÆğÊ¼µã¡£</param>
-		/// <param name="v0">³õÊ¼Éú³¤·½Ïò¡£</param>
-		/// <param name="select_points">Êä³ö£º±»Ñ¡ÖĞµÄµãÔÆ²¿·Ö¡£</param>
-		/// <param name="result">Êä³ö£ºÉú³¤µÃµ½µÄÏß¶Î¶¥µãĞòÁĞ¡£</param>
-		/// <param name="m_glWindow">¿ÉÑ¡£ºÓÃÓÚµ÷ÊÔÊ±½«Éú³¤¹ı³Ì¿ÉÊÓ»¯µ½´°¿Ú¡£</param>
-		/// <param name="isGetGround">ÊÇ·ñÏÈÌáÈ¡µØÃæµãÔÆÔÙÉú³¤¡£</param>
-		/// <param name="doFitLine">ÊÇ·ñÔÚÃ¿²½Éú³¤Ê±×ö RANSAC ÄâºÏÖ±Ïß²¢ÌáÈ¡ inliers¡£</param>
-		/// <param name="useDynamicRect">ÊÇ·ñÔÚÉú³¤¹ı³ÌÖĞÊ¹ÓÃ¶¯Ì¬¾ØĞÎ£¨¸ù¾İµãÔÆÖÊĞÄÒÆ¶¯´°¿Ú£©¡£</param>
-		/// <param name="W">¾ØĞÎ¿í¶È£¨Ã×£©£¬Ä¬ÈÏ 0.2¡£</param>
-		/// <param name="L">Ã¿´ÎÉú³¤²½³¤£¨Ã×£©£¬Ä¬ÈÏ 2¡£</param>
-		/// <param name="Nmin">Ã¿¶ÎÏßÖÁÉÙ°üº¬µÄµãÊı£¬Ä¬ÈÏ 50¡£</param>
-		/// <param name="theta_max">ÏàÁÚÁ½¶Î×î´óÔÊĞíÍäÕÛ½Ç¶È£¨»¡¶È£©£¬Ä¬ÈÏ 45¡ã¡£</param>
-		/// <param name="Kmax">×î´óÌøÔ¾´ÎÊı£¨´¦Àí¶ÏÁÑ£©£¬Ä¬ÈÏ 10¡£</param>
+		/// <param name="P">ç‚¹äº‘ç§»åŠ¨å¯¹è±¡</param>
+		/// <param name="p0">ç§å­èµ·å§‹ç‚¹</param>
+		/// <param name="v0">èµ·å§‹æ–¹å‘å‘é‡</param>
+		/// <param name="select_points">ç‚¹äº‘ä¸­å·²é€‰ä¸­çš„ç‚¹äº‘éƒ¨åˆ†</param>
+		/// <param name="result">æœ€ç»ˆå¾—åˆ°çš„çº¿æ®µç«¯ç‚¹é›†åˆ</param>
+		/// <param name="m_glWindow">å¯é€‰ï¼Œç”¨äºå®æ—¶æ˜¾ç¤ºæ‰©å±•è¿‡ç¨‹</param>
+		/// <param name="isGetGround">æ˜¯å¦åŒæ—¶æå–åœ°é¢ç‚¹äº‘éƒ¨åˆ†</param>
+		/// <param name="doFitLine">æ˜¯å¦åœ¨æ¯æ¬¡æ‰©å±•æ—¶ç”¨RANSACæ‹Ÿåˆç›´çº¿å¹¶æå–inliers</param>
+		/// <param name="useDynamicRect">æ˜¯å¦åœ¨æ‰©å±•è¿‡ç¨‹ä¸­ä½¿ç”¨åŠ¨æ€çŸ©å½¢ï¼ˆæ ¹æ®ç‚¹äº‘å¯†åº¦åŠ¨æ€è°ƒæ•´èŒƒå›´ï¼‰</param>
+		/// <param name="W">çŸ©å½¢å®½åº¦ï¼ˆç±³ï¼‰ï¼Œé»˜è®¤0.2</param>
+		/// <param name="L">æ¯æ¬¡æ‰©å±•çš„é•¿åº¦ï¼ˆç±³ï¼‰ï¼Œé»˜è®¤2</param>
+		/// <param name="Nmin">æ¯æ¬¡æ‰©å±•æœ€å°‘åŒ…å«çš„ç‚¹æ•°ï¼Œé»˜è®¤50</param>
+		/// <param name="theta_max">æ‰©å±•æ–¹å‘å…è®¸çš„æœ€å¤§åè½¬è§’åº¦ï¼ˆå¼§åº¦ï¼‰ï¼Œé»˜è®¤45Â°</param>
+		/// <param name="Kmax">æœ€å¤§æ‰©å±•æ¬¡æ•°ï¼Œé»˜è®¤10</param>
 		static void grow_line_from_seed(
 			ccPointCloud* P,
 			const CCVector3& p0,
@@ -99,14 +99,14 @@ namespace roadmarking
 		static void extract_zebra_by_struct(ccPointCloud* inputCloud, ccGLWindowInterface* m_glWindow);
 
 		/// <summary>
-		/// ´ÓÖ÷·½ÏòÍ¶Ó°µãÔÆ£¬°´ÃÜ¶ÈãĞÖµ·Ö¶ÎÌáÈ¡°ßÂíÏß°×Ïß¶ÎµÄ¼¸ºÎÖĞĞÄÏß¡£
+		/// ä½¿ç”¨å¯†åº¦æŠ•å½±æ³•ï¼Œæ ¹æ®å¯†åº¦é˜ˆå€¼æå–æ–‘é©¬çº¿çš„ä¸­å¿ƒçº¿æ®µã€‚
 		/// </summary>
-		/// <param name="inputCloud">ÊäÈëµãÔÆ</param>
-		/// <param name="binWidth">Í¶Ó°·Ö×é¿í¶È£¨Ã×£©£¬´óÓÚµãÔÆµãÖ®¼äµÄÌåËØµÈ¼ä¸ô¾àÀë</param>
-		/// <param name="densityThreshold">Ã¿¸ö bin ÖĞ×îĞ¡µãÊı£¬³¬¹ı¸ÃÖµÈÏÎªÊÇ°×Ïß¶Î</param>
-		/// <param name="minStripeLength">°×Ïß¶Î×îĞ¡ÓĞĞ§³¤¶È£¨Î´Ê¹ÓÃ£¬¿ÉÍØÕ¹£©</param>
-		/// <param name="outputCloud">Êä³öµãÔÆ£¬ÓÃÓÚÏÔÊ¾ËùÓĞÊ¶±ğ³öµÄ°×ÏßÖĞĞÄµã</param>
-		/// <param name="centers">Êä³öÃ¿¸ö°×Ïß¶ÎµÄ¼¸ºÎÖĞĞÄ</param>
+		/// <param name="inputCloud">è¾“å…¥ç‚¹äº‘</param>
+		/// <param name="binWidth">æŠ•å½±binå®½åº¦ï¼ˆç±³ï¼‰ï¼Œç”¨äºå°†ç‚¹äº‘åˆ†æˆç­‰è·çš„bin</param>
+		/// <param name="densityThreshold">æ¯ä¸ªbinçš„æœ€å°ç‚¹æ•°é˜ˆå€¼ï¼Œè¶…è¿‡è¯¥å€¼è®¤ä¸ºæ˜¯æ–‘é©¬çº¿</param>
+		/// <param name="minStripeLength">æ–‘é©¬çº¿æœ€å°æœ‰æ•ˆé•¿åº¦ï¼ˆæœªä½¿ç”¨ï¼Œå¾…æ‰©å±•ï¼‰</param>
+		/// <param name="outputCloud">è¾“å‡ºç‚¹äº‘ï¼Œç”¨äºæ˜¾ç¤ºè¯†åˆ«åˆ°çš„æ–‘é©¬çº¿çš„ç‚¹</param>
+		/// <param name="centers">æ¯ä¸ªæ–‘é©¬çº¿æ®µçš„ä¸­å¿ƒç‚¹é›†åˆ</param>
 		static void extract_zebra_by_projection(
 			ccPointCloud* inputCloud,
 			float binWidth,
@@ -120,6 +120,7 @@ namespace roadmarking
 		static void cluster_points_around_pos(ccPointCloud* select_cloud, unsigned idx,
 			float radius, ccPointCloud& clustered_cloud);
 
+		static void computeLocalNormal2D(const PCLCloudPtr& cloud, float radius, pcl::PointCloud<pcl::Normal>::Ptr normals);
 	private:
 		static ccPointCloud* rotate_cloud(ccPointCloud* P, const CCVector3& now_v, const CCVector3& new_v);
 		static PCLCloudPtr rotate_cloud(PCLCloudPtr pclCloud, const Eigen::Vector3f& now_v, const Eigen::Vector3f& new_v);
