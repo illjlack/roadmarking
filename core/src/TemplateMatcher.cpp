@@ -8,8 +8,13 @@
 #include <pcl/common/pca.h>
 #include "CloudProcess.h"
 #include "comm.h"
-
 #include "ConfigManager.h"
+#include <pcl/features/vfh.h>
+#include <pcl/features/normal_3d.h>
+#include <pcl/registration/icp.h>
+#include <pcl/kdtree/kdtree_flann.h>
+#include <pcl/search/kdtree.h>
+#include <omp.h>
 
 using namespace std;
 #include <pcl/visualization/pcl_visualizer.h>
@@ -180,7 +185,7 @@ bool RoadMarkingClassifier::model_match(const std::vector<Model>& models, const 
 	std::vector<std::vector<bool>> local_valid_matches(scenePointClouds.size(), std::vector<bool>(models.size(), false));
 
 	// 使用单层并行，避免嵌套问题
-	#pragma omp parallel for schedule(dynamic, 1)
+	// #pragma omp parallel for schedule(dynamic, 1)
 	for (int i = 0; i < scenePointClouds.size() * models.size(); i++)
 	{
 		int scene_idx = i / models.size();
@@ -196,7 +201,7 @@ bool RoadMarkingClassifier::model_match(const std::vector<Model>& models, const 
 		Eigen::Matrix4f tran_mat_m2s_temp;
 
 		// 执行匹配，得到临时匹配拟合度和变换矩阵
-		if (!fpfh_ransac(models[model_idx], cleaned_clouds[scene_idx], tran_mat_m2s_temp, heading_increment, 50, 
+		if (!iss_fpfh_ransac(models[model_idx], cleaned_clouds[scene_idx], tran_mat_m2s_temp, heading_increment, 50, 
 					   correct_match_fitness_thre, temp_match_fitness, overlapping_ratio))
 		{
 			continue;
@@ -704,13 +709,7 @@ float RoadMarkingClassifier::fpfh_ransac(const Model& model, const PCLCloudPtr& 
 	fpfh.setInputNormals(scene_normals);
 	fpfh.compute(*scene_fpfh);
 
-	//{
-	//	visualizePointCloudWithNormals("model点云二维法向量", model_keypoints, model_normals);
-	//	visualizePointCloudWithNormals("scene点云二维法向量", scene_keypoints, scene_normals);
-	//}
-
 	// 5. 粗配准 - RANSAC
-	//visualize_registration(model_keypoints, scene_keypoints, model_fpfh, scene_fpfh);
 	pcl::SampleConsensusPrerejective<pcl::PointXYZ, pcl::PointXYZ, pcl::FPFHSignature33> sac;
 	sac.setInputSource(model_keypoints);
 	sac.setInputTarget(scene_keypoints);
@@ -719,12 +718,8 @@ float RoadMarkingClassifier::fpfh_ransac(const Model& model, const PCLCloudPtr& 
 	sac.setTargetFeatures(scene_fpfh);
 
 	sac.setMaximumIterations(5000);
-	// 设置每次迭代时使用的最小样本集（通常为3个点）
 	sac.setNumberOfSamples(3);
-
-	// 设置随机匹配的点数（默认为3个，通常为3到5个足够）
 	sac.setCorrespondenceRandomness(3);
-
 	sac.setSimilarityThreshold(0.8f);
 	sac.setMaxCorrespondenceDistance(0.1f);
 	sac.setInlierFraction(0.6f);
@@ -784,6 +779,192 @@ float RoadMarkingClassifier::fpfh_ransac(const Model& model, const PCLCloudPtr& 
 }
 
 
+#include <pcl/keypoints/iss_3d.h> // 包含 ISS 角点检测器
+float RoadMarkingClassifier::iss_fpfh_ransac(const Model& model, const PCLCloudPtr& sceneCloud,
+	Eigen::Matrix4f& tran_mat_m2s_best, float heading_step_d, int max_iter_num, float dis_thre,
+	float& match_fitness, float& overlapping_ratio)
+{
+	max_iter_num = 50;
+	// 1. 体素下采样
+	float voxel_size = 0.1f;
+	pcl::PointCloud<pcl::PointXYZ>::Ptr model_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr scene_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::VoxelGrid<pcl::PointXYZ> vg;
+	vg.setLeafSize(voxel_size, voxel_size, voxel_size);
+
+	vg.setInputCloud(model.raw_point_cloud);
+	vg.filter(*model_downsampled);
+	vg.setInputCloud(sceneCloud);
+	vg.filter(*scene_downsampled);
+
+	// 2. Alpha Shape 提取边界点
+	auto extract_alpha_shape = [](const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, float alpha)
+		-> pcl::PointCloud<pcl::PointXYZ>::Ptr
+	{
+		pcl::PointCloud<pcl::PointXYZ>::Ptr boundary(new pcl::PointCloud<pcl::PointXYZ>);
+		pcl::ConcaveHull<pcl::PointXYZ> chull;
+		chull.setInputCloud(cloud);
+		chull.setAlpha(alpha);
+		chull.setKeepInformation(true); // 保留边界点
+		chull.reconstruct(*boundary);
+		return boundary;
+	};
+
+	pcl::PointCloud<pcl::PointXYZ>::Ptr model_keypoints = extract_alpha_shape(model_downsampled, 0.1f);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr scene_keypoints = extract_alpha_shape(scene_downsampled, 0.1f);
+
+	if (model_keypoints->empty() || scene_keypoints->empty()) {
+		return false;
+	}
+
+	// 2.5 粗对齐
+	{
+		// 1. 使用PCA进行初步对齐
+		Eigen::Matrix4f initial_transformation;
+		align_with_PCA(model_downsampled, scene_downsampled, initial_transformation);
+
+		// 2. 使用ICP进行精细匹配
+		Eigen::Matrix4f final_transformation;
+		// 使用icp_reg进行精细匹配，传递必要的参数（初始变换、最大迭代次数、距离阈值等）
+		float fitness_score = icp_reg(model_keypoints, scene_keypoints, initial_transformation, final_transformation,
+			max_iter_num, dis_thre);
+
+		tran_mat_m2s_best = final_transformation;
+	}
+
+	pcl::PointCloud<pcl::Normal>::Ptr model_normals(new pcl::PointCloud<pcl::Normal>);
+	pcl::PointCloud<pcl::Normal>::Ptr scene_normals(new pcl::PointCloud<pcl::Normal>);
+	CloudProcess::computeLocalNormal2D(model_keypoints, 0.3, model_normals);
+	CloudProcess::computeLocalNormal2D(scene_keypoints, 0.3, scene_normals);
+
+	// 3.5 使用ISS检测关键点并计算FPFH特征
+	pcl::ISSKeypoint3D<pcl::PointXYZ, pcl::PointXYZ> iss_detector;
+	pcl::PointCloud<pcl::PointXYZ>::Ptr model_iss_keypoints(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr scene_iss_keypoints(new pcl::PointCloud<pcl::PointXYZ>);
+
+	// 设置ISS参数
+	double model_resolution = 0.1;  // 模型点云分辨率
+	double scene_resolution = 0.1;  // 场景点云分辨率
+
+	// 计算模型点云的ISS关键点
+	pcl::search::KdTree<pcl::PointXYZ>::Ptr model_tree(new pcl::search::KdTree<pcl::PointXYZ>());
+	iss_detector.setSearchMethod(model_tree);
+	iss_detector.setSalientRadius(6 * model_resolution);
+	iss_detector.setNonMaxRadius(4 * model_resolution);
+	iss_detector.setThreshold21(0.8);
+	iss_detector.setThreshold32(0.8);
+	iss_detector.setMinNeighbors(5);
+	iss_detector.setInputCloud(model_keypoints);
+	iss_detector.compute(*model_iss_keypoints);
+
+	// 获取模型关键点的索引并提取法向量
+	auto model_keypoint_indices = iss_detector.getKeypointsIndices();
+	pcl::PointCloud<pcl::Normal>::Ptr model_iss_normals(new pcl::PointCloud<pcl::Normal>);
+	model_iss_normals->points.resize(model_iss_keypoints->points.size());
+	for (size_t i = 0; i < model_keypoint_indices->indices.size(); ++i)
+	{
+		model_iss_normals->points[i] = model_normals->points[model_keypoint_indices->indices[i]];
+	}
+
+	// 计算模型关键点的FPFH特征
+	pcl::PointCloud<pcl::FPFHSignature33>::Ptr model_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>);
+	pcl::FPFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::FPFHSignature33> fpfh;
+	fpfh.setInputCloud(model_iss_keypoints);
+	fpfh.setInputNormals(model_iss_normals);
+	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+	fpfh.setSearchMethod(tree);
+	fpfh.setRadiusSearch(0.1);
+	fpfh.compute(*model_fpfh);
+
+	// 计算场景点云的ISS关键点
+	pcl::search::KdTree<pcl::PointXYZ>::Ptr scene_tree(new pcl::search::KdTree<pcl::PointXYZ>());
+	iss_detector.setSearchMethod(scene_tree);
+	iss_detector.setSalientRadius(6 * scene_resolution);
+	iss_detector.setNonMaxRadius(4 * scene_resolution);
+	iss_detector.setInputCloud(scene_keypoints);
+	iss_detector.compute(*scene_iss_keypoints);
+
+	// 获取场景关键点的索引并提取法向量
+	auto scene_keypoint_indices = iss_detector.getKeypointsIndices();
+	pcl::PointCloud<pcl::Normal>::Ptr scene_iss_normals(new pcl::PointCloud<pcl::Normal>);
+	scene_iss_normals->points.resize(scene_iss_keypoints->points.size());
+	for (size_t i = 0; i < scene_keypoint_indices->indices.size(); ++i) {
+		scene_iss_normals->points[i] = scene_normals->points[scene_keypoint_indices->indices[i]];
+	}
+
+	// 计算场景关键点的FPFH特征
+	pcl::PointCloud<pcl::FPFHSignature33>::Ptr scene_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>);
+	fpfh.setInputCloud(scene_iss_keypoints);
+	fpfh.setInputNormals(scene_iss_normals);
+	fpfh.compute(*scene_fpfh);
+
+
+	{
+		PCLCloudPtr model(new PCLCloud);
+		PCLCloudPtr scene(new PCLCloud);
+		for (size_t i = 0; i < model_keypoint_indices->indices.size(); ++i)
+		{
+			model->push_back(model_keypoints->points[model_keypoint_indices->indices[i]]);
+		}
+		for (size_t i = 0; i < scene_keypoint_indices->indices.size(); ++i)
+		{
+			scene->push_back(scene_keypoints->points[scene_keypoint_indices->indices[i]]);
+		}
+
+		
+		visualizePointCloudWithNormals("model点云二维法向量", model, model_iss_normals);
+		visualizePointCloudWithNormals("scene点云二维法向量", scene, scene_normals);
+	}
+
+
+	// 5. 粗配准 - RANSAC
+	pcl::SampleConsensusPrerejective<pcl::PointXYZ, pcl::PointXYZ, pcl::FPFHSignature33> sac;
+	sac.setInputSource(model_iss_keypoints);
+	sac.setInputTarget(scene_iss_keypoints);
+
+	sac.setSourceFeatures(model_fpfh);
+	sac.setTargetFeatures(scene_fpfh);
+
+	sac.setMaximumIterations(5000);
+	sac.setNumberOfSamples(3);
+	sac.setCorrespondenceRandomness(3);
+	sac.setSimilarityThreshold(0.8f);
+	sac.setMaxCorrespondenceDistance(0.1f);
+	sac.setInlierFraction(0.6f);
+
+	pcl::PointCloud<pcl::PointXYZ>::Ptr sac_aligned(new pcl::PointCloud<pcl::PointXYZ>);
+	sac.align(*sac_aligned, tran_mat_m2s_best);
+
+	if (!sac.hasConverged())
+	{
+		return false;
+	}
+
+	Eigen::Matrix4f init_transformation = sac.getFinalTransformation();
+
+	// 6. 精配准 - ICP
+	pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
+	icp.setInputSource(model_downsampled);
+	icp.setInputTarget(scene_downsampled);
+	icp.setMaxCorrespondenceDistance(dis_thre);
+	icp.setMaximumIterations(max_iter_num);
+	icp.setTransformationEpsilon(1e-8);
+	icp.setEuclideanFitnessEpsilon(1e-6);
+
+	pcl::PointCloud<pcl::PointXYZ> icp_result;
+	icp.align(icp_result, init_transformation);
+
+	if (!icp.hasConverged()) {
+		return false;
+	}
+
+	tran_mat_m2s_best = icp.getFinalTransformation();
+
+	match_fitness = static_cast<float>(icp.getFitnessScore());
+	overlapping_ratio = 1.0f - match_fitness;
+
+	return true;
+}
 
 
 PCLCloudPtr RoadMarkingClassifier::get_hull_cloud(PCLCloudPtr cloud)
