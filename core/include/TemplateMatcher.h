@@ -187,7 +187,7 @@ namespace roadmarking
 			Eigen::Matrix4f& tran_mat_m2s_best, float heading_step_d, int max_iter_num, float dis_thre,
 			float& match_fitness, float& overlapping_ratio);
 
-		float iss_fpfh_ransac(const Model& model, const PCLCloudPtr& sceneCloud, Eigen::Matrix4f& tran_mat_m2s_best, float heading_step_d, int max_iter_num, float dis_thre, float& match_fitness, float& overlapping_ratio);
+		float harris_fpfh_ransac(const Model& model, const PCLCloudPtr& sceneCloud, Eigen::Matrix4f& tran_mat_m2s_best, float heading_step_d, int max_iter_num, float dis_thre, float& match_fitness, float& overlapping_ratio);
 
 	private:
 		void vectorize_roadmarking(std::vector<Model>& models, RoadMarkings& roadmarkings);

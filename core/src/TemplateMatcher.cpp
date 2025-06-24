@@ -14,6 +14,8 @@
 #include <pcl/registration/icp.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/search/kdtree.h>
+#include <pcl/point_types.h>
+#include <cmath>
 #include <omp.h>
 
 using namespace std;
@@ -201,7 +203,7 @@ bool RoadMarkingClassifier::model_match(const std::vector<Model>& models, const 
 		Eigen::Matrix4f tran_mat_m2s_temp;
 
 		// 执行匹配，得到临时匹配拟合度和变换矩阵
-		if (!iss_fpfh_ransac(models[model_idx], cleaned_clouds[scene_idx], tran_mat_m2s_temp, heading_increment, 50, 
+		if (!fpfh_ransac(models[model_idx], cleaned_clouds[scene_idx], tran_mat_m2s_temp, heading_increment, 50, 
 					   correct_match_fitness_thre, temp_match_fitness, overlapping_ratio))
 		{
 			continue;
@@ -779,189 +781,261 @@ float RoadMarkingClassifier::fpfh_ransac(const Model& model, const PCLCloudPtr& 
 }
 
 
-#include <pcl/keypoints/iss_3d.h> // 包含 ISS 角点检测器
-float RoadMarkingClassifier::iss_fpfh_ransac(const Model& model, const PCLCloudPtr& sceneCloud,
+#include <pcl/keypoints/harris_3d.h> // 包含 Harris 角点检测器
+float RoadMarkingClassifier::harris_fpfh_ransac(const Model& model, const PCLCloudPtr& sceneCloud,
 	Eigen::Matrix4f& tran_mat_m2s_best, float heading_step_d, int max_iter_num, float dis_thre,
 	float& match_fitness, float& overlapping_ratio)
 {
-	max_iter_num = 50;
-	// 1. 体素下采样
-	float voxel_size = 0.1f;
-	pcl::PointCloud<pcl::PointXYZ>::Ptr model_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
-	pcl::PointCloud<pcl::PointXYZ>::Ptr scene_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
-	pcl::VoxelGrid<pcl::PointXYZ> vg;
-	vg.setLeafSize(voxel_size, voxel_size, voxel_size);
+	//max_iter_num = 50;
+	//// 1. 体素下采样
+	//float voxel_size = 0.1f;
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr model_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr scene_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
+	//pcl::VoxelGrid<pcl::PointXYZ> vg;
+	//vg.setLeafSize(voxel_size, voxel_size, voxel_size);
 
-	vg.setInputCloud(model.raw_point_cloud);
-	vg.filter(*model_downsampled);
-	vg.setInputCloud(sceneCloud);
-	vg.filter(*scene_downsampled);
+	//vg.setInputCloud(model.raw_point_cloud);
+	//vg.filter(*model_downsampled);
+	//vg.setInputCloud(sceneCloud);
+	//vg.filter(*scene_downsampled);
 
-	// 2. Alpha Shape 提取边界点
-	auto extract_alpha_shape = [](const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, float alpha)
-		-> pcl::PointCloud<pcl::PointXYZ>::Ptr
-	{
-		pcl::PointCloud<pcl::PointXYZ>::Ptr boundary(new pcl::PointCloud<pcl::PointXYZ>);
-		pcl::ConcaveHull<pcl::PointXYZ> chull;
-		chull.setInputCloud(cloud);
-		chull.setAlpha(alpha);
-		chull.setKeepInformation(true); // 保留边界点
-		chull.reconstruct(*boundary);
-		return boundary;
-	};
+	//// 2. Alpha Shape 提取边界点
+	//auto extract_alpha_shape = [](const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, float alpha)
+	//	-> pcl::PointCloud<pcl::PointXYZ>::Ptr
+	//{
+	//	pcl::PointCloud<pcl::PointXYZ>::Ptr boundary(new pcl::PointCloud<pcl::PointXYZ>);
+	//	pcl::ConcaveHull<pcl::PointXYZ> chull;
+	//	chull.setInputCloud(cloud);
+	//	chull.setAlpha(alpha);
+	//	chull.setKeepInformation(true); // 保留边界点
+	//	chull.reconstruct(*boundary);
+	//	return boundary;
+	//};
 
-	pcl::PointCloud<pcl::PointXYZ>::Ptr model_keypoints = extract_alpha_shape(model_downsampled, 0.1f);
-	pcl::PointCloud<pcl::PointXYZ>::Ptr scene_keypoints = extract_alpha_shape(scene_downsampled, 0.1f);
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr model_keypoints = extract_alpha_shape(model_downsampled, 0.1f);
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr scene_keypoints = extract_alpha_shape(scene_downsampled, 0.1f);
 
-	if (model_keypoints->empty() || scene_keypoints->empty()) {
-		return false;
-	}
+	//if (model_keypoints->empty() || scene_keypoints->empty()) {
+	//	return false;
+	//}
 
-	// 2.5 粗对齐
-	{
-		// 1. 使用PCA进行初步对齐
-		Eigen::Matrix4f initial_transformation;
-		align_with_PCA(model_downsampled, scene_downsampled, initial_transformation);
+	//// 2.5 粗对齐
+	//{
+	//	// 1. 使用PCA进行初步对齐
+	//	Eigen::Matrix4f initial_transformation;
+	//	align_with_PCA(model_downsampled, scene_downsampled, initial_transformation);
 
-		// 2. 使用ICP进行精细匹配
-		Eigen::Matrix4f final_transformation;
-		// 使用icp_reg进行精细匹配，传递必要的参数（初始变换、最大迭代次数、距离阈值等）
-		float fitness_score = icp_reg(model_keypoints, scene_keypoints, initial_transformation, final_transformation,
-			max_iter_num, dis_thre);
+	//	// 2. 使用ICP进行精细匹配
+	//	Eigen::Matrix4f final_transformation;
+	//	// 使用icp_reg进行精细匹配，传递必要的参数（初始变换、最大迭代次数、距离阈值等）
+	//	float fitness_score = icp_reg(model_keypoints, scene_keypoints, initial_transformation, final_transformation,
+	//		max_iter_num, dis_thre);
 
-		tran_mat_m2s_best = final_transformation;
-	}
+	//	tran_mat_m2s_best = final_transformation;
+	//}
 
-	pcl::PointCloud<pcl::Normal>::Ptr model_normals(new pcl::PointCloud<pcl::Normal>);
-	pcl::PointCloud<pcl::Normal>::Ptr scene_normals(new pcl::PointCloud<pcl::Normal>);
-	CloudProcess::computeLocalNormal2D(model_keypoints, 0.3, model_normals);
-	CloudProcess::computeLocalNormal2D(scene_keypoints, 0.3, scene_normals);
+	//pcl::PointCloud<pcl::Normal>::Ptr model_normals(new pcl::PointCloud<pcl::Normal>);
+	//pcl::PointCloud<pcl::Normal>::Ptr scene_normals(new pcl::PointCloud<pcl::Normal>);
+	//CloudProcess::computeLocalNormal2D(model_keypoints, 0.3, model_normals);
+	//CloudProcess::computeLocalNormal2D(scene_keypoints, 0.3, scene_normals);
 
-	// 3.5 使用ISS检测关键点并计算FPFH特征
-	pcl::ISSKeypoint3D<pcl::PointXYZ, pcl::PointXYZ> iss_detector;
-	pcl::PointCloud<pcl::PointXYZ>::Ptr model_iss_keypoints(new pcl::PointCloud<pcl::PointXYZ>);
-	pcl::PointCloud<pcl::PointXYZ>::Ptr scene_iss_keypoints(new pcl::PointCloud<pcl::PointXYZ>);
+	//// 3.5 使用Harris检测关键点并计算FPFH特征
+	//pcl::HarrisKeypoint3D<pcl::PointXYZI, pcl::PointXYZI> harris_detector;
+	//pcl::PointCloud<pcl::PointXYZI>::Ptr model_harris_keypoints(new pcl::PointCloud<pcl::PointXYZI>);
+	//pcl::PointCloud<pcl::PointXYZI>::Ptr scene_harris_keypoints(new pcl::PointCloud<pcl::PointXYZI>);
 
-	// 设置ISS参数
-	double model_resolution = 0.1;  // 模型点云分辨率
-	double scene_resolution = 0.1;  // 场景点云分辨率
+	//// 将XYZ点云转换为XYZI点云（添加强度信息）
+	//pcl::PointCloud<pcl::PointXYZI>::Ptr model_keypoints_xyzi(new pcl::PointCloud<pcl::PointXYZI>);
+	//pcl::PointCloud<pcl::PointXYZI>::Ptr scene_keypoints_xyzi(new pcl::PointCloud<pcl::PointXYZI>);
+	//
+	//// 转换模型关键点，基于法向量变化计算强度
+	//model_keypoints_xyzi->points.reserve(model_keypoints->points.size());
+	//for (size_t i = 0; i < model_keypoints->points.size(); ++i) {
+	//	pcl::PointXYZI pt_xyzi;
+	//	pt_xyzi.x = model_keypoints->points[i].x;
+	//	pt_xyzi.y = model_keypoints->points[i].y;
+	//	pt_xyzi.z = model_keypoints->points[i].z;
+	//	
+	//	// 基于法向量的曲率计算强度值
+	//	if (i < model_normals->points.size()) {
+	//		pt_xyzi.intensity = std::abs(model_normals->points[i].curvature);
+	//	} else {
+	//		pt_xyzi.intensity = 1.0f; // 默认强度值
+	//	}
+	//	model_keypoints_xyzi->points.push_back(pt_xyzi);
+	//}
+	//model_keypoints_xyzi->width = model_keypoints_xyzi->points.size();
+	//model_keypoints_xyzi->height = 1;
+	//model_keypoints_xyzi->is_dense = true;
 
-	// 计算模型点云的ISS关键点
-	pcl::search::KdTree<pcl::PointXYZ>::Ptr model_tree(new pcl::search::KdTree<pcl::PointXYZ>());
-	iss_detector.setSearchMethod(model_tree);
-	iss_detector.setSalientRadius(6 * model_resolution);
-	iss_detector.setNonMaxRadius(4 * model_resolution);
-	iss_detector.setThreshold21(0.8);
-	iss_detector.setThreshold32(0.8);
-	iss_detector.setMinNeighbors(5);
-	iss_detector.setInputCloud(model_keypoints);
-	iss_detector.compute(*model_iss_keypoints);
+	//// 转换场景关键点，基于法向量变化计算强度
+	//scene_keypoints_xyzi->points.reserve(scene_keypoints->points.size());
+	//for (size_t i = 0; i < scene_keypoints->points.size(); ++i) {
+	//	pcl::PointXYZI pt_xyzi;
+	//	pt_xyzi.x = scene_keypoints->points[i].x;
+	//	pt_xyzi.y = scene_keypoints->points[i].y;
+	//	pt_xyzi.z = scene_keypoints->points[i].z;
+	//	
+	//	// 基于法向量的曲率计算强度值
+	//	if (i < scene_normals->points.size()) {
+	//		pt_xyzi.intensity = std::abs(scene_normals->points[i].curvature);
+	//	} else {
+	//		pt_xyzi.intensity = 1.0f; // 默认强度值
+	//	}
+	//	scene_keypoints_xyzi->points.push_back(pt_xyzi);
+	//}
+	//scene_keypoints_xyzi->width = scene_keypoints_xyzi->points.size();
+	//scene_keypoints_xyzi->height = 1;
+	//scene_keypoints_xyzi->is_dense = true;
 
-	// 获取模型关键点的索引并提取法向量
-	auto model_keypoint_indices = iss_detector.getKeypointsIndices();
-	pcl::PointCloud<pcl::Normal>::Ptr model_iss_normals(new pcl::PointCloud<pcl::Normal>);
-	model_iss_normals->points.resize(model_iss_keypoints->points.size());
-	for (size_t i = 0; i < model_keypoint_indices->indices.size(); ++i)
-	{
-		model_iss_normals->points[i] = model_normals->points[model_keypoint_indices->indices[i]];
-	}
+	//// 设置Harris参数
+	//double model_resolution = 0.1;  // 模型点云分辨率
+	//double scene_resolution = 0.1;  // 场景点云分辨率
 
-	// 计算模型关键点的FPFH特征
-	pcl::PointCloud<pcl::FPFHSignature33>::Ptr model_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>);
-	pcl::FPFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::FPFHSignature33> fpfh;
-	fpfh.setInputCloud(model_iss_keypoints);
-	fpfh.setInputNormals(model_iss_normals);
-	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
-	fpfh.setSearchMethod(tree);
-	fpfh.setRadiusSearch(0.1);
-	fpfh.compute(*model_fpfh);
+	//// 计算模型点云的Harris关键点
+	//pcl::search::KdTree<pcl::PointXYZI>::Ptr model_tree(new pcl::search::KdTree<pcl::PointXYZI>());
+	//harris_detector.setSearchMethod(model_tree);
+	//harris_detector.setRadius(6 * model_resolution);  // 搜索半径
+	//harris_detector.setRadiusSearch(6 * model_resolution);  // 搜索半径
+	//harris_detector.setThreshold(0.01);  // Harris响应阈值
+	//harris_detector.setNonMaxSupression(true);  // 启用非极大值抑制
+	//harris_detector.setRefine(true);  // 启用细化
+	//harris_detector.setNumberOfThreads(4);  // 线程数
+	//harris_detector.setInputCloud(model_keypoints_xyzi);
+	//harris_detector.compute(*model_harris_keypoints);
 
-	// 计算场景点云的ISS关键点
-	pcl::search::KdTree<pcl::PointXYZ>::Ptr scene_tree(new pcl::search::KdTree<pcl::PointXYZ>());
-	iss_detector.setSearchMethod(scene_tree);
-	iss_detector.setSalientRadius(6 * scene_resolution);
-	iss_detector.setNonMaxRadius(4 * scene_resolution);
-	iss_detector.setInputCloud(scene_keypoints);
-	iss_detector.compute(*scene_iss_keypoints);
+	//// 获取模型关键点的索引并提取法向量
+	//auto model_keypoint_indices = harris_detector.getKeypointsIndices();
+	//pcl::PointCloud<pcl::Normal>::Ptr model_harris_normals(new pcl::PointCloud<pcl::Normal>);
+	//model_harris_normals->points.resize(model_harris_keypoints->points.size());
+	//for (size_t i = 0; i < model_keypoint_indices->indices.size(); ++i)
+	//{
+	//	model_harris_normals->points[i] = model_normals->points[model_keypoint_indices->indices[i]];
+	//}
 
-	// 获取场景关键点的索引并提取法向量
-	auto scene_keypoint_indices = iss_detector.getKeypointsIndices();
-	pcl::PointCloud<pcl::Normal>::Ptr scene_iss_normals(new pcl::PointCloud<pcl::Normal>);
-	scene_iss_normals->points.resize(scene_iss_keypoints->points.size());
-	for (size_t i = 0; i < scene_keypoint_indices->indices.size(); ++i) {
-		scene_iss_normals->points[i] = scene_normals->points[scene_keypoint_indices->indices[i]];
-	}
+	//// 将Harris关键点转换回XYZ格式用于FPFH计算
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr model_harris_keypoints_xyz(new pcl::PointCloud<pcl::PointXYZ>);
+	//model_harris_keypoints_xyz->points.reserve(model_harris_keypoints->points.size());
+	//for (const auto& pt : model_harris_keypoints->points) {
+	//	pcl::PointXYZ pt_xyz;
+	//	pt_xyz.x = pt.x;
+	//	pt_xyz.y = pt.y;
+	//	pt_xyz.z = pt.z;
+	//	model_harris_keypoints_xyz->points.push_back(pt_xyz);
+	//}
+	//model_harris_keypoints_xyz->width = model_harris_keypoints_xyz->points.size();
+	//model_harris_keypoints_xyz->height = 1;
+	//model_harris_keypoints_xyz->is_dense = true;
 
-	// 计算场景关键点的FPFH特征
-	pcl::PointCloud<pcl::FPFHSignature33>::Ptr scene_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>);
-	fpfh.setInputCloud(scene_iss_keypoints);
-	fpfh.setInputNormals(scene_iss_normals);
-	fpfh.compute(*scene_fpfh);
+	//// 计算模型关键点的FPFH特征
+	//pcl::PointCloud<pcl::FPFHSignature33>::Ptr model_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>);
+	//pcl::FPFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::FPFHSignature33> fpfh;
+	//fpfh.setInputCloud(model_harris_keypoints_xyz);
+	//fpfh.setInputNormals(model_harris_normals);
+	//pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+	//fpfh.setSearchMethod(tree);
+	//fpfh.setRadiusSearch(0.1);
+	//fpfh.compute(*model_fpfh);
+
+	//// 计算场景点云的Harris关键点
+	//pcl::search::KdTree<pcl::PointXYZI>::Ptr scene_tree(new pcl::search::KdTree<pcl::PointXYZI>());
+	//harris_detector.setSearchMethod(scene_tree);
+	//harris_detector.setRadius(4 * scene_resolution);  // 搜索半径
+	//harris_detector.setRadiusSearch(4 * scene_resolution);  // 搜索半径
+	//harris_detector.setInputCloud(scene_keypoints_xyzi);
+	//harris_detector.compute(*scene_harris_keypoints);
+
+	//// 获取场景关键点的索引并提取法向量
+	//auto scene_keypoint_indices = harris_detector.getKeypointsIndices();
+	//pcl::PointCloud<pcl::Normal>::Ptr scene_harris_normals(new pcl::PointCloud<pcl::Normal>);
+	//scene_harris_normals->points.resize(scene_harris_keypoints->points.size());
+	//for (size_t i = 0; i < scene_keypoint_indices->indices.size(); ++i) {
+	//	scene_harris_normals->points[i] = scene_normals->points[scene_keypoint_indices->indices[i]];
+	//}
+
+	//// 将场景Harris关键点转换回XYZ格式用于FPFH计算
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr scene_harris_keypoints_xyz(new pcl::PointCloud<pcl::PointXYZ>);
+	//scene_harris_keypoints_xyz->points.reserve(scene_harris_keypoints->points.size());
+	//for (const auto& pt : scene_harris_keypoints->points) {
+	//	pcl::PointXYZ pt_xyz;
+	//	pt_xyz.x = pt.x;
+	//	pt_xyz.y = pt.y;
+	//	pt_xyz.z = pt.z;
+	//	scene_harris_keypoints_xyz->points.push_back(pt_xyz);
+	//}
+	//scene_harris_keypoints_xyz->width = scene_harris_keypoints_xyz->points.size();
+	//scene_harris_keypoints_xyz->height = 1;
+	//scene_harris_keypoints_xyz->is_dense = true;
+
+	//// 计算场景关键点的FPFH特征
+	//pcl::PointCloud<pcl::FPFHSignature33>::Ptr scene_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>);
+	//fpfh.setInputCloud(scene_harris_keypoints_xyz);
+	//fpfh.setInputNormals(scene_harris_normals);
+	//fpfh.compute(*scene_fpfh);
 
 
-	{
-		PCLCloudPtr model(new PCLCloud);
-		PCLCloudPtr scene(new PCLCloud);
-		for (size_t i = 0; i < model_keypoint_indices->indices.size(); ++i)
-		{
-			model->push_back(model_keypoints->points[model_keypoint_indices->indices[i]]);
-		}
-		for (size_t i = 0; i < scene_keypoint_indices->indices.size(); ++i)
-		{
-			scene->push_back(scene_keypoints->points[scene_keypoint_indices->indices[i]]);
-		}
+	//{
+	//	PCLCloudPtr model(new PCLCloud);
+	//	PCLCloudPtr scene(new PCLCloud);
+	//	for (size_t i = 0; i < model_keypoint_indices->indices.size(); ++i)
+	//	{
+	//		model->push_back(model_keypoints->points[model_keypoint_indices->indices[i]]);
+	//	}
+	//	for (size_t i = 0; i < scene_keypoint_indices->indices.size(); ++i)
+	//	{
+	//		scene->push_back(scene_keypoints->points[scene_keypoint_indices->indices[i]]);
+	//	}
 
-		
-		visualizePointCloudWithNormals("model点云二维法向量", model, model_iss_normals);
-		visualizePointCloudWithNormals("scene点云二维法向量", scene, scene_normals);
-	}
+	//	visualizePointCloudWithNormals("model点云二维法向量", model, model_harris_normals);
+	//	visualizePointCloudWithNormals("scene点云二维法向量", scene, scene_normals);
+	//}
 
 
-	// 5. 粗配准 - RANSAC
-	pcl::SampleConsensusPrerejective<pcl::PointXYZ, pcl::PointXYZ, pcl::FPFHSignature33> sac;
-	sac.setInputSource(model_iss_keypoints);
-	sac.setInputTarget(scene_iss_keypoints);
+	//// 5. 粗配准 - RANSAC
+	//pcl::SampleConsensusPrerejective<pcl::PointXYZ, pcl::PointXYZ, pcl::FPFHSignature33> sac;
+	//sac.setInputSource(model_harris_keypoints_xyz);
+	//sac.setInputTarget(scene_harris_keypoints_xyz);
 
-	sac.setSourceFeatures(model_fpfh);
-	sac.setTargetFeatures(scene_fpfh);
+	//sac.setSourceFeatures(model_fpfh);
+	//sac.setTargetFeatures(scene_fpfh);
 
-	sac.setMaximumIterations(5000);
-	sac.setNumberOfSamples(3);
-	sac.setCorrespondenceRandomness(3);
-	sac.setSimilarityThreshold(0.8f);
-	sac.setMaxCorrespondenceDistance(0.1f);
-	sac.setInlierFraction(0.6f);
+	//sac.setMaximumIterations(5000);
+	//sac.setNumberOfSamples(3);
+	//sac.setCorrespondenceRandomness(3);
+	//sac.setSimilarityThreshold(0.8f);
+	//sac.setMaxCorrespondenceDistance(0.1f);
+	//sac.setInlierFraction(0.6f);
 
-	pcl::PointCloud<pcl::PointXYZ>::Ptr sac_aligned(new pcl::PointCloud<pcl::PointXYZ>);
-	sac.align(*sac_aligned, tran_mat_m2s_best);
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr sac_aligned(new pcl::PointCloud<pcl::PointXYZ>);
+	//sac.align(*sac_aligned, tran_mat_m2s_best);
 
-	if (!sac.hasConverged())
-	{
-		return false;
-	}
+	//if (!sac.hasConverged())
+	//{
+	//	return false;
+	//}
 
-	Eigen::Matrix4f init_transformation = sac.getFinalTransformation();
+	//Eigen::Matrix4f init_transformation = sac.getFinalTransformation();
 
-	// 6. 精配准 - ICP
-	pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
-	icp.setInputSource(model_downsampled);
-	icp.setInputTarget(scene_downsampled);
-	icp.setMaxCorrespondenceDistance(dis_thre);
-	icp.setMaximumIterations(max_iter_num);
-	icp.setTransformationEpsilon(1e-8);
-	icp.setEuclideanFitnessEpsilon(1e-6);
+	//// 6. 精配准 - ICP
+	//pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
+	//icp.setInputSource(model_downsampled);
+	//icp.setInputTarget(scene_downsampled);
+	//icp.setMaxCorrespondenceDistance(dis_thre);
+	//icp.setMaximumIterations(max_iter_num);
+	//icp.setTransformationEpsilon(1e-8);
+	//icp.setEuclideanFitnessEpsilon(1e-6);
 
-	pcl::PointCloud<pcl::PointXYZ> icp_result;
-	icp.align(icp_result, init_transformation);
+	//pcl::PointCloud<pcl::PointXYZ> icp_result;
+	//icp.align(icp_result, init_transformation);
 
-	if (!icp.hasConverged()) {
-		return false;
-	}
+	//if (!icp.hasConverged()) {
+	//	return false;
+	//}
 
-	tran_mat_m2s_best = icp.getFinalTransformation();
+	//tran_mat_m2s_best = icp.getFinalTransformation();
 
-	match_fitness = static_cast<float>(icp.getFitnessScore());
-	overlapping_ratio = 1.0f - match_fitness;
+	//match_fitness = static_cast<float>(icp.getFitnessScore());
+	//overlapping_ratio = 1.0f - match_fitness;
 
 	return true;
 }
