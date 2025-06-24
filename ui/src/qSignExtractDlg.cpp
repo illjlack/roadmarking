@@ -34,7 +34,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	: QDialog(app ? app->getMainWindow() : nullptr, Qt::WindowMaximizeButtonHint | Qt::WindowCloseButtonHint)
 	, m_app(app)
 {
-	setWindowTitle("Â·±êµãÔÆÊ¶±ğ");
+	setWindowTitle("è·¯æ ‡ç‚¹äº‘è¯†åˆ«");
 	resize(1200, 800);
 	setFocusPolicy(Qt::StrongFocus);
 
@@ -45,7 +45,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	if (m_app)
 		m_app->createGLWindow(m_glWindow, m_glWidget);
 
-	// ==================================== Ç°¾°»æÖÆÆ÷
+	// ==================================== å‰æ™¯ç»˜åˆ¶å™¨
 	m_pointCloudSelector = new PointCloudSelector(m_glWindow);
 	m_pointCloudSelector->setSelectCloudPtr(&p_select_cloud);
 
@@ -53,19 +53,19 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	m_pointCloudDrawer->setSelectCloudPtr(&p_select_cloud);
 
 
-	// ==================================== ãĞÖµÉ¸Ñ¡
+	// ==================================== é˜ˆå€¼ç­›é€‰
 	histogramWidget = new ThresholdHistogramWidget(this);
 	histogramWidget->setWindowFlag(Qt::Window);
 	histogramWidget -> hide();
 	connect(histogramWidget, &ThresholdHistogramWidget::addCloudToDB, this, &qSignExtractDlg::addCloudToDB);
 
-	// ÔÊĞíÄ¿Â¼ÇøÓòÉÏÏÂÊÕËõ
+	// å…è®¸ç›®å½•åŒºåŸŸä¸Šä¸‹æ”¶ç¼©
 	QSplitter* directorySplitter = new QSplitter(Qt::Vertical);
-	// ==================================== ¶ÔÏóÄ¿Â¼
+	// ==================================== å¯¹è±¡ç›®å½•
 
 	{
 		
-		QGroupBox* objectGroup = new QGroupBox("¶ÔÏóÄ¿Â¼", this);
+		QGroupBox* objectGroup = new QGroupBox("å¯¹è±¡ç›®å½•", this);
 		m_objectTree = new CloudObjectTreeWidget(objectGroup);
 		m_objectTree->initialize(m_glWindow, m_app, &p_select_cloud, {});
 
@@ -77,10 +77,10 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 
 	
 	QVBoxLayout* leftLayout_button = new QVBoxLayout();
-	// ==================================== ÊÓÍ¼ÇĞ»»
+	// ==================================== è§†å›¾åˆ‡æ¢
 	{
-		QGroupBox* viewGroup = new QGroupBox("ÊÓÍ¼ÇĞ»»", this);
-		QHBoxLayout* viewLayout = new QHBoxLayout(viewGroup);  // ÉèÖÃ parent Îª viewGroup
+		QGroupBox* viewGroup = new QGroupBox("è§†å›¾åˆ‡æ¢", this);
+		QHBoxLayout* viewLayout = new QHBoxLayout(viewGroup);  // è®¾ç½® parent ä¸º viewGroup
 
 		auto addViewButton = [&](QHBoxLayout* layout, const QString& name, CC_VIEW_ORIENTATION view)
 		{
@@ -92,17 +92,17 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 				});
 		};
 
-		addViewButton(viewLayout, "Ç°ÊÓÍ¼", CC_FRONT_VIEW);
-		addViewButton(viewLayout, "×óÊÓÍ¼", CC_LEFT_VIEW);
-		addViewButton(viewLayout, "ÓÒÊÓÍ¼", CC_RIGHT_VIEW);
-		addViewButton(viewLayout, "¶¥ÊÓÍ¼", CC_TOP_VIEW);
-		addViewButton(viewLayout, "ºóÊÓÍ¼", CC_BACK_VIEW);
-		addViewButton(viewLayout, "µ×²¿ÊÓÍ¼", CC_BOTTOM_VIEW);
+		addViewButton(viewLayout, "å‰è§†å›¾", CC_FRONT_VIEW);
+		addViewButton(viewLayout, "å·¦è§†å›¾", CC_LEFT_VIEW);
+		addViewButton(viewLayout, "å³è§†å›¾", CC_RIGHT_VIEW);
+		addViewButton(viewLayout, "é¡¶è§†å›¾", CC_TOP_VIEW);
+		addViewButton(viewLayout, "åè§†å›¾", CC_BACK_VIEW);
+		addViewButton(viewLayout, "åº•éƒ¨è§†å›¾", CC_BOTTOM_VIEW);
 
 		viewGroup->setLayout(viewLayout);
 		leftLayout_button->addWidget(viewGroup);
 
-		QToolButton* btn = new QToolButton(viewGroup);  // ÉèÖÃ parent Îª viewGroup
+		QToolButton* btn = new QToolButton(viewGroup);  // è®¾ç½® parent ä¸º viewGroup
 		btn->setText("1:1");
 		viewLayout->addWidget(btn);
 		connect(btn, &QToolButton::clicked, [=]()
@@ -163,7 +163,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 
 
 	std::vector<QButtonGroup*> allGroups;
-	// ==================================== ¹¦ÄÜ°´Å¥×é¹¤¾ßº¯Êı
+	// ==================================== åŠŸèƒ½æŒ‰é’®ç»„å·¥å…·å‡½æ•°
 	auto addGroupedButton = [&](const QString& text,
 		std::function<void()> callback,
 		QGroupBox* parentGroup,
@@ -177,102 +177,102 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		group->addButton(btn);
 	};
 
-	// ==================================== ¹¦ÄÜ°´Å¥×é£º¹ıÂËÀà
+	// ==================================== åŠŸèƒ½æŒ‰é’®ç»„ï¼šè¿‡æ»¤ç±»
 	{
-		QGroupBox* filterGroup = new QGroupBox("µãÔÆ¹ıÂË", this);
+		QGroupBox* filterGroup = new QGroupBox("ç‚¹äº‘è¿‡æ»¤", this);
 		QVBoxLayout* filterLayout = new QVBoxLayout(filterGroup);
 		QButtonGroup* filterButtonGroup = new QButtonGroup(this);
 		allGroups.push_back(filterButtonGroup);
 		filterButtonGroup->setExclusive(true);
 
-		// ÉèÖÃ¹ıÂËÀà°´Å¥
-		addGroupedButton("Ñ¡ÔñÇ¿¶ÈãĞÖµ¹ıÂËµãÔÆ", [this]() { onFilteCloudByIntensity(); }, filterGroup, filterLayout, filterButtonGroup);
-		addGroupedButton("Ñ¡Ôñ¸ß³ÌãĞÖµ¹ıÂËµãÔÆ", [this]() { onFilteCloudByZ(); }, filterGroup, filterLayout, filterButtonGroup);
-		addGroupedButton("ÌáÈ¡µØÃæ", [this]() { onFilteGround(); }, filterGroup, filterLayout, filterButtonGroup);
+		// è®¾ç½®è¿‡æ»¤ç±»æŒ‰é’®
+		addGroupedButton("é€‰æ‹©å¼ºåº¦é˜ˆå€¼è¿‡æ»¤ç‚¹äº‘", [this]() { onFilteCloudByIntensity(); }, filterGroup, filterLayout, filterButtonGroup);
+		addGroupedButton("é€‰æ‹©é«˜ç¨‹é˜ˆå€¼è¿‡æ»¤ç‚¹äº‘", [this]() { onFilteCloudByZ(); }, filterGroup, filterLayout, filterButtonGroup);
+		addGroupedButton("æå–åœ°é¢", [this]() { onFilteGround(); }, filterGroup, filterLayout, filterButtonGroup);
 
 		filterGroup->setLayout(filterLayout);
 		leftLayout_button->addWidget(filterGroup);
 	}
 
-	// ==================================== ¹¦ÄÜ°´Å¥×é£º¼ôÇĞÀà
+	// ==================================== åŠŸèƒ½æŒ‰é’®ç»„ï¼šå‰ªåˆ‡ç±»
 	{
-		QGroupBox* clipGroup = new QGroupBox("µãÔÆ¼ôÇĞ", this);
+		QGroupBox* clipGroup = new QGroupBox("ç‚¹äº‘å‰ªåˆ‡", this);
 		QVBoxLayout* clipLayout = new QVBoxLayout(clipGroup);
 		QButtonGroup* clipButtonGroup = new QButtonGroup(this);
 		allGroups.push_back(clipButtonGroup);
 		clipButtonGroup->setExclusive(true);
 
-		addGroupedButton("¶à±ßĞÎ½ØÈ¡µãÔÆ", [this]() { onBoxClip(); }, clipGroup, clipLayout, clipButtonGroup);
-		addGroupedButton("¾ØĞÎ½ØÈ¡µãÔÆ", [this]() { onRectClip(); }, clipGroup, clipLayout, clipButtonGroup);
-		addGroupedButton("Ä£ĞÍÖÆ×÷", [this]() {onMakeModel(); }, clipGroup, clipLayout, clipButtonGroup);
+		addGroupedButton("å¤šè¾¹å½¢æˆªå–ç‚¹äº‘", [this]() { onBoxClip(); }, clipGroup, clipLayout, clipButtonGroup);
+		addGroupedButton("çŸ©å½¢æˆªå–ç‚¹äº‘", [this]() { onRectClip(); }, clipGroup, clipLayout, clipButtonGroup);
+		addGroupedButton("æ¨¡å‹åˆ¶ä½œ", [this]() {onMakeModel(); }, clipGroup, clipLayout, clipButtonGroup);
 
 		clipGroup->setLayout(clipLayout);
 		leftLayout_button->addWidget(clipGroup);
 	}
 
-	// ==================================== ¹¦ÄÜ°´Å¥×é£º×Ô¶¯Á÷³ÌÌáÈ¡
+	// ==================================== åŠŸèƒ½æŒ‰é’®ç»„ï¼šè‡ªåŠ¨æµç¨‹æå–
 	{
-		QGroupBox* autoExtractGroup = new QGroupBox("×Ô¶¯Á÷³ÌÌáÈ¡", this);
+		QGroupBox* autoExtractGroup = new QGroupBox("è‡ªåŠ¨æµç¨‹æå–", this);
 		QVBoxLayout* autoExtractLayout = new QVBoxLayout(autoExtractGroup);
 		QButtonGroup* autoExtractButtonGroup = new QButtonGroup(this);
 		allGroups.push_back(autoExtractButtonGroup);
 		autoExtractButtonGroup->setExclusive(true);
 
-		// ×Ô¶¯ÌáÈ¡Ïà¹Ø°´Å¥
-		addGroupedButton("È«²¿ÌáÈ¡", [this]() { onAutoExtract(); }, autoExtractGroup, autoExtractLayout, autoExtractButtonGroup);
-		addGroupedButton("¿òÑ¡ÌáÈ¡", [this]() { onBoxSelectExtract(); }, autoExtractGroup, autoExtractLayout, autoExtractButtonGroup);
+		// è‡ªåŠ¨æå–ç›¸å…³æŒ‰é’®
+		addGroupedButton("å…¨éƒ¨æå–", [this]() { onAutoExtract(); }, autoExtractGroup, autoExtractLayout, autoExtractButtonGroup);
+		addGroupedButton("æ¡†é€‰æå–", [this]() { onBoxSelectExtract(); }, autoExtractGroup, autoExtractLayout, autoExtractButtonGroup);
 
 		autoExtractGroup->setLayout(autoExtractLayout);
-		autoExtractGroup->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed); // ¸ÄÎª¹Ì¶¨¸ß¶È£¬À©Õ¹¿í¶È
+		autoExtractGroup->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed); // æ”¹ä¸ºå›ºå®šé«˜åº¦ï¼Œæ‰©å±•å®½åº¦
 		leftLayout_button->addWidget(autoExtractGroup);
 	}
 
-	// ==================================== ¹¦ÄÜ°´Å¥×é£º°´ĞÎÌ¬ÌáÈ¡
+	// ==================================== åŠŸèƒ½æŒ‰é’®ç»„ï¼šæŒ‰å½¢æ€æå–
 	{
-		QGroupBox* shapeExtractGroup = new QGroupBox("°´ĞÎÌ¬ÌáÈ¡", this);
+		QGroupBox* shapeExtractGroup = new QGroupBox("æŒ‰å½¢æ€æå–", this);
 		QVBoxLayout* shapeExtractLayout = new QVBoxLayout(shapeExtractGroup);
 		QButtonGroup* shapeExtractButtonGroup = new QButtonGroup(this);
 		allGroups.push_back(shapeExtractButtonGroup);
 		shapeExtractButtonGroup->setExclusive(true);
 
-		// °´ĞÎÌ¬ÌáÈ¡Ïà¹Ø°´Å¥
-		addGroupedButton("±ßÏßÌáÈ¡£¨°´ĞÎÌ¬£©", [this]() { onPointGrowExtract(); }, shapeExtractGroup, shapeExtractLayout, shapeExtractButtonGroup);
-		addGroupedButton("°ßÂíÏßÌáÈ¡£¨°´ĞÎÌ¬£©", [this]() { onZebraExtract(); }, shapeExtractGroup, shapeExtractLayout, shapeExtractButtonGroup);
-		addGroupedButton("¼ıÍ·µÈÌáÈ¡£¨°´ĞÎÌ¬£©", [this]() { onMatchTemplate(); }, shapeExtractGroup, shapeExtractLayout, shapeExtractButtonGroup);
+		// æŒ‰å½¢æ€æå–ç›¸å…³æŒ‰é’®
+		addGroupedButton("è¾¹çº¿æå–ï¼ˆæŒ‰å½¢æ€ï¼‰", [this]() { onPointGrowExtract(); }, shapeExtractGroup, shapeExtractLayout, shapeExtractButtonGroup);
+		addGroupedButton("æ–‘é©¬çº¿æå–ï¼ˆæŒ‰å½¢æ€ï¼‰", [this]() { onZebraExtract(); }, shapeExtractGroup, shapeExtractLayout, shapeExtractButtonGroup);
+		addGroupedButton("ç®­å¤´ç­‰æå–ï¼ˆæŒ‰å½¢æ€ï¼‰", [this]() { onMatchTemplate(); }, shapeExtractGroup, shapeExtractLayout, shapeExtractButtonGroup);
 
 		shapeExtractGroup->setLayout(shapeExtractLayout);
-		shapeExtractGroup->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed); // ¸ÄÎª¹Ì¶¨¸ß¶È£¬À©Õ¹¿í¶È
+		shapeExtractGroup->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed); // æ”¹ä¸ºå›ºå®šé«˜åº¦ï¼Œæ‰©å±•å®½åº¦
 		leftLayout_button->addWidget(shapeExtractGroup);
 	}
 
-	//// ==================================== ¹¦ÄÜ°´Å¥×é£º°´Ç¿¶ÈÌáÈ¡
+	//// ==================================== åŠŸèƒ½æŒ‰é’®ç»„ï¼šæŒ‰å¼ºåº¦æå–
 	//{
-	//	QGroupBox* intensityExtractGroup = new QGroupBox("°´Ç¿¶ÈÌáÈ¡", this);
+	//	QGroupBox* intensityExtractGroup = new QGroupBox("æŒ‰å¼ºåº¦æå–", this);
 	//	QVBoxLayout* intensityExtractLayout = new QVBoxLayout(intensityExtractGroup);
 	//	QButtonGroup* intensityExtractButtonGroup = new QButtonGroup(this);
 	//	allGroups.push_back(intensityExtractButtonGroup);
 	//	intensityExtractButtonGroup->setExclusive(true);
 
-	//	// °´Ç¿¶ÈÌáÈ¡Ïà¹Ø°´Å¥
-	//	addGroupedButton("±ßÏßÌáÈ¡£¨°´Ç¿¶È£©", [this]() { onPointGrowExtractByIntensity(); }, intensityExtractGroup, intensityExtractLayout, intensityExtractButtonGroup);
-	//	addGroupedButton("°ßÂíÏßÌáÈ¡£¨°´Ç¿¶È£©", [this]() { onZebraExtract(); }, intensityExtractGroup, intensityExtractLayout, intensityExtractButtonGroup);
-	//	addGroupedButton("¼ıÍ·µÈÌáÈ¡£¨°´Ç¿¶È£©", [this]() { onMatchTemplate(); }, intensityExtractGroup, intensityExtractLayout, intensityExtractButtonGroup);
+	//	// æŒ‰å¼ºåº¦æå–ç›¸å…³æŒ‰é’®
+	//	addGroupedButton("è¾¹çº¿æå–ï¼ˆæŒ‰å¼ºåº¦ï¼‰", [this]() { onPointGrowExtractByIntensity(); }, intensityExtractGroup, intensityExtractLayout, intensityExtractButtonGroup);
+	//	addGroupedButton("æ–‘é©¬çº¿æå–ï¼ˆæŒ‰å¼ºåº¦ï¼‰", [this]() { onZebraExtract(); }, intensityExtractGroup, intensityExtractLayout, intensityExtractButtonGroup);
+	//	addGroupedButton("ç®­å¤´ç­‰æå–ï¼ˆæŒ‰å¼ºåº¦ï¼‰", [this]() { onMatchTemplate(); }, intensityExtractGroup, intensityExtractLayout, intensityExtractButtonGroup);
 
 	//	intensityExtractGroup->setLayout(intensityExtractLayout);
-	//	intensityExtractGroup->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed); // ¸ÄÎª¹Ì¶¨¸ß¶È£¬À©Õ¹¿í¶È
+	//	intensityExtractGroup->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed); // æ”¹ä¸ºå›ºå®šé«˜åº¦ï¼Œæ‰©å±•å®½åº¦
 	//	leftLayout_button->addWidget(intensityExtractGroup);
 	//}
 
-	// ==================================== ¹¦ÄÜ°´Å¥×é£ºÆ¥ÅäÀà£¨ĞÂÔö£©
+	// ==================================== åŠŸèƒ½æŒ‰é’®ç»„ï¼šåŒ¹é…ç±»ï¼ˆæ–°å¢ï¼‰
 	{
-		QGroupBox* matchGroup = new QGroupBox("µãÔÆÆ¥Åä", this);
+		QGroupBox* matchGroup = new QGroupBox("ç‚¹äº‘åŒ¹é…", this);
 		QVBoxLayout* matchLayout = new QVBoxLayout(matchGroup);
 		QButtonGroup* matchButtonGroup = new QButtonGroup(this);
 		allGroups.push_back(matchButtonGroup);
 		matchButtonGroup->setExclusive(true);
 
-		addGroupedButton("Ö±½ÓÆ¥ÅäÄ£°å", [this]() { onMatchTemplateDirect(); }, matchGroup, matchLayout, matchButtonGroup);
-		addGroupedButton("¿òÑ¡Æ¥ÅäÄ£°å", [this]() { onMatchTemplateByBox();   }, matchGroup, matchLayout, matchButtonGroup);
+		addGroupedButton("ç›´æ¥åŒ¹é…æ¨¡æ¿", [this]() { onMatchTemplateDirect(); }, matchGroup, matchLayout, matchButtonGroup);
+		addGroupedButton("æ¡†é€‰åŒ¹é…æ¨¡æ¿", [this]() { onMatchTemplateByBox();   }, matchGroup, matchLayout, matchButtonGroup);
 
 		matchGroup->setLayout(matchLayout);
 		leftLayout_button->addWidget(matchGroup);
@@ -285,7 +285,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	leftLayout->addWidget(directorySplitter);
 
 
-	// ==================================== ÆôÓÃ/½ûÓÃ¿ØÖÆ£¨ËùÓĞ×é°´Å¥£©
+	// ==================================== å¯ç”¨/ç¦ç”¨æ§åˆ¶ï¼ˆæ‰€æœ‰ç»„æŒ‰é’®ï¼‰
 	{
 		connect(m_pointCloudSelector, &PointCloudSelector::draw_start, [allGroups]() {
 			for (auto* group : allGroups)
@@ -323,9 +323,9 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	QSplitter* horizontalSplitter = new QSplitter(Qt::Horizontal, this);
 	QWidget* leftPanel = new QWidget(this);
 	leftPanel->setLayout(leftLayout);
-	horizontalSplitter->addWidget(leftPanel);  // ×ó²àÃæ°å£¨Ä¿Â¼ + °´Å¥£©
+	horizontalSplitter->addWidget(leftPanel);  // å·¦ä¾§é¢æ¿ï¼ˆç›®å½• + æŒ‰é’®ï¼‰
 
-	// ==================================== GL´°¿ÚÇøÓò
+	// ==================================== GLçª—å£åŒºåŸŸ
 	{
 		QFrame* glFrame = new QFrame(this);
 		glFrame->setFrameStyle(QFrame::Box);
@@ -336,16 +336,16 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		horizontalSplitter->addWidget(glFrame);
 		/*
 		enum PICKING_MODE {
-			NO_PICKING,                           // ½ûÓÃÊ°È¡¹¦ÄÜ£¬ÓÃ»§ÎŞ·¨Ñ¡ÔñÈÎºÎÎïÌå
-			ENTITY_PICKING,                       // Ñ¡ÔñÕû¸öÊµÌå£¬ÔÊĞíÓÃ»§Ñ¡ÔñÈçµãÔÆ¡¢Íø¸ñµÈÊµÌå
-			ENTITY_RECT_PICKING,                  // ¾ØĞÎÇøÓòÑ¡Ôñ£¬ÔÊĞíÓÃ»§Í¨¹ı¾ØĞÎ¿òÑ¡Ôñ¶à¸öÊµÌå
-			FAST_PICKING,                         // ¿ìËÙÑ¡Ôñ£¬ÓÅ»¯ÁËĞÔÄÜ£¬µ«¾«¶È½ÏµÍ£¬ÊÊÓÃÓÚ´óÊı¾İ¼¯
-			POINT_PICKING,                        // Ñ¡Ôñµ¥¸öµã£¬ÔÊĞíÓÃ»§Ñ¡ÔñµãÔÆÖĞµÄµã
-			TRIANGLE_PICKING,                     // Ñ¡ÔñÈı½ÇĞÎ£¬ÔÊĞíÓÃ»§Ñ¡ÔñÍø¸ñÖĞµÄÈı½ÇĞÎÃæÆ¬
-			POINT_OR_TRIANGLE_PICKING,            // Ñ¡Ôñµã»òÈı½ÇĞÎ£¬ÔÊĞíÓÃ»§Ñ¡ÔñµãÔÆÖĞµÄµã»òÍø¸ñÖĞµÄÈı½ÇĞÎ
-			POINT_OR_TRIANGLE_OR_LABEL_PICKING,   // Ñ¡Ôñµã¡¢Èı½ÇĞÎ»ò±êÇ©£¬ÔÊĞíÓÃ»§Ñ¡ÔñµãÔÆÖĞµÄµã¡¢Íø¸ñÖĞµÄÈı½ÇĞÎ»ò±êÇ©£¨ÈçµãÔÆ±ê×¢£©
-			LABEL_PICKING,                        // Ñ¡Ôñ±êÇ©£¬ÔÊĞíÓÃ»§Ñ¡ÔñµãÔÆÖĞµÄ±êÇ©»òÆäËû×¢ÊÍĞÅÏ¢
-			DEFAULT_PICKING,                      // Ä¬ÈÏÊ°È¡Ä£Ê½£¬Í¨³£Óë `ENTITY_PICKING` ÏàÍ¬£¬ÓÃÓÚÑ¡ÔñÊµÌå
+			NO_PICKING,                           // ç¦ç”¨æ‹¾å–åŠŸèƒ½ï¼Œç”¨æˆ·æ— æ³•é€‰æ‹©ä»»ä½•ç‰©ä½“
+			ENTITY_PICKING,                       // é€‰æ‹©æ•´ä¸ªå®ä½“ï¼Œå…è®¸ç”¨æˆ·é€‰æ‹©å¦‚ç‚¹äº‘ã€ç½‘æ ¼ç­‰å®ä½“
+			ENTITY_RECT_PICKING,                  // çŸ©å½¢åŒºåŸŸé€‰æ‹©ï¼Œå…è®¸ç”¨æˆ·é€šè¿‡çŸ©å½¢æ¡†é€‰æ‹©å¤šä¸ªå®ä½“
+			FAST_PICKING,                         // å¿«é€Ÿé€‰æ‹©ï¼Œä¼˜åŒ–äº†æ€§èƒ½ï¼Œä½†ç²¾åº¦è¾ƒä½ï¼Œé€‚ç”¨äºå¤§æ•°æ®é›†
+			POINT_PICKING,                        // é€‰æ‹©å•ä¸ªç‚¹ï¼Œå…è®¸ç”¨æˆ·é€‰æ‹©ç‚¹äº‘ä¸­çš„ç‚¹
+			TRIANGLE_PICKING,                     // é€‰æ‹©ä¸‰è§’å½¢ï¼Œå…è®¸ç”¨æˆ·é€‰æ‹©ç½‘æ ¼ä¸­çš„ä¸‰è§’å½¢é¢ç‰‡
+			POINT_OR_TRIANGLE_PICKING,            // é€‰æ‹©ç‚¹æˆ–ä¸‰è§’å½¢ï¼Œå…è®¸ç”¨æˆ·é€‰æ‹©ç‚¹äº‘ä¸­çš„ç‚¹æˆ–ç½‘æ ¼ä¸­çš„ä¸‰è§’å½¢
+			POINT_OR_TRIANGLE_OR_LABEL_PICKING,   // é€‰æ‹©ç‚¹ã€ä¸‰è§’å½¢æˆ–æ ‡ç­¾ï¼Œå…è®¸ç”¨æˆ·é€‰æ‹©ç‚¹äº‘ä¸­çš„ç‚¹ã€ç½‘æ ¼ä¸­çš„ä¸‰è§’å½¢æˆ–æ ‡ç­¾ï¼ˆå¦‚ç‚¹äº‘æ ‡æ³¨ï¼‰
+			LABEL_PICKING,                        // é€‰æ‹©æ ‡ç­¾ï¼Œå…è®¸ç”¨æˆ·é€‰æ‹©ç‚¹äº‘ä¸­çš„æ ‡ç­¾æˆ–å…¶ä»–æ³¨é‡Šä¿¡æ¯
+			DEFAULT_PICKING,                      // é»˜è®¤æ‹¾å–æ¨¡å¼ï¼Œé€šå¸¸ä¸ `ENTITY_PICKING` ç›¸åŒï¼Œç”¨äºé€‰æ‹©å®ä½“
 		};
 		*/
 
@@ -360,7 +360,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	horizontalSplitter->setStretchFactor(1, 2);
 	mainLayout->addWidget(horizontalSplitter);
 	setLayout(mainLayout);
-	// ==================================== Ò»Ğ©ĞÅºÅ
+	// ==================================== ä¸€äº›ä¿¡å·
 
 	connect(m_pointCloudSelector, &PointCloudSelector::update_tree, m_objectTree, [=]() { m_objectTree->refresh(); });
 	connect(m_pointCloudSelector, &PointCloudSelector::draw_start, [&]() {m_selectionMode = DRAW_SELECTION; });
@@ -425,19 +425,19 @@ bool qSignExtractDlg::setCloud(std::vector<ccHObject*>cloud)
 void qSignExtractDlg::onAutoExtract()
 {
 	SettingsDialog settingsDialog;
-	settingsDialog.setDescription("²ÎÊı£º\n"
-		"ÂË²¨ÃÜ¶È(m)£ºµãÔÆÔ½ÃÜ´¦ÀíÊ±¼äÔ½³¤£¬¶ÔÓÚµÀÂ·±ßÑØµÄÇø·ÖÔ½ÇåÎú\n"
-		"¾ÛÀà°ë¾¶(m)£ºĞè´óÓÚÂË²¨ÃÜ¶È\n"
-		"ÇúÂÊãĞÖµ£ºÇúÂÊ»ù´¡Öµ£¬ÓÃÓÚÅĞ¶Ï±íÃæÆ½Ì¹¶È\n"
-		"½Ç¶ÈãĞÖµ(¶È)£ºÔÊĞíµÄ·¨ÏòÁ¿¼Ğ½Ç£¨×Ô¶¯×ªÓàÏÒ£©\n"
-		"ËÑË÷°ë¾¶(m)£ºÁÚÓòËÑË÷·¶Î§");
+	settingsDialog.setDescription("å‚æ•°ï¼š\n"
+		"æ»¤æ³¢å¯†åº¦(m)ï¼šç‚¹äº‘è¶Šå¯†å¤„ç†æ—¶é—´è¶Šé•¿ï¼Œå¯¹äºé“è·¯è¾¹æ²¿çš„åŒºåˆ†è¶Šæ¸…æ™°\n"
+		"èšç±»åŠå¾„(m)ï¼šéœ€å¤§äºæ»¤æ³¢å¯†åº¦\n"
+		"æ›²ç‡é˜ˆå€¼ï¼šæ›²ç‡åŸºç¡€å€¼ï¼Œç”¨äºåˆ¤æ–­è¡¨é¢å¹³å¦åº¦\n"
+		"è§’åº¦é˜ˆå€¼(åº¦)ï¼šå…è®¸çš„æ³•å‘é‡å¤¹è§’ï¼ˆè‡ªåŠ¨è½¬ä½™å¼¦ï¼‰\n"
+		"æœç´¢åŠå¾„(m)ï¼šé‚»åŸŸæœç´¢èŒƒå›´");
 
-	settingsDialog.registerComponent<float>("ÂË²¨ÃÜ¶È", "targetVoxelSize", 0.2);
-	settingsDialog.registerComponent<float>("¾ÛÀà°ë¾¶", "euclideanClusterRadius", 0.3);
-	settingsDialog.registerComponent<float>("ÇúÂÊãĞÖµ", "curvatureBaseThreshold", 0.01);
-	settingsDialog.registerComponent<float>("½Ç¶ÈãĞÖµ", "angleThresholdDegrees", 5.0);
-	settingsDialog.registerComponent<float>("ËÑË÷°ë¾¶", "searchRadius", 0.3);
-	settingsDialog.registerComponent<float>("Íø¸ñ´óĞ¡", "gridSize", (double)0.05);
+	settingsDialog.registerComponent<float>("æ»¤æ³¢å¯†åº¦", "targetVoxelSize", 0.2);
+	settingsDialog.registerComponent<float>("èšç±»åŠå¾„", "euclideanClusterRadius", 0.3);
+	settingsDialog.registerComponent<float>("æ›²ç‡é˜ˆå€¼", "curvatureBaseThreshold", 0.01);
+	settingsDialog.registerComponent<float>("è§’åº¦é˜ˆå€¼", "angleThresholdDegrees", 5.0);
+	settingsDialog.registerComponent<float>("æœç´¢åŠå¾„", "searchRadius", 0.3);
+	settingsDialog.registerComponent<float>("ç½‘æ ¼å¤§å°", "gridSize", (double)0.05);
 
 	if (settingsDialog.exec() != QDialog::Accepted)
 		return;
@@ -446,7 +446,7 @@ void qSignExtractDlg::onAutoExtract()
 	float euclideanClusterRadius = parameters["euclideanClusterRadius"].toFloat();
 	float curvatureBaseThreshold = parameters["curvatureBaseThreshold"].toFloat();
 	float angleDegrees = parameters["angleThresholdDegrees"].toFloat();
-	float angleThreshold = cos(angleDegrees * M_PI / 180.0);  // ½Ç¶È×ª»¡¶ÈÔÙ¼ÆËãÓàÏÒ
+	float angleThreshold = cos(angleDegrees * M_PI / 180.0);  // è§’åº¦è½¬å¼§åº¦å†è®¡ç®—ä½™å¼¦
 	float searchRadius = parameters["searchRadius"].toFloat();
 	float gridSize = parameters["gridSize"].toFloat();
 
@@ -484,7 +484,7 @@ void qSignExtractDlg::onPointGrowExtract()
 {
 	if (!p_select_cloud || !dynamic_cast<ccPointCloud*>(p_select_cloud))
 	{
-		ccLog::Error("Î´Ñ¡ÔñµãÔÆ");
+		ccLog::Error("æœªé€‰æ‹©ç‚¹äº‘");
 		return;
 	}
 	m_pointCloudSelector->startDraw();
@@ -493,39 +493,39 @@ void qSignExtractDlg::onPointGrowExtract()
 		{
 			SettingsDialog settingsDialog;
 			settingsDialog.setDescription(
-				"²ÎÊı£º\n"
-				"µ÷ÊÔÄ£Ê½£ºÊÇ·ñ¿ªÆôµ÷ÊÔÏÔÊ¾£¨½«ÏßÏÔÊ¾ÔÚ´°¿ÚÉÏ£©\n"
-				"ÊÇ·ñ½øĞĞ¶îÍâµÄ csf ÌáÈ¡µØÃæ£º\n"
-				"ÊÇ·ñÄâºÏÖ±Ïß£º\n"
-				"ÊÇ·ñÊ¹ÓÃ¶¯Ì¬¾ØĞÎ£º\n"
-				"¾ØĞÎ¿í¶È(m)£ºÏßÉú³¤µÄ¿í¶È\n"
-				"Éú³¤²½³¤(m)£ºÃ¿´ÎÀ©Õ¹µÄ³¤¶È\n"
-				"×îĞ¡µãÊı£ºÃ¿¶ÎÏß¶ÎĞèÒª°üº¬µÄ×îÉÙµãÊı\n"
-				"×î´óÍäÕÛ½Ç¶È(¶È)£ºÏß¶Î¼äÔÊĞíµÄ×î´óÍäÕÛ½Ç¶È\n"
-				"×î´óÌøÔ¾´ÎÊı£º³¢ÊÔÌøÔ¾µÄ×î´ó´ÎÊı£¨ÓÃÓÚ´¦Àí¶Ï¿ªµÄÏß£©"
+				"å‚æ•°ï¼š\n"
+				"è°ƒè¯•æ¨¡å¼ï¼šæ˜¯å¦å¼€å¯è°ƒè¯•æ˜¾ç¤ºï¼ˆå°†çº¿æ˜¾ç¤ºåœ¨çª—å£ä¸Šï¼‰\n"
+				"æ˜¯å¦è¿›è¡Œé¢å¤–çš„ csf æå–åœ°é¢ï¼š\n"
+				"æ˜¯å¦æ‹Ÿåˆç›´çº¿ï¼š\n"
+				"æ˜¯å¦ä½¿ç”¨åŠ¨æ€çŸ©å½¢ï¼š\n"
+				"çŸ©å½¢å®½åº¦(m)ï¼šçº¿ç”Ÿé•¿çš„å®½åº¦\n"
+				"ç”Ÿé•¿æ­¥é•¿(m)ï¼šæ¯æ¬¡æ‰©å±•çš„é•¿åº¦\n"
+				"æœ€å°ç‚¹æ•°ï¼šæ¯æ®µçº¿æ®µéœ€è¦åŒ…å«çš„æœ€å°‘ç‚¹æ•°\n"
+				"æœ€å¤§å¼¯æŠ˜è§’åº¦(åº¦)ï¼šçº¿æ®µé—´å…è®¸çš„æœ€å¤§å¼¯æŠ˜è§’åº¦\n"
+				"æœ€å¤§è·³è·ƒæ¬¡æ•°ï¼šå°è¯•è·³è·ƒçš„æœ€å¤§æ¬¡æ•°ï¼ˆç”¨äºå¤„ç†æ–­å¼€çš„çº¿ï¼‰"
 			);
 
-			// ²¼¶ûÖµ
-			settingsDialog.registerComponent<bool>("¿ªÆôµ÷ÊÔÏÔÊ¾", "debugEnabled", false);
-			settingsDialog.registerComponent<bool>("¿ªÆôÌáÈ¡µØÃæ", "isGetGround", false);
-			settingsDialog.registerComponent<bool>("ÄâºÏÖ±Ïß", "doFitLine", false);
-			settingsDialog.registerComponent<bool>("Ê¹ÓÃ¶¯Ì¬¾ØĞÎ", "useDynamicRect", true);
+			// å¸ƒå°”å€¼
+			settingsDialog.registerComponent<bool>("å¼€å¯è°ƒè¯•æ˜¾ç¤º", "debugEnabled", false);
+			settingsDialog.registerComponent<bool>("å¼€å¯æå–åœ°é¢", "isGetGround", false);
+			settingsDialog.registerComponent<bool>("æ‹Ÿåˆç›´çº¿", "doFitLine", false);
+			settingsDialog.registerComponent<bool>("ä½¿ç”¨åŠ¨æ€çŸ©å½¢", "useDynamicRect", true);
 
-			// ¸¡µãÖµ
-			settingsDialog.registerComponent<float>("¾ØĞÎ¿í¶È", "W", 1.0f);
-			settingsDialog.registerComponent<float>("Éú³¤²½³¤", "L", 2.0f);
-			settingsDialog.registerComponent<float>("×î´óÍäÕÛ½Ç¶È(¶È)", "theta_max_degrees", 45.0f);
+			// æµ®ç‚¹å€¼
+			settingsDialog.registerComponent<float>("çŸ©å½¢å®½åº¦", "W", 1.0f);
+			settingsDialog.registerComponent<float>("ç”Ÿé•¿æ­¥é•¿", "L", 2.0f);
+			settingsDialog.registerComponent<float>("æœ€å¤§å¼¯æŠ˜è§’åº¦(åº¦)", "theta_max_degrees", 45.0f);
 
-			// ÕûÊıÖµ
-			settingsDialog.registerComponent<int>("×îĞ¡µãÊı", "Nmin", 20);
-			settingsDialog.registerComponent<int>("×î´óÌøÔ¾´ÎÊı", "Kmax", 10);
+			// æ•´æ•°å€¼
+			settingsDialog.registerComponent<int>("æœ€å°ç‚¹æ•°", "Nmin", 20);
+			settingsDialog.registerComponent<int>("æœ€å¤§è·³è·ƒæ¬¡æ•°", "Kmax", 10);
 
 			if (settingsDialog.exec() != QDialog::Accepted)
 				return;
 
 			QMap<QString, QVariant> parameters = settingsDialog.getParameters();
 
-			// ²ÎÊıÌáÈ¡
+			// å‚æ•°æå–
 			bool debugEnabled = parameters["debugEnabled"].toBool();
 			bool isGetGround = parameters["isGetGround"].toBool();
 			bool doFitLine = parameters["doFitLine"].toBool();
@@ -534,7 +534,7 @@ void qSignExtractDlg::onPointGrowExtract()
 			double L = parameters["L"].toFloat();
 			int    Nmin = parameters["Nmin"].toUInt();
 			double theta_max = parameters["theta_max_degrees"]
-				.toFloat() * M_PI / 180.0; // ½Ç¶È×ª»¡¶È
+				.toFloat() * M_PI / 180.0; // è§’åº¦è½¬å¼§åº¦
 			int    Kmax = parameters["Kmax"].toUInt();
 
 			std::vector<CCVector3d> polyline;
@@ -572,13 +572,13 @@ void qSignExtractDlg::onPointGrowExtract()
 
 
 			ccPointCloud* ccCloud = new ccPointCloud;
-			// ´´½¨ccPolyline¶ÔÏó
+			// åˆ›å»ºccPolylineå¯¹è±¡
 			ccPolyline* polylineObj = new ccPolyline(ccCloud);
 
-			// ½«lineÖĞµÄµãÌí¼Óµ½polylineObjÖĞ
+			// å°†lineä¸­çš„ç‚¹æ·»åŠ åˆ°polylineObjä¸­
 			for (const auto& point : line)
 			{
-				ccCloud->addPoint(CCVector3(point.x, point.y, point.z)); // Ìí¼Óµã
+				ccCloud->addPoint(CCVector3(point.x, point.y, point.z)); // æ·»åŠ ç‚¹
 				polylineObj->addPointIndex(ccCloud->size() - 1);
 			}
 
@@ -601,7 +601,7 @@ void qSignExtractDlg::onZebraExtract()
 {
 	if (!p_select_cloud || !dynamic_cast<ccPointCloud*>(p_select_cloud))
 	{
-		ccLog::Error("Î´Ñ¡ÔñµãÔÆ");
+		ccLog::Error("æœªé€‰æ‹©ç‚¹äº‘");
 		return;
 	}
 	m_pointCloudSelector->startDraw();
@@ -610,17 +610,17 @@ void qSignExtractDlg::onZebraExtract()
 		{
 			SettingsDialog settingsDialog;
 			settingsDialog.setDescription(
-				"²ÎÊı£º\n"
-				"¾ØĞÎ¿í¶È(m)£ºÖ÷·½ÏòÍ¶Ó°·ÖÎöµÄÕ¤¸ñ¿í¶È\n"
-				"ÃÜ¶ÈãĞÖµ£ºÅĞ¶Ï°×ÏßµÄÍ¶Ó°ÃÜ¶ÈãĞÖµ\n"
-				"×îĞ¡°×Ïß³¤¶È(m)£ºÓĞĞ§°×Ïß¶ÎµÄ×îĞ¡³¤¶È\n"
-				"ÊÇ·ñÏÔÊ¾µ÷ÊÔ½á¹û"
+				"å‚æ•°ï¼š\n"
+				"çŸ©å½¢å®½åº¦(m)ï¼šä¸»æ–¹å‘æŠ•å½±åˆ†æçš„æ …æ ¼å®½åº¦\n"
+				"å¯†åº¦é˜ˆå€¼ï¼šåˆ¤æ–­ç™½çº¿çš„æŠ•å½±å¯†åº¦é˜ˆå€¼\n"
+				"æœ€å°ç™½çº¿é•¿åº¦(m)ï¼šæœ‰æ•ˆç™½çº¿æ®µçš„æœ€å°é•¿åº¦\n"
+				"æ˜¯å¦æ˜¾ç¤ºè°ƒè¯•ç»“æœ"
 			);
 
-			settingsDialog.registerComponent<float>("¾ØĞÎ¿í¶È", "binWidth", 0.1f);
-			settingsDialog.registerComponent<int>("ÃÜ¶ÈãĞÖµ", "densityThreshold", 10);
-			settingsDialog.registerComponent<float>("×îĞ¡°×Ïß³¤¶È", "minStripeLength", 1.0f);
-			settingsDialog.registerComponent<bool>("µ÷ÊÔÏÔÊ¾", "debugEnabled", true);
+			settingsDialog.registerComponent<float>("çŸ©å½¢å®½åº¦", "binWidth", 0.1f);
+			settingsDialog.registerComponent<int>("å¯†åº¦é˜ˆå€¼", "densityThreshold", 10);
+			settingsDialog.registerComponent<float>("æœ€å°ç™½çº¿é•¿åº¦", "minStripeLength", 1.0f);
+			settingsDialog.registerComponent<bool>("è°ƒè¯•æ˜¾ç¤º", "debugEnabled", true);
 
 			if (settingsDialog.exec() != QDialog::Accepted)
 				return;
@@ -653,7 +653,7 @@ void qSignExtractDlg::onFilteCloudByIntensity()
 {
 	if (!p_select_cloud || !dynamic_cast<ccPointCloud*>(p_select_cloud))
 	{
-		ccLog::Error("Î´Ñ¡ÔñµãÔÆ");
+		ccLog::Error("æœªé€‰æ‹©ç‚¹äº‘");
 		return;
 	}
 
@@ -667,7 +667,7 @@ void qSignExtractDlg::onFilteCloudByZ()
 {
 	if (!p_select_cloud || !dynamic_cast<ccPointCloud*>(p_select_cloud))
 	{
-		ccLog::Error("Î´Ñ¡ÔñµãÔÆ");
+		ccLog::Error("æœªé€‰æ‹©ç‚¹äº‘");
 		return;
 	}
 
@@ -681,7 +681,7 @@ void qSignExtractDlg::onFilteGround()
 {
 	if (!p_select_cloud || !dynamic_cast<ccPointCloud*>(p_select_cloud))
 	{
-		ccLog::Error("Î´Ñ¡ÔñµãÔÆ");
+		ccLog::Error("æœªé€‰æ‹©ç‚¹äº‘");
 		return;
 	}
 
@@ -723,7 +723,7 @@ void qSignExtractDlg::onMatchTemplateDirect()
 {
 	if (!p_select_cloud || !dynamic_cast<ccPointCloud*>(p_select_cloud))
 	{
-		ccLog::Error("Î´Ñ¡ÔñµãÔÆ");
+		ccLog::Error("æœªé€‰æ‹©ç‚¹äº‘");
 		return;
 	}
 
@@ -734,12 +734,12 @@ void qSignExtractDlg::onMatchTemplateDirect()
 
 void qSignExtractDlg::onMatchTemplateByBox()
 {
-	// ÏÈÈÃÓÃ»§ÔÚÊÓÍ¼ÖĞÓÃ¾ØĞÎ¿òÑ¡ÇøÓò
+	// å…ˆè®©ç”¨æˆ·åœ¨è§†å›¾ä¸­ç”¨çŸ©å½¢æ¡†é€‰åŒºåŸŸ
 	m_pointCloudSelector->startDraw();
 	m_pointCloudSelector->setDraw(DrawMode::Rectangle);
 	m_pointCloudSelector->setCallbackfunc([&]()
 		{
-			// »ñÈ¡ÓÃ»§»æÖÆµÄ±ÕºÏ¶à±ßĞÎ£¨¾ØĞÎËÄ½Ç£©
+			// è·å–ç”¨æˆ·ç»˜åˆ¶çš„é—­åˆå¤šè¾¹å½¢ï¼ˆçŸ©å½¢å››è§’ï¼‰
 			std::vector<CCVector3d> polyline;
 			m_pointCloudSelector->getPoints(polyline);
 
@@ -791,19 +791,19 @@ void qSignExtractDlg::onMakeModel()
 {
 	if (!p_select_cloud || !dynamic_cast<ccPointCloud*>(p_select_cloud))
 	{
-		QMessageBox::critical(nullptr, "´íÎó", "Î´Ñ¡ÔñµãÔÆ");
+		QMessageBox::critical(nullptr, "é”™è¯¯", "æœªé€‰æ‹©ç‚¹äº‘");
 		return;
 	}
 
-	// Ñ¡Ôñ JSON Ä£°åÎÄ¼ş
+	// é€‰æ‹© JSON æ¨¡æ¿æ–‡ä»¶
 	QString jsonFilePath = QFileDialog::getOpenFileName(
-		nullptr, "Ñ¡Ôñ JSON Ä£°åÎÄ¼ş", "", "JSON Files (*.json);;All Files (*)");
+		nullptr, "é€‰æ‹© JSON æ¨¡æ¿æ–‡ä»¶", "", "JSON Files (*.json);;All Files (*)");
 	if (jsonFilePath.isEmpty()) {
-		QMessageBox::information(nullptr, "ÌáÊ¾", "Î´Ñ¡ÔñÎÄ¼ş");
+		QMessageBox::information(nullptr, "æç¤º", "æœªé€‰æ‹©æ–‡ä»¶");
 		return;
 	}
 
-	// ¶ÁÈ¡ JSON ÎÄ¼ş
+	// è¯»å– JSON æ–‡ä»¶
 	json j;
 	{
 		std::ifstream inputFile(jsonFilePath.toStdString());
@@ -812,95 +812,95 @@ void qSignExtractDlg::onMakeModel()
 				inputFile >> j;
 			}
 			catch (...) {
-				QMessageBox::critical(nullptr, "´íÎó", "JSON ¶ÁÈ¡Ê§°Ü£¬¿ÉÄÜ¸ñÊ½´íÎó");
+				QMessageBox::critical(nullptr, "é”™è¯¯", "JSON è¯»å–å¤±è´¥ï¼Œå¯èƒ½æ ¼å¼é”™è¯¯");
 				return;
 			}
 			inputFile.close();
 		}
 		else {
-			QMessageBox::critical(nullptr, "´íÎó", "ÎŞ·¨´ò¿ª JSON ÎÄ¼ş");
+			QMessageBox::critical(nullptr, "é”™è¯¯", "æ— æ³•æ‰“å¼€ JSON æ–‡ä»¶");
 			return;
 		}
 	}
 
-	// ÓÃ»§ÊäÈëÄ£°åÃû³Æ
+	// ç”¨æˆ·è¾“å…¥æ¨¡æ¿åç§°
 	bool ok;
 	QString modelName = QInputDialog::getText(
-		nullptr, "ÊäÈëÄ£°åÃû³Æ", "ÇëÊäÈëÄ£°åÃû³Æ£º", QLineEdit::Normal, "", &ok);
+		nullptr, "è¾“å…¥æ¨¡æ¿åç§°", "è¯·è¾“å…¥æ¨¡æ¿åç§°ï¼š", QLineEdit::Normal, "", &ok);
 	if (!ok || modelName.isEmpty()) {
-		QMessageBox::information(nullptr, "ÌáÊ¾", "Î´ÊäÈëÄ£°åÃû³Æ");
+		QMessageBox::information(nullptr, "æç¤º", "æœªè¾“å…¥æ¨¡æ¿åç§°");
 		return;
 	}
 
 	ccPointCloud* p_cloud = static_cast<ccPointCloud*>(p_select_cloud);
 	if (p_cloud->size() > 100000)
 	{
-		QMessageBox::critical(nullptr, "´íÎó", "µãÔÆÌ«´ó");
+		QMessageBox::critical(nullptr, "é”™è¯¯", "ç‚¹äº‘å¤ªå¤§");
 		return;
 	}
-	// »ñÈ¡Ô­Ê¼µãÔÆºÍÂÖÀª
+	// è·å–åŸå§‹ç‚¹äº‘å’Œè½®å»“
 	PCLCloudPtr pclCloud = PointCloudIO::convert_to_PCLCloudPtr(p_cloud);
 	PCLCloudPtr outlineCloud = CloudProcess::extract_outline(pclCloud);
 	if (!outlineCloud) {
-		QMessageBox::critical(nullptr, "´íÎó", "ÂÖÀªÌáÈ¡Ê§°Ü");
+		QMessageBox::critical(nullptr, "é”™è¯¯", "è½®å»“æå–å¤±è´¥");
 		return;
 	}
 
-	// »ñÈ¡ÓÃ»§»æÖÆµÄÕÛÏß
+	// è·å–ç”¨æˆ·ç»˜åˆ¶çš„æŠ˜çº¿
 	std::vector<PCLPoint> controlPoints;
 	std::vector<std::vector<int>> polylines;
 
 	m_pointCloudDrawer->startDraw();
 	m_pointCloudDrawer->setCallbackfunc([=]() mutable
 		{
-			// ========== A. ´Ó»æÖÆÆ÷»ñÈ¡ËùÓĞÕÛÏß£¨¶àÌõ£© ==========
+			// ========== A. ä»ç»˜åˆ¶å™¨è·å–æ‰€æœ‰æŠ˜çº¿ï¼ˆå¤šæ¡ï¼‰ ==========
 			std::vector<std::vector<CCVector3d>> allPolylines;
 			m_pointCloudDrawer->getPoints(allPolylines);
 
-			// Èç¹ûÓÃ»§Ã»ÓĞ»­ÈÎºÎÕÛÏß£¬¾ÍÌáÊ¾²¢·µ»Ø
+			// å¦‚æœç”¨æˆ·æ²¡æœ‰ç”»ä»»ä½•æŠ˜çº¿ï¼Œå°±æç¤ºå¹¶è¿”å›
 			if (allPolylines.empty())
 			{
-				QMessageBox::warning(nullptr, "ÌáÊ¾", "Î´¼ì²âµ½ÈÎºÎÕÛÏß£¬ÎŞ·¨Éú³ÉÄ£°å¡£");
+				QMessageBox::warning(nullptr, "æç¤º", "æœªæ£€æµ‹åˆ°ä»»ä½•æŠ˜çº¿ï¼Œæ— æ³•ç”Ÿæˆæ¨¡æ¿ã€‚");
 				return;
 			}
 
-			// ========== B. »ñÈ¡µ±Ç°³¡¾°ÖĞËùÓĞµãÔÆ£¬²¢Ö´ĞĞ²Ã¼ô ==========
+			// ========== B. è·å–å½“å‰åœºæ™¯ä¸­æ‰€æœ‰ç‚¹äº‘ï¼Œå¹¶æ‰§è¡Œè£å‰ª ==========
 			std::vector<ccPointCloud*> clouds;
 			m_objectTree->getAllPointClouds(clouds);
 
-			// ========== C. ×¼±¸±£´æÂ·¾¶£¨PCD£© ==========
+			// ========== C. å‡†å¤‡ä¿å­˜è·¯å¾„ï¼ˆPCDï¼‰ ==========
 			QFileInfo jsonInfo(jsonFilePath);
 			QString dirPath = jsonInfo.absolutePath();
 			QString modelPath = dirPath + "/" + modelName + ".pcd";
 			QString outlinePath = dirPath + "/" + modelName + "_outline.pcd";
 
-			// --------- 1. ¶ÔÔ­Ê¼²Ã¼ôºóµãÔÆ½øĞĞÆ½Ãæ»¯´¦Àí£¬²¢±£´æµ½ modelPath ---------
+			// --------- 1. å¯¹åŸå§‹è£å‰ªåç‚¹äº‘è¿›è¡Œå¹³é¢åŒ–å¤„ç†ï¼Œå¹¶ä¿å­˜åˆ° modelPath ---------
 			{
-				// Éî¿½±´³öÒ»·İĞÂµÄµãÔÆ
+				// æ·±æ‹·è´å‡ºä¸€ä»½æ–°çš„ç‚¹äº‘
 				PCLCloudPtr flatCloud(new pcl::PointCloud<pcl::PointXYZ>);
-				*flatCloud = *pclCloud; // Öğµã¸´ÖÆÔ­Ê¼ PCLCloudPtr
+				*flatCloud = *pclCloud; // é€ç‚¹å¤åˆ¶åŸå§‹ PCLCloudPtr
 
-				// ½«ËùÓĞµãµÄ z ×ø±êÖÃÎª 0
+				// å°†æ‰€æœ‰ç‚¹çš„ z åæ ‡ç½®ä¸º 0
 				for (auto& pt : flatCloud->points)
 				{
 					pt.z = 0.0f;
 				}
 
-				// Ğ´Èë´ÅÅÌµ½ modelPath
+				// å†™å…¥ç£ç›˜åˆ° modelPath
 				if (pcl::io::savePCDFileASCII(modelPath.toStdString(), *flatCloud) < 0)
 				{
-					QMessageBox::warning(nullptr, "´íÎó", "±£´æÆ½Ãæ»¯ºóµÄ PCD ÎÄ¼şÊ§°Ü: " + modelPath);
+					QMessageBox::warning(nullptr, "é”™è¯¯", "ä¿å­˜å¹³é¢åŒ–åçš„ PCD æ–‡ä»¶å¤±è´¥: " + modelPath);
 					return;
 				}
 			}
 
-			// --------- 2. Èç¹û´æÔÚÂÖÀªµãÔÆ£¬Ôò¶ÔÆä½øĞĞÆ½Ãæ»¯²¢±£´æµ½ outlinePath ---------
+			// --------- 2. å¦‚æœå­˜åœ¨è½®å»“ç‚¹äº‘ï¼Œåˆ™å¯¹å…¶è¿›è¡Œå¹³é¢åŒ–å¹¶ä¿å­˜åˆ° outlinePath ---------
 			if (outlineCloud && !outlineCloud->empty())
 			{
 				PCLCloudPtr flatOutline(new pcl::PointCloud<pcl::PointXYZ>);
-				*flatOutline = *outlineCloud; // Éî¿½±´
+				*flatOutline = *outlineCloud; // æ·±æ‹·è´
 
-				// Í¬Ñù½«ÂÖÀªµãÔÆµÄ z È«²¿ÖÃÎª 0
+				// åŒæ ·å°†è½®å»“ç‚¹äº‘çš„ z å…¨éƒ¨ç½®ä¸º 0
 				for (auto& pt : flatOutline->points)
 				{
 					pt.z = 0.0f;
@@ -908,25 +908,25 @@ void qSignExtractDlg::onMakeModel()
 
 				if (pcl::io::savePCDFileASCII(outlinePath.toStdString(), *flatOutline) < 0)
 				{
-					QMessageBox::warning(nullptr, "´íÎó", "±£´æÆ½Ãæ»¯ºóµÄÂÖÀª PCD ÎÄ¼şÊ§°Ü: " + outlinePath);
+					QMessageBox::warning(nullptr, "é”™è¯¯", "ä¿å­˜å¹³é¢åŒ–åçš„è½®å»“ PCD æ–‡ä»¶å¤±è´¥: " + outlinePath);
 					return;
 				}
 			}
 
-			// ========== D. ¹¹Ôì JSON ¶ÔÏó²¢Ğ´ÈëÎÄ¼ş ==========
+			// ========== D. æ„é€  JSON å¯¹è±¡å¹¶å†™å…¥æ–‡ä»¶ ==========
 			json modelJson;
-			modelJson["_comment"] = "¸ÃÄ£°å°üº¬¶àÌõÕÛÏß£¬Ã¿ÌõÕÛÏß´æ·ÅÎªÒ»×é 3D ×ø±êÊı×é";
+			modelJson["_comment"] = "è¯¥æ¨¡æ¿åŒ…å«å¤šæ¡æŠ˜çº¿ï¼Œæ¯æ¡æŠ˜çº¿å­˜æ”¾ä¸ºä¸€ç»„ 3D åæ ‡æ•°ç»„";
 			modelJson["name"] = modelName.toStdString();
 			modelJson["raw_point_cloud_path"] = modelPath.toStdString();
 			modelJson["outline_point_cloud_path"] = outlinePath.toStdString();
 
-			// Ö±½Ó°´ÕÛÏß·Ö×é£¬Ã¿Ìõ polyline ÊÇÒ»¸öµãÁĞ±í£¬ÇÒ¶¼Í¶Ó°µ½ z = 0 Æ½Ãæ
+			// ç›´æ¥æŒ‰æŠ˜çº¿åˆ†ç»„ï¼Œæ¯æ¡ polyline æ˜¯ä¸€ä¸ªç‚¹åˆ—è¡¨ï¼Œä¸”éƒ½æŠ•å½±åˆ° z = 0 å¹³é¢
 			for (const auto& poly : allPolylines)
 			{
 				json lineArray = json::array();
 				for (const auto& cc3d : poly)
 				{
-					// ±£Ö¤ÕÛÏßµÄËùÓĞ¶¥µã z ×ø±ê¶¼Îª 0
+					// ä¿è¯æŠ˜çº¿çš„æ‰€æœ‰é¡¶ç‚¹ z åæ ‡éƒ½ä¸º 0
 					lineArray.push_back({ cc3d.x, cc3d.y, 0.0 });
 				}
 				modelJson["graph_elements"].push_back({
@@ -941,19 +941,19 @@ void qSignExtractDlg::onMakeModel()
 			}
 			j["models"].push_back(modelJson);
 
-			// Ğ´Èë´ÅÅÌ£¨¸²¸ÇÔ­ JSON ÎÄ¼ş£©
+			// å†™å…¥ç£ç›˜ï¼ˆè¦†ç›–åŸ JSON æ–‡ä»¶ï¼‰
 			{
 				std::ofstream outputFile(jsonFilePath.toStdString());
 				if (!outputFile.is_open())
 				{
-					QMessageBox::warning(nullptr, "´íÎó", "ÎŞ·¨´ò¿ª JSON ÎÄ¼ş: " + jsonFilePath);
+					QMessageBox::warning(nullptr, "é”™è¯¯", "æ— æ³•æ‰“å¼€ JSON æ–‡ä»¶: " + jsonFilePath);
 					return;
 				}
-				outputFile << j.dump(4); // Ëõ½ø 4 ¿Õ¸ñ
+				outputFile << j.dump(4); // ç¼©è¿› 4 ç©ºæ ¼
 				outputFile.close();
 			}
 
-			QMessageBox::information(nullptr, "³É¹¦", "Ä£°åÒÑ³É¹¦±£´æµ½ JSON ÎÄ¼ş£¡");
+			QMessageBox::information(nullptr, "æˆåŠŸ", "æ¨¡æ¿å·²æˆåŠŸä¿å­˜åˆ° JSON æ–‡ä»¶ï¼");
 		});
 }
 
@@ -966,14 +966,14 @@ void qSignExtractDlg::addCloudToDB(ccPointCloud* cloud)
 
 void qSignExtractDlg::onMatchTemplate()
 {
-	// »Øµ÷£¬µã»÷ºóÔÚ±¾µã»÷µÄµãÔÆÖĞËÑË÷ÖÜÎ§£¨Î§ÈÆÕâ¸öµã¾ÛÀà£©,´´½¨µãÔÆ£¬ ²¢Ö´ĞĞÆ¥Åä
+	// å›è°ƒï¼Œç‚¹å‡»ååœ¨æœ¬ç‚¹å‡»çš„ç‚¹äº‘ä¸­æœç´¢å‘¨å›´ï¼ˆå›´ç»•è¿™ä¸ªç‚¹èšç±»ï¼‰,åˆ›å»ºç‚¹äº‘ï¼Œ å¹¶æ‰§è¡ŒåŒ¹é…
 	m_pick_callback = [&](ccHObject* select_cloud, unsigned idx)
 	{
 
 		ccPointCloud* select_cloud_ = dynamic_cast<ccPointCloud*>(select_cloud);
 		if (!select_cloud_)
 		{
-			QMessageBox::critical(nullptr, "´íÎó", "Î´Ñ¡ÔñµãÔÆ");
+			QMessageBox::critical(nullptr, "é”™è¯¯", "æœªé€‰æ‹©ç‚¹äº‘");
 		}
 		else
 		{
@@ -991,16 +991,16 @@ void qSignExtractDlg::onMatchTemplate()
 
 void qSignExtractDlg::onItemPicked(ccHObject* entity, unsigned itemIdx, int x, int y, const CCVector3& pos, const CCVector3d&)
 {
-	// uiÊÇ×èÈûµÄ£¬Ó¦¸Ã²»ÓÃ¶îÍâ¶³½á
+	// uiæ˜¯é˜»å¡çš„ï¼Œåº”è¯¥ä¸ç”¨é¢å¤–å†»ç»“
 	if (m_pick_callback)
 	{
-		// »Ö¸´ÆÕÍ¨µÄ½»»¥,ÊµÌåÑ¡Ôñ
+		// æ¢å¤æ™®é€šçš„äº¤äº’,å®ä½“é€‰æ‹©
 		m_glWindow->setPickingMode(ccGLWindowInterface::ENTITY_PICKING);
 
-		// Ö´ĞĞ
+		// æ‰§è¡Œ
 		m_pick_callback(entity, itemIdx);
 
-		// Çå¿Õ»Øµ÷º¯ÊıµÄÖ¸Õë,·ÀÖ¹ÔÙµ÷ÓÃ
+		// æ¸…ç©ºå›è°ƒå‡½æ•°çš„æŒ‡é’ˆ,é˜²æ­¢å†è°ƒç”¨
 		m_pick_callback = nullptr;
 	}
 }
@@ -1019,7 +1019,7 @@ void qSignExtractDlg::onLeftButtonClicked(int x, int y)
 	}
 	else if (m_selectionMode == DRAW_MODEL)
 	{
-		// »æÖÆÄ£Ê½ÏÂ£¬×ó¼üµã»÷Ò²ÒªÍ¨Öª Drawer
+		// ç»˜åˆ¶æ¨¡å¼ä¸‹ï¼Œå·¦é”®ç‚¹å‡»ä¹Ÿè¦é€šçŸ¥ Drawer
 		m_pointCloudDrawer->onLeftButtonClicked(x, y);
 	}
 	m_glWindow->redraw();
@@ -1033,7 +1033,7 @@ void qSignExtractDlg::onLeftButtonDoubleClicked(int x, int y)
 	}
 	else if (m_selectionMode == DRAW_MODEL)
 	{
-		// »æÖÆÄ£Ê½ÏÂ£¬×ó¼üË«»÷½áÊøµ±Ç°ÕÛÏß»òÇĞ»»×´Ì¬
+		// ç»˜åˆ¶æ¨¡å¼ä¸‹ï¼Œå·¦é”®åŒå‡»ç»“æŸå½“å‰æŠ˜çº¿æˆ–åˆ‡æ¢çŠ¶æ€
 		m_pointCloudDrawer->onDoubleLeftButtonClicked(x, y);
 	}
 	m_glWindow->redraw();
@@ -1047,7 +1047,7 @@ void qSignExtractDlg::onRightButtonDoubleClicked(int x, int y)
 	}
 	else if (m_selectionMode == DRAW_MODEL)
 	{
-		// »æÖÆÄ£Ê½ÏÂ£¬ÓÒ¼üË«»÷Ò²¿É½áÊø»òÍË³ö»æÖÆ
+		// ç»˜åˆ¶æ¨¡å¼ä¸‹ï¼Œå³é”®åŒå‡»ä¹Ÿå¯ç»“æŸæˆ–é€€å‡ºç»˜åˆ¶
 		m_pointCloudDrawer->onDoubleRightButtonClicked(x, y);
 	}
 	m_glWindow->redraw();
@@ -1061,7 +1061,7 @@ void qSignExtractDlg::onMouseMoved(int x, int y, Qt::MouseButtons button)
 	}
 	else if (m_selectionMode == DRAW_MODEL)
 	{
-		// »æÖÆÄ£Ê½ÏÂ£¬Êó±êÒÆ¶¯ÓÃÓÚ¸üĞÂÕÛÏß¸ú×Ù
+		// ç»˜åˆ¶æ¨¡å¼ä¸‹ï¼Œé¼ æ ‡ç§»åŠ¨ç”¨äºæ›´æ–°æŠ˜çº¿è·Ÿè¸ª
 		m_pointCloudDrawer->onMouseMoved(x, y, button);
 	}
 	m_glWindow->redraw();
@@ -1075,7 +1075,7 @@ void qSignExtractDlg::onMouseWheelRotated(int delta)
 	}
 	else if (m_selectionMode == DRAW_MODEL)
 	{
-		// Èç¹ûĞèÒª£¬»æÖÆÄ£Ê½ÏÂ¹öÂÖËõ·ÅÊ±Ò²¿ÉÒÔ¸üĞÂÕÛÏßµÄÍ¶Ó°
+		// å¦‚æœéœ€è¦ï¼Œç»˜åˆ¶æ¨¡å¼ä¸‹æ»šè½®ç¼©æ”¾æ—¶ä¹Ÿå¯ä»¥æ›´æ–°æŠ˜çº¿çš„æŠ•å½±
 		m_pointCloudDrawer->onMouseWheelRotated(delta);
 	}
 	m_glWindow->redraw();
@@ -1089,7 +1089,7 @@ void qSignExtractDlg::keyPressEvent(QKeyEvent* event)
 	}
 	else if (m_selectionMode == DRAW_MODEL)
 	{
-		// »æÖÆÄ£Ê½ÏÂ£¬°´¼ü£¨Èç F/G£©ÓÃÓÚ½áÊøÕÛÏß»òÍË³ö»æÖÆ
+		// ç»˜åˆ¶æ¨¡å¼ä¸‹ï¼ŒæŒ‰é”®ï¼ˆå¦‚ F/Gï¼‰ç”¨äºç»“æŸæŠ˜çº¿æˆ–é€€å‡ºç»˜åˆ¶
 		m_pointCloudDrawer->onKeyPressEvent(event);
 	}
 }
@@ -1114,341 +1114,9 @@ void qSignExtractDlg::onEntitySelectionChanged(ccHObject* entity)
 
 void qSignExtractDlg::showThresholdHistogram(ccPointCloud* pointCloud, bool isfilterIntensity,bool is_has_threshold, float lowerThreshold, float upperThreshold)
 {
-	histogramWidget->setPointCloud(pointCloud, isfilterIntensity); // ÉèÖÃµãÔÆÊı¾İ
+	histogramWidget->setPointCloud(pointCloud, isfilterIntensity); // è®¾ç½®ç‚¹äº‘æ•°æ®
 
-	histogramWidget->setUpperAndLowerThreshold(is_has_threshold, lowerThreshold, upperThreshold); // ÉèÖÃãĞÖµ
+	histogramWidget->setUpperAndLowerThreshold(is_has_threshold, lowerThreshold, upperThreshold); // è®¾ç½®é˜ˆå€¼
 
 	histogramWidget->show();
-}
-
-// ============================================================================ CloudObjectTreeWidget
-#include <QMenu>
-#include <QAction>
-#include <QHeaderView>
-
-CloudObjectTreeWidget::CloudObjectTreeWidget(QWidget* parent)
-	: QTreeWidget(parent)
-{
-	setColumnCount(1);
-	setHeaderLabel("¶ÔÏóÄ¿Â¼");
-	setSelectionMode(QAbstractItemView::ExtendedSelection);
-	setContextMenuPolicy(Qt::DefaultContextMenu);
-
-	connect(this, &CloudObjectTreeWidget::async_refresh, this, &CloudObjectTreeWidget::refresh, Qt::QueuedConnection);
-
-	// ¸´Ñ¡¿òÉèÖÃ¿É¼ûĞÔ
-	connect(this, &QTreeWidget::itemChanged, this, [&](QTreeWidgetItem * item, int column)
-	{
-		if (!item || column != 0)
-			return;
-
-		auto obj = static_cast<ccHObject*>(item->data(0, Qt::UserRole).value<void*>());
-		if (!obj)
-			return;
-
-		bool visible = (item->checkState(0) == Qt::Checked);
-		if (!visible && *pp_select_cloud == obj)
-		{
-			obj->setSelected(false);
-			*pp_select_cloud = nullptr;
-		}
-
-		std::function<void(ccHObject*)> dfs = [&](ccHObject* object)
-		{
-			object->setVisible(visible);
-			for (int i = 0; i < object->getChildrenNumber(); ++i)
-			{
-				ccHObject* child = object->getChild(i);
-				if (child)
-				{
-					dfs(child);
-				}
-			}
-		};
-		dfs(obj);
-		emit async_refresh();
-
-		if (m_glWindow)
-			m_glWindow->redraw();
-	});
-
-	// µã»÷ÉèÖÃÑ¡ÖĞµãÔÆ
-	connect(this, &QTreeWidget::itemClicked, this, [&](QTreeWidgetItem* item, int column)
-	{
-		if (!item)return;
-		auto obj = static_cast<ccHObject*>(item->data(0, Qt::UserRole).value<void*>());
-		if (!obj || !obj->isVisible()) 
-			return;
-
-		if(*pp_select_cloud)(*pp_select_cloud)->setSelected(false);
-
-		obj->setSelected(true);
-		*pp_select_cloud = obj;
-
-		if (m_glWindow)
-			m_glWindow->redraw();
-	});
-}
-
-void CloudObjectTreeWidget::initialize(ccGLWindowInterface* win, ccMainAppInterface* app, ccHObject** select_cloud, const std::vector<ccHObject*>& objects)
-{
-	m_glWindow = win;
-	m_app = app;
-	pp_select_cloud = select_cloud;
-
-	if (objects.size())
-	{
-		originalDisplay = objects[0]->getDisplay();
-		for (auto object : objects)
-		{
-			// if (!object->getParent()) // Ö»ÓÃ·ÅÈëËùÓĞ¸ù½Úµã
-			{
-				if (object->isA(CC_TYPES::POINT_CLOUD))
-				{
-					addCloud(static_cast<ccPointCloud*>(object));
-				}
-				else
-				{
-					m_glWindow->addToOwnDB(object);
-				}
-			}
-		}
-	}
-	refresh();
-}
-
-void CloudObjectTreeWidget::addCloud(ccPointCloud* cloud, ccHObject* parent)
-{
-	// ²éÕÒÃûÎª¡°intensity¡±µÄ±êÁ¿×Ö¶Î
-	int sfIdx = -1;
-	const int sfCount = cloud->getNumberOfScalarFields();
-	for (int i = 0; i < sfCount; ++i)
-	{
-		if (QString::fromStdString(cloud->getScalarField(i)->getName()).contains("intensity", Qt::CaseInsensitive))
-		{
-			sfIdx = i;
-			break;
-		}
-	}
-
-	// Èç¹ûÕÒµ½ÁËÇ¿¶È±êÁ¿×Ö¶Î
-	if (sfIdx >= 0)
-	{
-		// ÉèÖÃ¸Ã±êÁ¿×Ö¶Î×÷ÎªÑÕÉ«ÏÔÊ¾
-		cloud->setCurrentDisplayedScalarField(sfIdx);
-		cloud->showSF(true);  // ÏÔÊ¾±êÁ¿×Ö¶Î
-		cloud->showColors(true);  // ÆôÓÃÑÕÉ«ÏÔÊ¾
-	}
-	else
-	{
-		// Èç¹ûÃ»ÓĞÇ¿¶È±êÁ¿×Ö¶Î£¬±£³ÖÄ¬ÈÏĞĞÎª
-		cloud->showSF(false);
-		//cloud->showColors(false);
-	}
-
-	cloud->setEnabled(true);
-	cloud->setVisible(true);
-
-	if(parent)
-	{
-		parent->addChild(cloud);
-	}
-	else
-	{
-		m_glWindow->addToOwnDB(cloud);
-	}
-}
-
-void CloudObjectTreeWidget::refresh()
-{
-	blockSignals(true);
-
-	clear();
-
-	if (!m_glWindow)
-		return;
-
-	ccHObject* dbRoot = m_glWindow->getOwnDB();
-	if (!dbRoot || dbRoot->getChildrenNumber() == 0)
-		return;
-
-	for (int i = 0; i < dbRoot->getChildrenNumber(); i++)
-	{
-		if (!i)root = dbRoot->getChild(i);
-		loadTreeItem(dbRoot->getChild(i), nullptr);
-	}
-	expandAll();  // Õ¹¿ªËùÓĞÏî
-
-	m_glWindow->redraw();
-
-	// »Ö¸´ĞÅºÅ´¦Àí
-	blockSignals(false);
-}
-
-void CloudObjectTreeWidget::loadTreeItem(ccHObject* object, QTreeWidgetItem* parentItem, bool isFold)
-{
-
-	QTreeWidgetItem* item = nullptr;
-	if (!isFold)
-	{
-		// ´´½¨Ê÷Ïî
-		item = new QTreeWidgetItem(parentItem);
-		item->setText(0, object->getName());  // ÉèÖÃÏîµÄÎÄ±¾Îª¶ÔÏóµÄÃû³Æ
-		item->setCheckState(0, object->isVisible() ? Qt::Checked : Qt::Unchecked);  // ÉèÖÃ¸´Ñ¡¿ò×´Ì¬
-		item->setData(0, Qt::UserRole, QVariant::fromValue<void*>(object));  // ½«¶ÔÏó°ó¶¨µ½¸ÃÏî
-
-		// ÉèÖÃÏî±êÖ¾£¬Ê¹ÆäÖ§³ÖÓÃ»§¹´Ñ¡
-		item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-		// Èç¹ûÓĞ¸¸Ïî£¬¾Í½«µ±Ç°Ïî×÷Îª¸¸ÏîµÄ×ÓÏîÌí¼Ó
-
-		if (parentItem)
-		{
-			parentItem->addChild(item);
-		}
-		else
-		{
-			addTopLevelItem(item);  // Èç¹ûÃ»ÓĞ¸¸Ïî£¬×÷Îª¸ùÏîÌí¼Ó
-		}
-		item->setSelected(object->isSelected());
-	}
-
-	// Èç¹ûÊÇÍ¼Ôª£¬ºóÃæµÄÄÚÈİÔÚÄ¿Â¼ÖĞ²»ÏÔÊ¾
-	if (dynamic_cast<MetaRoadmarking*>(object))
-	{
-		isFold = true;
-	}
-
-	// µİ¹é¼ÓÔØ×ÓÏî
-	for (int i = 0; i < object->getChildrenNumber(); ++i)
-	{
-		ccHObject* child = object->getChild(i);
-		if (child)
-		{
-			child->setDisplay(object->getDisplay()); // ÔÚÍ¬´°¿ÚÏÔÊ¾
-			loadTreeItem(child, item, isFold);  // ½«×Ó½Úµãµİ¹é¹ÒÔØµ½µ±Ç°ÏîÏÂ
-		}
-	}
-}
-
-void CloudObjectTreeWidget::contextMenuEvent(QContextMenuEvent* event)
-{
-	QMenu menu(this);
-
-	QAction* delAct = new QAction("É¾³ıËùÑ¡¶ÔÏó", &menu);
-
-	connect(delAct, &QAction::triggered, this, [=]()
-		{
-			const QList<QTreeWidgetItem*> selItems = selectedItems();
-			if (!m_glWindow || selItems.isEmpty())
-				return;
-
-			QSet<ccHObject*> delSet;
-			for (auto* item : selItems)
-			{
-				auto obj = static_cast<ccHObject*>(item->data(0, Qt::UserRole).value<void*>());
-				if (obj && obj != root)
-					delSet.insert(obj);
-			}
-
-			for (auto* obj : delSet)
-			{
-				bool skip = false;
-				for (ccHObject* p = obj->getParent(); p; p = p->getParent())
-				{
-					if (delSet.contains(p))
-					{
-						skip = true;
-						break;
-					}
-				}
-				if (skip)
-					continue;
-
-				if (*pp_select_cloud == obj)
-					*pp_select_cloud = nullptr;
-
-				if (obj->getParent())obj->getParent()->removeChild(obj);
-				else m_glWindow->removeFromOwnDB(obj);
-			}
-
-			refresh();
-		});
-
-
-	menu.addAction(delAct);
-
-	menu.exec(event->globalPos());
-}
-
-void CloudObjectTreeWidget::getAllPointClouds(std::vector<ccPointCloud*>& pointClouds)
-{
-	if (!m_glWindow)
-		return;
-
-	ccHObject* dbRoot = m_glWindow->getOwnDB();
-	if (!dbRoot || dbRoot->getChildrenNumber() == 0)
-		return;
-
-	for (int i = 0; i < dbRoot->getChildrenNumber(); ++i)
-	{
-		ccHObject* child = dbRoot->getChild(i);
-		if (child)
-		{
-			getAllPointCloudsRecursive(child, pointClouds);
-		}
-	}
-}
-
-void CloudObjectTreeWidget::getAllPointCloudsRecursive(ccHObject* object, std::vector<ccPointCloud*>& pointClouds)
-{
-	if (ccPointCloud* cloud = dynamic_cast<ccPointCloud*>(object))
-	{
-		if (cloud->isVisible())
-			pointClouds.push_back(cloud);
-	}
-
-	for (int i = 0; i < object->getChildrenNumber(); ++i)
-	{
-		ccHObject* child = object->getChild(i);
-		if (child)
-		{
-			getAllPointCloudsRecursive(child, pointClouds);
-		}
-	}
-}
-
-void CloudObjectTreeWidget::relase()
-{
-	std::function<void(ccHObject*)> dfsChild = [&](ccHObject* object)
-	{
-		if (!object)
-			return;
-
-		object->setVisible(true);
-		object->setSelected(false);
-
-		for (int i = 0; i < object->getChildrenNumber(); i++)
-		{
-			ccHObject* child = object->getChild(i);
-			if (child)
-			{
-				child->setDisplay(object->getDisplay());
-				dfsChild(child);
-			}
-		}
-	};
-
-	if (!m_glWindow)
-		return;
-
-	ccHObject* dbRoot = m_glWindow->getOwnDB();
-	if (!dbRoot || dbRoot->getChildrenNumber() == 0)
-		return;
-
-	for (int i = 0; i < dbRoot->getChildrenNumber(); i++)
-	{
-		dbRoot->getChild(i)->setDisplay(originalDisplay);
-		m_app->addToDB(dbRoot->getChild(i));
-		dfsChild(dbRoot->getChild(i));
-	}
 }

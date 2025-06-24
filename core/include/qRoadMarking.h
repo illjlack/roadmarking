@@ -4,7 +4,7 @@
 #include "ccStdPluginInterface.h"
 
 /// <summary>
-/// qRoadMarking²å¼şÓëccµÄ½Ó¿Ú
+/// qRoadMarkingæ’ä»¶ä¸ccçš„æ¥å£
 /// </summary>
 class qRoadMarking : public QObject, public ccStdPluginInterface
 {

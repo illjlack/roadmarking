@@ -11,24 +11,24 @@ namespace roadmarking
 	public:
 		RoadMarkingExtract() = default;
 
-		// ÌåËØÂË²¨
+		// ä½“ç´ æ»¤æ³¢
 		static ccCloudPtr applyVoxelGridFiltering(
 			ccCloudPtr inputCloud,
 			float voxelSize = 0.2f,
 			ccMainAppInterface* m_app = nullptr);
 
-		// CSF ÌáÈ¡µØÃæ
+		// CSF åœ°é¢æå–
 		static ccCloudPtr applyCSFGroundExtraction(
 			ccCloudPtr inputCloud,
 			ccMainAppInterface* m_app = nullptr);
 
-		// ÌáÈ¡×î´óÁ¬Í¨¿é
+		// æå–æœ€å¤§è¿é€š
 		static ccCloudPtr extractLargestComponent(
 			ccCloudPtr inputCloud,
 			float clusterRadius = 0.3f,
 			ccMainAppInterface* m_app = nullptr);
 
-		// ÌáÈ¡µÀÂ·µãÔÆ
+		// æå–é“è·¯ç‚¹
 		static ccCloudPtr extractRoadPoints(
 			ccCloudPtr inputCloud,
 			const CCVector3& seedPoint,
@@ -37,12 +37,12 @@ namespace roadmarking
 			float searchRadius = 0.3f,
 			ccMainAppInterface* m_app = nullptr);
 
-		// Ê¸Á¿»¯
+		// çŸ¢é‡åŒ–
 		static ccHObject* applyVectorization(
 			ccCloudPtr inputCloud,
 			ccMainAppInterface* m_app = nullptr);
 
-		// È«×Ô¶¯ÌáÈ¡
+		// å…¨è‡ªåŠ¨æå–
 		static void automaticExtraction(
 			ccCloudPtr inputCloud,
 			ccMainAppInterface* m_app = nullptr,

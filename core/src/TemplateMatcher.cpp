@@ -1,4 +1,4 @@
-﻿#include "TemplateMatcher.h"
+#include "TemplateMatcher.h"
 #include <pcl/surface/concave_hull.h>
 #include <pcl/surface/convex_hull.h>
 #include <pcl/filters/voxel_grid.h>

@@ -1,4 +1,4 @@
-﻿#include "ConfigManager.h"
+#include "ConfigManager.h"
 #include <fstream>
 #include <stdexcept>
 #include <filesystem>

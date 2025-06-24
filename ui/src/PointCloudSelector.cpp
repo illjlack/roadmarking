@@ -1,4 +1,4 @@
-#include "PointCloudSelector.h"
+ï»¿#include "PointCloudSelector.h"
 #include <ccColorTypes.h>
 #include <QPointF>
 
@@ -133,7 +133,7 @@ void PointCloudSelector::onMouseMoved(int x, int y, Qt::MouseButtons button)
 	}
 
 
-	// ÍÏ¶¯¸üÐÂ2DÆÁÄ»ÉÏµÄµã
+	// æ‹–åŠ¨æ›´æ–°2Då±å¹•ä¸Šçš„ç‚¹
 	if (button == Qt::RightButton)
 	{
 		updateViewPoints();
@@ -144,7 +144,7 @@ void PointCloudSelector::onMouseMoved(int x, int y, Qt::MouseButtons button)
 void PointCloudSelector::onDoubleLeftButtonClicked(int, int)
 {
 	if (!isFreezeUI && m_drawMode == DrawMode::PolylineClosed)finishDraw(true);
-	else if (!isFreezeUI) finishDraw(false); /*Ä¿Ç°ÆäËûµÄ»á×Ô¶¯ÖÕÖ¹*/
+	else if (!isFreezeUI) finishDraw(false); /*ç›®å‰å…¶ä»–çš„ä¼šè‡ªåŠ¨ç»ˆæ­¢*/
 }
 
 void PointCloudSelector::onDoubleRightButtonClicked(int, int)
@@ -187,7 +187,7 @@ void PointCloudSelector::handlePolylineClick(int x, int y)
 		m_state.polyline2D->addPointIndex(1);
 		m_state.ctrolPoints.push_back(_3DPoint);
 
-		// ÈôÊÇ±ÕºÏÄ£Ê½£¬ÖØÐÂÌí¼Ó±ÕºÏµÄÆðµãË÷Òý£¨0£©
+		// è‹¥æ˜¯é—­åˆæ¨¡å¼ï¼Œé‡æ–°æ·»åŠ é—­åˆçš„èµ·ç‚¹ç´¢å¼•ï¼ˆ0ï¼‰
 		if (m_drawMode == DrawMode::PolylineClosed)
 		{
 			m_state.polyline2D->addPointIndex(0);
@@ -195,10 +195,10 @@ void PointCloudSelector::handlePolylineClick(int x, int y)
 		m_polyState = PolyState::WaitingNewPoint;
 		break;
 	case PolyState::WaitingNewPoint:
-		// ÈôÊÇ±ÕºÏÄ£Ê½£¬ÔòÏÈÒÆ³ý±ÕºÏµÄµãË÷Òý£¨0£©
+		// è‹¥æ˜¯é—­åˆæ¨¡å¼ï¼Œåˆ™å…ˆç§»é™¤é—­åˆçš„ç‚¹ç´¢å¼•ï¼ˆ0ï¼‰
 		if (m_drawMode == DrawMode::PolylineClosed && m_state.polyline2D->size() >= 2)
 		{
-			// ÒÆ³ýÎ²²¿µÄ±ÕºÏË÷Òý£¨0£©
+			// ç§»é™¤å°¾éƒ¨çš„é—­åˆç´¢å¼•ï¼ˆ0ï¼‰
 			m_state.polyline2D->resize(m_state.polyline2D->size() - 1);
 		}
 
@@ -206,7 +206,7 @@ void PointCloudSelector::handlePolylineClick(int x, int y)
 		m_state.polyline2D->addPointIndex(m_state.pointCloud->size() - 1);
 		m_state.ctrolPoints.push_back(_3DPoint);
 
-		// ÈôÊÇ±ÕºÏÄ£Ê½£¬ÖØÐÂÌí¼Ó±ÕºÏµÄÆðµãË÷Òý£¨0£©
+		// è‹¥æ˜¯é—­åˆæ¨¡å¼ï¼Œé‡æ–°æ·»åŠ é—­åˆçš„èµ·ç‚¹ç´¢å¼•ï¼ˆ0ï¼‰
 		if (m_drawMode == DrawMode::PolylineClosed)
 		{
 			m_state.polyline2D->addPointIndex(0);
@@ -259,9 +259,9 @@ void PointCloudSelector::handleRectangleClick(int x, int y)
 void PointCloudSelector::updateViewPoints()
 {
 	ccGLCameraParameters camera;
-	// Ëõ·ÅÖÐÐÄ(viewport[0] + viewport[2]/2, viewport[1] + viewport[3]/2)ÔÚglÆÁÄ»ÉÏÊÇÓÒÉÏ½Ç£¬ ÐèÒªÒÆµ½ÖÐÐÄ
-	// ²»ÖªµÀÄÚ²¿µÄ¹ý³ÌÎªÊ²Ã´»á²úÉúÕâÑùµÄ½á¹û
-	// ÊÖ¶¯ÐÞÕý
+	// ç¼©æ”¾ä¸­å¿ƒ(viewport[0] + viewport[2]/2, viewport[1] + viewport[3]/2)åœ¨glå±å¹•ä¸Šæ˜¯å³ä¸Šè§’ï¼Œ éœ€è¦ç§»åˆ°ä¸­å¿ƒ
+	// ä¸çŸ¥é“å†…éƒ¨çš„è¿‡ç¨‹ä¸ºä»€ä¹ˆä¼šäº§ç”Ÿè¿™æ ·çš„ç»“æžœ
+	// æ‰‹åŠ¨ä¿®æ­£
 	m_glWindow->getGLCameraParameters(camera);
 	camera.viewport[0] = -camera.viewport[2] / 2;
 	camera.viewport[1] = -camera.viewport[3] / 2;

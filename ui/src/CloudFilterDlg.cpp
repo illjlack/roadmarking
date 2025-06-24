@@ -12,17 +12,17 @@ ThresholdHistogramWidget::ThresholdHistogramWidget(QWidget* parent)
 	: QWidget(parent), lowerPos(50), upperPos(200)
 {
 	this->setGeometry(100, 100, 600, 400);
-	// ³õÊ¼»¯UI²¼¾ÖºÍ¿Ø¼ş
-	confirmButton = new QPushButton(tr("È·¶¨"), this);
-	// Ê¹ÓÃ´¹Ö±²¼¾Ö½«°´Å¥·ÅÔÚÖ±·½Í¼ÏÂ·½
+	// åˆå§‹åŒ–UIå¸ƒå±€å’Œæ§ä»¶
+	confirmButton = new QPushButton(tr("ç¡®å®š"), this);
+	// ä½¿ç”¨å‚ç›´å¸ƒå±€å°†æŒ‰é’®æ”¾åœ¨ç›´æ–¹å›¾ä¸‹æ–¹
 	QVBoxLayout* mainLayout = new QVBoxLayout(this);
-	mainLayout->addStretch();  // ÉÏ·½µ¯ĞÔÇøÓò£¬Õ¼¾İÖ±·½Í¼»æÖÆÇøÓò
+	mainLayout->addStretch();  // ä¸Šæ–¹å¼¹æ€§åŒºåŸŸï¼Œå æ®ç›´æ–¹å›¾ç»˜åˆ¶åŒºåŸŸ
 	QHBoxLayout* buttonLayout = new QHBoxLayout();
-	buttonLayout->addStretch();             // ×ó²àµ¯ĞÔÇøÓò£¬Ê¹°´Å¥¿¿ÓÒ
-	buttonLayout->addWidget(confirmButton); // Ìí¼ÓÈ·¶¨°´Å¥
-	mainLayout->addLayout(buttonLayout);    // ½«Ë®Æ½²¼¾ÖÌí¼Óµ½Ö÷²¼¾Öµ×²¿
+	buttonLayout->addStretch();             // å·¦ä¾§å¼¹æ€§åŒºåŸŸï¼Œä½¿æŒ‰é’®é å³
+	buttonLayout->addWidget(confirmButton); // æ·»åŠ ç¡®å®šæŒ‰é’®
+	mainLayout->addLayout(buttonLayout);    // å°†æ°´å¹³å¸ƒå±€æ·»åŠ åˆ°ä¸»å¸ƒå±€åº•éƒ¨
 
-	// Á¬½Ó°´Å¥µã»÷ĞÅºÅµ½²Ûº¯Êı
+	// è¿æ¥æŒ‰é’®ç‚¹å‡»ä¿¡å·åˆ°æ§½å‡½æ•°
 	connect(confirmButton, &QPushButton::clicked, this, &ThresholdHistogramWidget::onConfirmButtonClicked);
 }
 
@@ -44,18 +44,18 @@ void ThresholdHistogramWidget::setPointCloud(ccPointCloud* pointCloud, bool isfi
 		computeZRangeAndHistogramData();
 		this->isfilterIntensity = isfilterIntensity;
 	}
-	update();                // ¸üĞÂÏÔÊ¾
+	update();                // æ›´æ–°æ˜¾ç¤º
 }
 
 void ThresholdHistogramWidget::setUpperAndLowerThreshold(bool is_has_threshold, float lowerPos, float upperPos)
 {
 	if (is_has_threshold) {
-		// Èç¹û´«ÈëÁËãĞÖµ£¬Ê¹ÓÃ´«ÈëµÄÖµ
+		// å¦‚æœä¼ å…¥äº†é˜ˆå€¼ï¼Œä½¿ç”¨ä¼ å…¥çš„å€¼
 		this->lowerPos = lowerPos;
 		this->upperPos = upperPos;
 	}
 	else {
-		// Èç¹ûÃ»ÓĞ´«ÈëãĞÖµ£¬Ê¹ÓÃµãÔÆÊı¾İµÄ×îĞ¡ºÍ×î´óÇ¿¶ÈÖµ×÷ÎªãĞÖµ
+		// å¦‚æœæ²¡æœ‰ä¼ å…¥é˜ˆå€¼ï¼Œä½¿ç”¨ç‚¹äº‘æ•°æ®çš„æœ€å°å’Œæœ€å¤§å¼ºåº¦å€¼ä½œä¸ºé˜ˆå€¼
 		this->lowerPos = minScalar;
 		this->upperPos = maxScalar;
 	}
@@ -66,7 +66,7 @@ void ThresholdHistogramWidget::setUpperAndLowerThreshold(bool is_has_threshold, 
 		pointCloud->getDisplay()->redraw(false, true);
 		QApplication::processEvents();
 	}
-	update(); // ¸üĞÂÏÔÊ¾
+	update(); // æ›´æ–°æ˜¾ç¤º
 }
 
 void ThresholdHistogramWidget::paintEvent(QPaintEvent* event)
@@ -74,17 +74,17 @@ void ThresholdHistogramWidget::paintEvent(QPaintEvent* event)
 	if (!pointCloud)return;
 	QPainter painter(this);
 	painter.setRenderHint(QPainter::Antialiasing);
-	drawHistogram(painter); // »æÖÆÖ±·½Í¼
+	drawHistogram(painter); // ç»˜åˆ¶ç›´æ–¹å›¾
 }
 
 void ThresholdHistogramWidget::mousePressEvent(QMouseEvent* event) {
 	int debug_x = event->x();
 
 	if (event->x() >= lowerPosX - 5 && event->x() <= lowerPosX + 5) {
-		draggingLower = true; // Èç¹ûµã»÷ÔÚÏÂãĞÖµ¸½½ü£¬¿ªÊ¼ÍÏ¶¯ÏÂãĞÖµ
+		draggingLower = true; // å¦‚æœç‚¹å‡»åœ¨ä¸‹é˜ˆå€¼é™„è¿‘ï¼Œå¼€å§‹æ‹–åŠ¨ä¸‹é˜ˆå€¼
 	}
 	else if (event->x() >= upperPosX -5 && event->x() <= upperPosX + 5) {
-		draggingUpper = true; // Èç¹ûµã»÷ÔÚÉÏãĞÖµ¸½½ü£¬¿ªÊ¼ÍÏ¶¯ÉÏãĞÖµ
+		draggingUpper = true; // å¦‚æœç‚¹å‡»åœ¨ä¸Šé˜ˆå€¼é™„è¿‘ï¼Œå¼€å§‹æ‹–åŠ¨ä¸Šé˜ˆå€¼
 	}
 }
 
@@ -96,7 +96,7 @@ void ThresholdHistogramWidget::mouseMoveEvent(QMouseEvent* event)
 		if (newPos >= 0 && newPos <= 255 && newPos < upperPos - 5)
 		{
 			setUpperAndLowerThreshold(true, newPos, upperPos);
-			update(); // ¸üĞÂÏÔÊ¾
+			update(); // æ›´æ–°æ˜¾ç¤º
 		}
 	}
 	else if (draggingUpper)
@@ -104,13 +104,13 @@ void ThresholdHistogramWidget::mouseMoveEvent(QMouseEvent* event)
 		if (newPos >= 0 && newPos <= 255 && newPos > lowerPos + 5)
 		{
 			setUpperAndLowerThreshold(true, lowerPos, newPos);
-			update(); // ¸üĞÂÏÔÊ¾
+			update(); // æ›´æ–°æ˜¾ç¤º
 		}
 	}
 }
 
 void ThresholdHistogramWidget::mouseReleaseEvent(QMouseEvent* event) {
-	draggingLower = draggingUpper = false; // ÊÍ·ÅÍÏ¶¯±êÖ¾
+	draggingLower = draggingUpper = false; // é‡Šæ”¾æ‹–åŠ¨æ ‡å¿—
 }
 
 void ThresholdHistogramWidget::drawHistogram(QPainter& painter) {
@@ -164,14 +164,14 @@ void ThresholdHistogramWidget::drawHistogram(QPainter& painter) {
 	painter.drawText(lowerPosX + 10, histHeight + 15, QString("Lower: %1").arg(getValue(lowerPos)));
 	painter.drawText(upperPosX + 10, histHeight + 15, QString("Upper: %1").arg(getValue(upperPos)));
 
-	// Çø¼äÄÚµãÊı£¨ÓÒÉÏ½Ç£©
-	QString countText = QString("Çø¼äÄÚµãÊı: %1 , ×ÜµãÊı: %2")
+	// åŒºé—´å†…ç‚¹æ•°ï¼ˆå³ä¸Šè§’ï¼‰
+	QString countText = QString("åŒºé—´å†…ç‚¹æ•°: %1 , æ€»ç‚¹æ•°: %2")
 		.arg(inRangeCount)
 		.arg(static_cast<int>(pointCloud->size()));
 	int textWidth = painter.fontMetrics().horizontalAdvance(countText);
 	painter.drawText(
-		width() - textWidth - 10,  // ÓÒ²àÁô 10px
-		15,                        // ¾àÀë¶¥²¿ 15px
+		width() - textWidth - 10,  // å³ä¾§ç•™ 10px
+		15,                        // è·ç¦»é¡¶éƒ¨ 15px
 		countText);
 }
 
@@ -188,20 +188,20 @@ void ThresholdHistogramWidget::computeIntensityRangeAndHistogramData()
 
 		if (!sf)return;
 
-		// ±éÀúµãÔÆÊı¾İ£¬¼ÆËãÇ¿¶ÈµÄ×îĞ¡ÖµºÍ×î´óÖµ
+		// éå†ç‚¹äº‘æ•°æ®ï¼Œè®¡ç®—å¼ºåº¦çš„æœ€å°å€¼å’Œæœ€å¤§å€¼
 		for (unsigned i = 0; i < pointCloud->size(); ++i)
 		{
 			const float intensity = sf->getValue(i);
 			minScalar = std::min(minScalar, intensity);
 			maxScalar = std::max(maxScalar, intensity);
 		}
-		std::vector<int>(256, 0).swap(histogram); // ³õÊ¼»¯Ö±·½Í¼Êı¾İ
+		std::vector<int>(256, 0).swap(histogram); // åˆå§‹åŒ–ç›´æ–¹å›¾æ•°æ®
 		for (unsigned i = 0; i < pointCloud->size(); ++i)
 		{
 			const float intensity = sf->getValue(i);
-			int bin = (int)(255 * (intensity - minScalar) / (maxScalar - minScalar)); // Ó³Éäµ½0-255Çø¼ä
-			bin = std::min(std::max(bin, 0), 255); // È·±£binÔÚÓĞĞ§·¶Î§ÄÚ
-			++histogram[bin]; // Ôö¼ÓÏàÓ¦binµÄ¼ÆÊı
+			int bin = (int)(255 * (intensity - minScalar) / (maxScalar - minScalar)); // æ˜ å°„åˆ°0-255åŒºé—´
+			bin = std::min(std::max(bin, 0), 255); // ç¡®ä¿binåœ¨æœ‰æ•ˆèŒƒå›´å†…
+			++histogram[bin]; // å¢åŠ ç›¸åº”binçš„è®¡æ•°
 		}
 	}
 }
@@ -213,7 +213,7 @@ void ThresholdHistogramWidget::computeZRangeAndHistogramData()
 		minScalar = std::numeric_limits<float>::max();
 		maxScalar = std::numeric_limits<float>::lowest();
 
-		// ±éÀúµãÔÆÊı¾İ£¬¼ÆËãÇ¿¶ÈµÄ×îĞ¡ÖµºÍ×î´óÖµ
+		// éå†ç‚¹äº‘æ•°æ®ï¼Œè®¡ç®—å¼ºåº¦çš„æœ€å°å€¼å’Œæœ€å¤§å€¼
 		for (unsigned i = 0; i < pointCloud->size(); ++i)
 		{
 			const float z = pointCloud->getPoint(i)->z;
@@ -221,11 +221,11 @@ void ThresholdHistogramWidget::computeZRangeAndHistogramData()
 			maxScalar = std::max(maxScalar, z);
 		}
 
-		histogram.resize(256, 0); // ³õÊ¼»¯Ö±·½Í¼Êı¾İ
+		histogram.resize(256, 0); // åˆå§‹åŒ–ç›´æ–¹å›¾æ•°æ®
 		for (unsigned i = 0; i < pointCloud->size(); ++i)
 		{
 			const float z = pointCloud->getPoint(i)->z;
-			int bin = (int)(255 * (z - minScalar) / (maxScalar - minScalar)); // Ó³Éäµ½0-255Çø¼ä
+			int bin = (int)(255 * (z - minScalar) / (maxScalar - minScalar)); // æ˜ å°„åˆ°0-255åŒºé—´
 			bin = std::min(std::max(bin, 0), 255);
 			++histogram[bin];
 		}
@@ -234,8 +234,8 @@ void ThresholdHistogramWidget::computeZRangeAndHistogramData()
 
 void ThresholdHistogramWidget::onConfirmButtonClicked()
 {
-	// µã»÷¡°È·¶¨¡±°´Å¥´¦Àí£º
-	// ÏÈ½ûÓÃµãÔÆµÄãĞÖµ¹ıÂËÄ£Ê½£¬È»ºóÉú³ÉĞÂµÄµãÔÆ
+	// ç‚¹å‡»â€œç¡®å®šâ€æŒ‰é’®å¤„ç†ï¼š
+	// å…ˆç¦ç”¨ç‚¹äº‘çš„é˜ˆå€¼è¿‡æ»¤æ¨¡å¼ï¼Œç„¶åç”Ÿæˆæ–°çš„ç‚¹äº‘
 	if (pointCloud) {
 		pointCloud->setUpperAndLowerThreshold(false);
 	}
@@ -276,7 +276,7 @@ float ThresholdHistogramWidget::getValue(float pos)
 
 int ThresholdHistogramWidget::getPos(float posX)
 {
-	// ´°¿Ú×óÓÒ±ß½çÁô20¿í¶È
+	// çª—å£å·¦å³è¾¹ç•Œç•™20å®½åº¦
 	return (posX - 20) / ((width() - 40) / 256);
 }
 

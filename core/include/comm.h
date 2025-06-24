@@ -17,19 +17,19 @@ extern ccMainAppInterface* GApp;
 #include <sstream>
 #include <pcl/octree/octree.h>
 
-// ======================================================= ÀàĞÍ
+// ======================================================= é€šç”¨
 
 /// <summary>
-/// ¿ÉÒÔÊÍ·ÅËùÓĞÈ¨(²»×Ô¶¯Îö¹¹)µÄÖÇÄÜÖ¸Õë
+/// å¯ç§»åŠ¨å…±äº«æ‰€æœ‰æƒ(è‡ªåŠ¨ç®¡ç†)çš„æ™ºèƒ½æŒ‡é’ˆ
 /// </summary>
-/// <typeparam name="T">¶ÔÏóÀàĞÍ</typeparam>
+/// <typeparam name="T">æ•°æ®ç±»å‹</typeparam>
 template <typename T>
 class MovableSharedPtr : public std::shared_ptr<T> {
 private:
-	std::shared_ptr<std::atomic<bool>> m_is_move;  // ¹²ÏíµÄ×ªÒÆ±ê¼Ç
+	std::shared_ptr<std::atomic<bool>> m_is_move;  // æ‰€æœ‰æƒè½¬ç§»æ ‡å¿—
 
 public:
-	// Ä¬ÈÏ¹¹Ôì£¬Ö§³ÖÔ­ÉúÖ¸Õë£¬´ø×Ô¶¨ÒåÉ¾³ıÆ÷
+	// é»˜è®¤æ„é€ ï¼Œæ”¯æŒåŸå§‹æŒ‡é’ˆï¼Œè‡ªåŠ¨ç®¡ç†åˆ é™¤å™¨
 	template <typename Deleter = std::default_delete<T>>
 	explicit MovableSharedPtr(T* ptr = nullptr, Deleter deleter = Deleter())
 	{
@@ -45,19 +45,19 @@ public:
 			);
 	}
 
-	// nullptr ¼æÈİ¹¹Ôìº¯Êı
+	// nullptr æ‹·è´æ„é€ å‡½æ•°
 	MovableSharedPtr(std::nullptr_t)
 		: std::shared_ptr<T>(nullptr),
 		m_is_move(std::make_shared<std::atomic<bool>>(false))
 	{}
 
-	// ¸´ÖÆ¹¹Ôì
+	// æ‹·è´æ„é€ 
 	MovableSharedPtr(const MovableSharedPtr& other)
 		: std::shared_ptr<T>(other),
 		m_is_move(other.m_is_move)
 	{}
 
-	// ¸³ÖµÔËËã·û
+	// èµ‹å€¼æ“ä½œ
 	MovableSharedPtr& operator=(const MovableSharedPtr& other) {
 		if (this != &other) {
 			std::shared_ptr<T>::operator=(other);
@@ -67,19 +67,19 @@ public:
 	}
 
 	/// <summary>
-	/// ½»³öËùÓĞÈ¨
-	/// £¨Ô­Àí£º´Ë¹²ÏíÖ¸ÕëÄÚ²¿°üº¬Ò»¸ö¹²ÏíÖ¸ÕëÖ¸Ïò±ê¼Ç,´Ë±ê¼Ç±íÊ¾ÊÇ·ñÊÍ·ÅÁËËùÓĞÈ¨£©
+	/// é‡Šæ”¾æ‰€æœ‰æƒ
+	/// å°†åŸå§‹å…±äº«æŒ‡é’ˆå†…éƒ¨è½¬ç§»åˆ°ä¸€ä¸ªæ–°çš„æŒ‡é’ˆæŒ‡å‘ï¼Œæ­¤æ ‡å¿—è¡¨ç¤ºæ˜¯å¦é‡Šæ”¾åŸå§‹æ‰€æœ‰æƒ
 	/// </summary>
-	/// <returns>ÆÕÍ¨Ö¸Õë</returns>
+	/// <returns>æ™®é€šæŒ‡é’ˆ</returns>
 	T* release() {
-		*m_is_move = true;  // ±ê¼ÇËùÓĞ¶ÔÏóÒÑ×ªÒÆ
+		*m_is_move = true;  // æ ‡è®°ä¸ºæ‰€æœ‰æƒè½¬ç§»
 		return this->get();
 	}
 
 	/// <summary>
-	/// ÅĞ¶Ï¹²ÏíÖ¸ÕëÊÇ·ñ½»³öËùÓĞÈ¨
+	/// åˆ¤æ–­å…±äº«æŒ‡é’ˆæ˜¯å¦å·²äº¤å‡ºæ‰€æœ‰æƒ
 	/// </summary>
-	/// <returns>ÊÇ·ñ½»³öËùÓĞÈ¨</returns>
+	/// <returns>æ˜¯å¦å·²äº¤å‡ºæ‰€æœ‰æƒ</returns>
 	bool isMoved() const {
 		return *m_is_move;
 	}
@@ -102,8 +102,8 @@ using PCLOctreePtr = pcl::octree::OctreePointCloudSearch<pcl::PointXYZ>::Ptr;
 template <typename... PointClouds>
 void visualizePointClouds(
 	const QString& title,
-	const std::vector<QString>& dynamic_text = {},  // ¶¯Ì¬ÎÄ±¾
-	PointClouds&&... clouds  // ÕÛµş²ÎÊı£¬ÓÃÓÚ½ÓÊÕ¶à¸öµãÔÆ
+	const std::vector<QString>& dynamic_text = {},  // åŠ¨æ€æ–‡æœ¬
+	PointClouds&&... clouds  // æŠ˜å è¡¨è¾¾å¼ç”¨äºæ¥æ”¶å¤šä¸ªå‚æ•°
 )
 {
 	pcl::visualization::PCLVisualizer viewer(title.toStdString());
@@ -114,7 +114,7 @@ void visualizePointClouds(
 
 	size_t cloud_index = 0;
 	([&] {
-		// ÎªÃ¿¸öµãÔÆÉèÖÃ²»Í¬µÄÑÕÉ«
+		// ä¸ºæ¯ä¸ªç‚¹äº‘è®¾ç½®ä¸åŒçš„é¢œè‰²
 		pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> color(
 			std::forward<PointClouds>(clouds),
 			255 - (cloud_index * 50),
@@ -126,45 +126,45 @@ void visualizePointClouds(
 		id << "cloud_" << cloud_index;
 		cloud_ids.push_back(id.str());
 
-		// ½«µãÔÆÌí¼Óµ½ÊÓÍ¼Æ÷
+		// å°†ç‚¹äº‘æ·»åŠ åˆ°å¯è§†åŒ–
 		viewer.addPointCloud(std::forward<PointClouds>(clouds), color, cloud_ids[cloud_index]);
 
-		// ¼ÆËãÃ¿¸öµãÔÆµÄÖĞĞÄ
+		// è®¡ç®—æ¯ä¸ªç‚¹äº‘çš„è´¨å¿ƒ
 		Eigen::Vector4f centroid;
 		pcl::compute3DCentroid(*std::forward<PointClouds>(clouds), centroid);
-		overall_centroid += centroid;  // ÀÛ¼Ó
+		overall_centroid += centroid;  // ç´¯ç§¯
 		total_points += clouds->size();
 
 		++cloud_index;
-		}(), ...);  // Ê¹ÓÃÕÛµş±í´ïÊ½Õ¹¿ª¶à¸öµãÔÆ
+		}(), ...);  // ä½¿ç”¨æŠ˜å è¡¨è¾¾å¼å±•å¼€å‚æ•°
 
-		// ¼ÆËãËùÓĞµãÔÆµÄÕûÌåÖĞĞÄ
+		// è®¡ç®—æ‰€æœ‰ç‚¹äº‘çš„å¹³å‡è´¨å¿ƒ
 	overall_centroid /= cloud_index;
 
-	// Ìí¼Ó×ø±êÏµ
+	// æ·»åŠ åæ ‡ç³»
 	viewer.addCoordinateSystem(1.0);
-	viewer.setBackgroundColor(0, 0, 0);  // ÉèÖÃ±³¾°ÑÕÉ«ÎªºÚÉ«
+	viewer.setBackgroundColor(0, 0, 0);  // è®¾ç½®èƒŒæ™¯è‰²ä¸ºé»‘è‰²
 
-	// ÉèÖÃÏà»úÊÓ½Ç£¬¾Û½¹ÔÚËùÓĞµãÔÆµÄÖĞĞÄ
+	// è®¾ç½®ç›¸æœºè§†è§’ï¼Œèšç„¦åœ¨æ‰€æœ‰ç‚¹äº‘çš„è´¨å¿ƒ
 	viewer.setCameraPosition(
 		overall_centroid[0], overall_centroid[1], overall_centroid[2] + 10,
 		overall_centroid[0], overall_centroid[1], overall_centroid[2],
-		0, -1, 0  // ¹Û²ìÄ¿±êµã¡¢ÊÓ½ÇºÍÉÏ·½Ïò
+		0, -1, 0  // è§‚å¯Ÿç›®æ ‡ç‚¹ã€è§†è§’å’Œä¸Šæ–¹å‘
 	);
 
-	// ÏÔÊ¾µãÔÆ¸öÊı
+	// æ˜¾ç¤ºç‚¹äº‘ä¸ªæ•°
 	std::stringstream cloud_count_text;
 	cloud_count_text << "Total Points: " << total_points;
 	viewer.addText(cloud_count_text.str(), 10, 10, 1.0, 1.0, 1.0, "cloud_count_text");
 
-	// ÏÔÊ¾¶¯Ì¬ÎÄ±¾
+	// æ˜¾ç¤ºåŠ¨æ€æ–‡æœ¬
 	int y_offset = 30;
 	for (const auto& text : dynamic_text) {
 		viewer.addText(text.toStdString(), 10, y_offset, 1.0, 1.0, 1.0, "dynamic_text_" + std::to_string(y_offset));
-		y_offset += 20;  // Ã¿¸öÎÄ±¾ÏÂÒÆ20ÏñËØ
+		y_offset += 20;  // æ¯ä¸ªæ–‡æœ¬é—´éš”20åƒç´ 
 	}
 
-	// ³ÖĞøÏÔÊ¾Ö±µ½¹Ø±Õ´°¿Ú
+	// å¾ªç¯æ˜¾ç¤ºç›´åˆ°å…³é—­çª—å£
 	while (!viewer.wasStopped()) {
 		viewer.spinOnce();
 	}
@@ -173,59 +173,59 @@ void visualizePointClouds(
 
 inline void visualizePointCloudWithNormals(
 	const QString& title,
-	const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, // µ¥¸öµãÔÆ
-	const pcl::PointCloud<pcl::Normal>::Ptr& normals,  // ¶ÔÓ¦µÄ·¨ÏòÁ¿
-	const std::vector<QString>& dynamic_text = {}      // ¶¯Ì¬ÎÄ±¾
+	const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, // ç‚¹äº‘æ•°æ®
+	const pcl::PointCloud<pcl::Normal>::Ptr& normals,  // å¯¹åº”çš„æ³•å‘é‡
+	const std::vector<QString>& dynamic_text = {}      // åŠ¨æ€æ–‡æœ¬
 )
 {
 	pcl::visualization::PCLVisualizer viewer(title.toStdString());
 
-	std::string cloud_id = "cloud_0"; // Ö»ÓĞÒ»¸öµãÔÆ
+	std::string cloud_id = "cloud_0"; // åªæœ‰ä¸€ä¸ªç‚¹äº‘
 	std::string normals_id = "normals_0";
 
-	// ÉèÖÃµãÔÆµÄÑÕÉ«
+	// è®¾ç½®ç‚¹äº‘çš„é¢œè‰²
 	pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> color(cloud, 255, 0, 0);
 
-	// Ìí¼ÓµãÔÆµ½ÊÓÍ¼Æ÷
+	// æ·»åŠ ç‚¹äº‘åˆ°å¯è§†åŒ–
 	viewer.addPointCloud(cloud, color, cloud_id);
 
-	// Ìí¼Ó·¨ÏòÁ¿
+	// æ·»åŠ æ³•å‘é‡
 	viewer.addPointCloudNormals<pcl::PointXYZ, pcl::Normal>(cloud, normals, 1, 0.05, normals_id);
 
-	// ¼ÆËãµãÔÆµÄÖĞĞÄ
+	// è®¡ç®—ç‚¹äº‘çš„è´¨å¿ƒ
 	Eigen::Vector4f centroid;
 	pcl::compute3DCentroid(*cloud, centroid);
 
-	// ÉèÖÃ×ø±êÏµ
+	// æ·»åŠ åæ ‡ç³»
 	viewer.addCoordinateSystem(1.0);
-	viewer.setBackgroundColor(0, 0, 0);  // ÉèÖÃ±³¾°ÑÕÉ«ÎªºÚÉ«
+	viewer.setBackgroundColor(0, 0, 0);  // è®¾ç½®èƒŒæ™¯è‰²ä¸ºé»‘è‰²
 
-	// ÉèÖÃÏà»úÊÓ½Ç£¬¾Û½¹ÔÚµãÔÆµÄÖĞĞÄ
+	// è®¾ç½®ç›¸æœºè§†è§’ï¼Œèšç„¦åœ¨ç‚¹äº‘çš„è´¨å¿ƒ
 	viewer.setCameraPosition(
 		centroid[0], centroid[1], centroid[2] + 10,
 		centroid[0], centroid[1], centroid[2],
-		0, -1, 0  // ¹Û²ìÄ¿±êµã¡¢ÊÓ½ÇºÍÉÏ·½Ïò
+		0, -1, 0  // è§‚å¯Ÿç›®æ ‡ç‚¹ã€è§†è§’å’Œä¸Šæ–¹å‘
 	);
 
-	// ÏÔÊ¾µãÔÆ¸öÊı
+	// æ˜¾ç¤ºç‚¹äº‘ä¸ªæ•°
 	std::stringstream cloud_count_text;
 	cloud_count_text << "Total Points: " << cloud->size();
 	viewer.addText(cloud_count_text.str(), 10, 10, 1.0, 1.0, 1.0, "cloud_count_text");
 
-	// ÏÔÊ¾¶¯Ì¬ÎÄ±¾
+	// æ˜¾ç¤ºåŠ¨æ€æ–‡æœ¬
 	int y_offset = 30;
 	for (const auto& text : dynamic_text) {
 		viewer.addText(text.toStdString(), 10, y_offset, 1.0, 1.0, 1.0, "dynamic_text_" + std::to_string(y_offset));
-		y_offset += 20;  // Ã¿¸öÎÄ±¾ÏÂÒÆ20ÏñËØ
+		y_offset += 20;  // æ¯ä¸ªæ–‡æœ¬é—´éš”20åƒç´ 
 	}
 
-	// ³ÖĞøÏÔÊ¾Ö±µ½¹Ø±Õ´°¿Ú
+	// å¾ªç¯æ˜¾ç¤ºç›´åˆ°å…³é—­çª—å£
 	while (!viewer.wasStopped()) {
 		viewer.spinOnce();
 	}
 }
 
-// =====================================================ÈÕÖ¾
+// ===================================================== æ—¥å¿—
 #define _SILENCE_CXX17_BYTE_DEPRECATION_WARNING
 #include <QDebug>
 #include <QFile>
@@ -248,35 +248,35 @@ public:
 		return *this;
 	}
 
-	// ÌØ»¯´¦Àí QString ÀàĞÍ
+	// è½¬æ¢ä¸º QString ç±»å‹
 	inline LogHelper& operator<<(const QString& value)
 	{
 		stream_ << value.toStdString();
 		return *this;
 	}
 
-	// ÌØ»¯´¦Àí std::string ÀàĞÍ
+	// è½¬æ¢ä¸º std::string ç±»å‹
 	inline LogHelper& operator<<(const std::string& value)
 	{
 		stream_ << value;
 		return *this;
 	}
 
-	// ÌØ»¯´¦Àí const char* ÀàĞÍ
+	// è½¬æ¢ä¸º const char* ç±»å‹
 	inline LogHelper& operator<<(const char* value)
 	{
 		stream_ << value;
 		return *this;
 	}
 
-	// ÌØ»¯´¦Àí int ÀàĞÍ
+	// è½¬æ¢ä¸º int ç±»å‹
 	inline LogHelper& operator<<(int value)
 	{
 		stream_ << value;
 		return *this;
 	}
 
-	// ÌØ»¯´¦Àí double ÀàĞÍ
+	// è½¬æ¢ä¸º double ç±»å‹
 	inline LogHelper& operator<<(double value)
 	{
 		stream_ << value;
@@ -305,10 +305,10 @@ private:
 	int line_;
 
 
-	// ÎÄ¼şÂ·¾¶£¨Äã¿ÉÒÔÑ¡Ôñ×Ô¼ºÉè¶¨Â·¾¶£©
+	// æ–‡ä»¶è·¯å¾„é€‰æ‹©ï¼Œå¯ä»¥è®¾ç½®è·¯å¾„
 	const QString logFilePath = "logfile.txt";
 
-	// Êä³öÈÕÖ¾µ½ÎÄ¼ş
+	// å†™å…¥æ—¥å¿—æ–‡ä»¶
 	inline void logToFile(const QString& logMessage)
 	{
 		QFile file(logFilePath);
@@ -320,11 +320,11 @@ private:
 	}
 };
 
-// Á÷Ê½ºê¶¨Òå
+// æ ¼å¼åŒ–å®å®šä¹‰
 #define UILog LogHelper(__FILE__, __LINE__)
 
 
-// ===================================================== ¼ÆÊ±Æ÷
+// ===================================================== è®¡æ—¶
 #include <QElapsedTimer>
 #include <ccMainAppInterface.h>
 #include <QCoreApplication>
@@ -359,7 +359,7 @@ public:
 	}
 };
 
-// ===================================================== ½ø¶ÈÌõ
+// ===================================================== è¿›åº¦æ¡
 #include <QProgressDialog>
 class ProgressDialog
 {
@@ -392,7 +392,7 @@ public:
 	}
 };
 
-// ======================================================= ÉèÖÃ´°¿Ú
+// ======================================================= è®¾ç½®å¯¹è¯æ¡†
 #include <QDialog>
 #include <QLineEdit>
 #include <QComboBox>
@@ -422,28 +422,28 @@ public:
 		: QDialog(parent) {
 		setWindowTitle("Settings");
 
-		// ÉèÖÃ²¼¾Ö
+		// æ·»åŠ éƒ¨ä»¶
 		layout = new QFormLayout(this);
 
-		// È·ÈÏ°´Å¥
+		// ç¡®å®šæŒ‰é’®
 		QPushButton* okButton = new QPushButton("OK", this);
 		layout->addRow(okButton);
 		connect(okButton, &QPushButton::clicked, this, &SettingsDialog::onOkClicked);
 	}
 
-	// ÉèÖÃ´°¿Ú±êÌâ
+	// è®¾ç½®å¯¹è¯æ¡†æ ‡é¢˜
 	inline void setWindowTitle(const char* title) {
-		QDialog::setWindowTitle(title);  // µ÷ÓÃ¸¸ÀàµÄÉèÖÃ±êÌâº¯Êı
+		QDialog::setWindowTitle(title);  // è°ƒç”¨çˆ¶ç±»çš„æ–¹æ³•
 	}
 
-	// ÉèÖÃÃèÊöÎÄ±¾
+	// è®¾ç½®æè¿°æ–‡æœ¬
 	inline void setDescription(const char* description) {
 		QLabel* descriptionLabel = new QLabel(description, this);
-		descriptionLabel->setWordWrap(true);  // ÉèÖÃÎÄ±¾×Ô¶¯»»ĞĞ
-		layout->addRow(descriptionLabel);  // ½«ÃèÊö±êÇ©Ìí¼Óµ½²¼¾ÖÖĞ
+		descriptionLabel->setWordWrap(true);  // è‡ªåŠ¨æ¢è¡Œ
+		layout->addRow(descriptionLabel);  // æ·»åŠ æè¿°æ ‡ç­¾åˆ°å¸ƒå±€
 	}
 
-	// ×¢²á¿Ø¼ş£¨ÀıÈçQLineEdit¡¢QComboBoxµÈ£©
+	// æ³¨æ„å…³é”®éƒ¨ä»¶ï¼Œå¦‚QLineEditå’ŒQComboBoxç­‰ï¼Œ
 	template<typename T>
 	inline void registerComponent(const QString& label, const QString& name, const T& defaultValue) {
 		QWidget* widget = nullptr;
@@ -485,13 +485,13 @@ public:
 
 		if (widget) {
 			layout->addRow(new QLabel(label, this), widget);
-			components[name] = widget;  // ±£´æ¿Ø¼şÓëÆäÃû³Æ
-			types[name] = type;  // ±£´æ¿Ø¼şµÄÀàĞÍ
-			defaultValues[name] = QVariant::fromValue(defaultValue); // ±£´æÄ¬ÈÏÖµ
+			components[name] = widget;  // å­˜å‚¨å…³é”®éƒ¨ä»¶å’Œå®ƒä»¬çš„æ˜ å°„
+			types[name] = type;  // å­˜å‚¨å…³é”®éƒ¨ä»¶ç±»å‹
+			defaultValues[name] = QVariant::fromValue(defaultValue); // å­˜å‚¨é»˜è®¤å€¼
 		}
 	}
 
-	// »ñÈ¡ÓÃ»§ÊäÈëµÄ²ÎÊı
+	// è·å–ç”¨æˆ·è¾“å…¥çš„å‚æ•°
 	inline QMap<QString, QVariant> getParameters() const {
 		QMap<QString, QVariant> result;
 		for (auto it = components.begin(); it != components.end(); ++it) {
@@ -500,10 +500,10 @@ public:
 
 			if (auto lineEdit = dynamic_cast<QLineEdit*>(component)) {
 				QString text = lineEdit->text();
-				const QVariant& defaultValue = defaultValues[it.key()];  // »ñÈ¡¿Ø¼şµÄÄ¬ÈÏÖµ
+				const QVariant& defaultValue = defaultValues[it.key()];  // è·å–å…³é”®éƒ¨ä»¶é»˜è®¤å€¼
 
 				if (text.isEmpty()) {
-					result[it.key()] = defaultValue.isNull() ? QVariant() : defaultValue;  // Èç¹ûÎª¿Õ£¬·µ»ØÄ¬ÈÏÖµ
+					result[it.key()] = defaultValue.isNull() ? QVariant() : defaultValue;  // å¦‚æœä¸ºç©ºï¼Œè¿”å›é»˜è®¤å€¼
 				}
 				else {
 					switch (type) {
@@ -535,12 +535,12 @@ public:
 
 private slots:
 	inline void onOkClicked() {
-		accept(); // È·ÈÏºó¹Ø±Õ´°¿Ú
+		accept(); // ç¡®å®šå…³é—­å¯¹è¯æ¡†
 	}
 
 private:
 	QFormLayout* layout;
-	QMap<QString, QWidget*> components;  // ´æ´¢¿Ø¼şÓëÆäÃû³ÆµÄÓ³Éä
-	QMap<QString, QVariant> defaultValues; // ´æ´¢Ä¬ÈÏÖµ
-	QMap<QString, ComponentType> types;  // ´æ´¢¿Ø¼şµÄÀàĞÍ
+	QMap<QString, QWidget*> components;  // å­˜å‚¨å…³é”®éƒ¨ä»¶å’Œå®ƒä»¬çš„æ˜ å°„
+	QMap<QString, QVariant> defaultValues; // å­˜å‚¨é»˜è®¤å€¼
+	QMap<QString, ComponentType> types;  // å­˜å‚¨å…³é”®éƒ¨ä»¶ç±»å‹
 };

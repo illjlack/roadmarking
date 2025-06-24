@@ -1,4 +1,4 @@
-﻿#include "qRoadMarking.h"
+#include "qRoadMarking.h"
 
 #include <QObject>
 #include <QPoint>

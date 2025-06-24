@@ -9,24 +9,24 @@ ccCloudPtr PointCloudIO::get_selected_cloud_from_DB(ccMainAppInterface* p_app)
 	const ccHObject::Container& selectedEntities = p_app->getSelectedEntities();
 	if (selectedEntities.empty())
 	{
-		p_app->dispToConsole("ÇëÏÈÑ¡ÔñÖÁÉÙÒ»¸öµãÔÆ", ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+		p_app->dispToConsole("è¯·å…ˆé€‰æ‹©è‡³å°‘ä¸€ä¸ªç‚¹äº‘", ccMainAppInterface::ERR_CONSOLE_MESSAGE);
 		return nullptr;
 	}
 	for (ccHObject* ent : selectedEntities)
 	{
 		if (ent->isA(CC_TYPES::POINT_CLOUD))
 		{
-			// ÉúÃüÖÜÆÚ¹éÇ°¶Ë¹ÜÀí, Ê¹ÓÃ¿ÕµÄÎö¹¹º¯Êı
+			// è¿™é‡Œä¸ç®¡ç†å½“å‰ç‚¹äº‘ï¼Œä½¿ç”¨ç©ºåˆ é™¤å™¨
 			return ccCloudPtr(static_cast<ccPointCloud*>(ent), [](ccPointCloud*) {});
 		}
 	}
-	p_app->dispToConsole("Ñ¡ÔñµÄÊµÌå²»ÊÇµãÔÆ", ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+	p_app->dispToConsole("é€‰æ‹©çš„å®ä½“ä¸æ˜¯ç‚¹äº‘", ccMainAppInterface::ERR_CONSOLE_MESSAGE);
 	return nullptr;
 }
 
 ccCloudPtr PointCloudIO::convert_to_ccCloudPtr(ccPointCloud* p_cloud)
 {
-	// ÉúÃüÖÜÆÚ¹éÇ°¶Ë¹ÜÀí, Ê¹ÓÃ¿ÕµÄÎö¹¹º¯Êı
+	// è¿™é‡Œä¸ç®¡ç†å½“å‰ç‚¹äº‘ï¼Œä½¿ç”¨ç©ºåˆ é™¤å™¨
 	return ccCloudPtr(static_cast<ccPointCloud*>(p_cloud), [](ccPointCloud*) {});
 }
 
@@ -35,7 +35,7 @@ std::vector<ccHObject*> PointCloudIO::get_selected_clouds_from_DB(ccMainAppInter
 	const ccHObject::Container& selectedEntities = app->getSelectedEntities();
 	if (selectedEntities.empty())
 	{
-		app->dispToConsole("ÇëÏÈÑ¡ÔñÖÁÉÙÒ»¸öµãÔÆ", ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+		app->dispToConsole("è¯·å…ˆé€‰æ‹©è‡³å°‘ä¸€ä¸ªç‚¹äº‘", ccMainAppInterface::ERR_CONSOLE_MESSAGE);
 		return {};
 	}
 	return selectedEntities;
@@ -48,13 +48,13 @@ ccCloudPtr PointCloudIO::convert_to_ccCloudPtr(ccHObject* ob, ccMainAppInterface
 	{
 		return ccCloudPtr(static_cast<ccPointCloud*>(ob), [](ccPointCloud*) {});
 	}
-	if(app)app->dispToConsole("Ñ¡ÔñµÄÊµÌå²»ÊÇµãÔÆ", ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+	if(app)app->dispToConsole("é€‰æ‹©çš„å®ä½“ä¸æ˜¯ç‚¹äº‘", ccMainAppInterface::ERR_CONSOLE_MESSAGE);
 	return nullptr;
 }
 
 void PointCloudIO::save_ccCloudPtr_to_DB(ccMainAppInterface* app, ccCloudPtr cloud)
 {
-	// ÍêÈ«»ñµÃµãÔÆµÄËùÓĞÈ¨,ÉúÃüÖÜÆÚ½»¸øÇ°¶Ë¿ØÖÆ
+	// å®Œå…¨è½¬ç§»ç‚¹äº‘æ‰€æœ‰æƒï¼Œäº¤ç”±ä¸»ç•Œé¢ç®¡ç†
 	ccPointCloud* cccloud = cloud.release();
 
 	app->addToDB(cccloud);

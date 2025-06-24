@@ -31,20 +31,19 @@
 
 #include "PointCloudSelector.h"
 #include "PointCloudDrawing.h"
-// Ç°ÏòÉùÃ÷
-class CloudObjectTreeWidget;
+#include "CloudObjectTreeWidget.h"
 
-// Ñ¡ÔñÄ£Ê½Ã¶¾Ù
+// é€‰æ‹©æ¨¡å¼æšä¸¾
 enum SelectionMode
 {
-	ENTITY_SELECTION,  // ÊµÌåÑ¡Ôñ×´Ì¬
-	POINT_SELECTION,   // µãÑ¡ÔñÄ£Ê½
-	DRAW_SELECTION,    // ¶à±ßĞÎ¿òÑ¡Ä£Ê½
-	DRAW_MODEL	       // Ä£°å»æÖÆ
+	ENTITY_SELECTION,  // å®ä½“é€‰æ‹©çŠ¶æ€
+	POINT_SELECTION,   // ç‚¹é€‰æ‹©æ¨¡å¼
+	DRAW_SELECTION,    // å¤šè¾¹å½¢æ¡†é€‰æ¨¡å¼
+	DRAW_MODEL	       // æ¨¡æ¿ç»˜åˆ¶
 };
 
 /// <summary>
-/// qSignExtractDlg ÀàÓÃÓÚµãÔÆÌáÈ¡¶Ô»°¿ò´¦Àí
+/// qSignExtractDlg ç±»ç”¨äºç‚¹äº‘æå–å¯¹è¯æ¡†å¤„ç†
 /// </summary>
 class qSignExtractDlg : public QDialog
 {
@@ -59,16 +58,16 @@ protected:
 	void keyPressEvent(QKeyEvent* event) override;
 
 private slots:
-	void onAutoExtract();        // È«×Ô¶¯ÌáÈ¡
-	void onBoxSelectExtract();   // ¿òÑ¡ÌáÈ¡
-	void onPointGrowExtract();   // µãÉú³¤ÌáÈ¡
-	void onBoxClip();            // ¿òÑ¡½ØÈ¡
+	void onAutoExtract();        // å…¨è‡ªåŠ¨æå–
+	void onBoxSelectExtract();   // æ¡†é€‰æå–
+	void onPointGrowExtract();   // ç‚¹ç”Ÿé•¿æå–
+	void onBoxClip();            // æ¡†é€‰æˆªå–
 	void onMatchTemplateDirect();
 	void onMatchTemplateByBox();
 	void onMatchTemplate();
 	void onRectClip();
 	void onMakeModel();
-	void onFilteCloudByIntensity();         // ¹ıÂËµãÔÆ
+	void onFilteCloudByIntensity();         // è¿‡æ»¤ç‚¹äº‘
 	void onFilteCloudByZ();
 	void onFilteGround();
 	void onZebraExtract();
@@ -92,63 +91,18 @@ private slots:
 private:
 	void showThresholdHistogram(ccPointCloud* pointCloud, bool isfilterIntensity, bool is_has_threshold = true, float lowerThreshold = 50, float upperThreshold = 250);
 
-	bool m_selecting = false;          // ÊÇ·ñÕıÔÚÑ¡Ôñ
-	ccHObject* p_select_cloud = nullptr; // Ñ¡ÔñµÄµãÔÆ¶ÔÏó
+	bool m_selecting = false;          // æ˜¯å¦æ­£åœ¨é€‰æ‹©
+	ccHObject* p_select_cloud = nullptr; // é€‰æ‹©çš„ç‚¹äº‘å¯¹è±¡
 	ThresholdHistogramWidget* histogramWidget;
 	QWidget* m_glWidget = nullptr;      // OpenGL Widget
-	ccMainAppInterface* m_app = nullptr; // Ö÷³ÌĞò½Ó¿Ú
-	ccGLWindowInterface* m_glWindow = nullptr;  // OpenGL ´°¿Ú½Ó¿Ú
+	ccMainAppInterface* m_app = nullptr; // ä¸»ç¨‹åºæ¥å£
+	ccGLWindowInterface* m_glWindow = nullptr;  // OpenGL çª—å£æ¥å£
 
-	CloudObjectTreeWidget* m_objectTree = nullptr; // ¶ÔÏóÊ÷
-	SelectionMode m_selectionMode = ENTITY_SELECTION; // Ñ¡ÔñÄ£Ê½
+	CloudObjectTreeWidget* m_objectTree = nullptr; // å¯¹è±¡æ ‘
+	SelectionMode m_selectionMode = ENTITY_SELECTION; // é€‰æ‹©æ¨¡å¼
 
-	cc_interact::PointCloudSelector* m_pointCloudSelector; // Ç°¾°ÕÛÏß±à¼­Æ÷
+	cc_interact::PointCloudSelector* m_pointCloudSelector; // å‰æ™¯æŠ˜çº¿ç¼–è¾‘å™¨
 	cc_drawing::PointCloudDrawer* m_pointCloudDrawer;
 
-	std::function<void(ccHObject*, unsigned)> m_pick_callback; // Ñ¡µãÈÎÎñµÄ»Øµ÷º¯Êı
-};
-
-/// <summary>
-/// CloudObjectTreeWidget ÀàÓÃÓÚ¹ÜÀíµãÔÆ¶ÔÏóÄ¿Â¼Ê÷
-/// </summary>
-class CloudObjectTreeWidget : public QTreeWidget
-{
-	Q_OBJECT
-
-public:
-	explicit CloudObjectTreeWidget(QWidget* parent = nullptr);
-
-	/// <summary>
-	/// ³õÊ¼»¯Ä¿Â¼Ê÷£¬°ó¶¨´°¿ÚºÍ¸ù½ÚµãµãÔÆ
-	/// </summary>
-	void initialize(ccGLWindowInterface* win, ccMainAppInterface* app, ccHObject** select_cloud, const std::vector<ccHObject*>& objects);
-
-	void addCloud(ccPointCloud* cloud, ccHObject* parent = nullptr);  // Ìí¼ÓµãÔÆ
-
-	void relase();	 // ÊÍ·ÅµãÔÆµ½Ô­´°¿Ú
-
-	void getAllPointClouds(std::vector<ccPointCloud*>& pointClouds);  // »ñÈ¡ËùÓĞµãÔÆ
-
-signals:
-	void async_refresh();
-
-public slots:
-	void refresh();
-
-protected:
-	void loadTreeItem(ccHObject* object, QTreeWidgetItem* parentItem, bool isFold = false);
-
-	void contextMenuEvent(QContextMenuEvent* event) override;
-
-	void getAllPointCloudsRecursive(ccHObject* object, std::vector<ccPointCloud*>& pointClouds); // µİ¹é»ñÈ¡ËùÓĞµãÔÆ
-
-private:
-	ccHObject* root = nullptr;  // ¸ù½Úµã
-	ccHObject** pp_select_cloud = nullptr;  // Ñ¡ÔñµÄµãÔÆ¶ÔÏóÖ¸Õë
-	ccMainAppInterface* m_app = nullptr;  // Ö÷³ÌĞò½Ó¿Ú
-	ccGLWindowInterface* m_glWindow = nullptr;  // OpenGL ´°¿Ú½Ó¿Ú
-
-	ccGenericGLDisplay* originalDisplay;  // Ô­Ê¼ÏÔÊ¾¶ÔÏó
-
-
+	std::function<void(ccHObject*, unsigned)> m_pick_callback; // é€‰ç‚¹ä»»åŠ¡çš„å›è°ƒå‡½æ•°
 };

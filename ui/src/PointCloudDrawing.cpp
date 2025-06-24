@@ -25,14 +25,14 @@ void PointCloudDrawer::setCallbackfunc(std::function<void()> callback)
 
 void PointCloudDrawer::startDraw()
 {
-	// ±¸·İµ±Ç°Ïà»ú½»»¥ºÍÊ°È¡Ä£Ê½
+	// å¤‡ä»½å½“å‰ç›¸æœºäº¤äº’å’Œæ‹¾å–æ¨¡å¼
 	interaction_flags_backup = m_glWindow->getInteractionMode();
 	picking_mode_backup = m_glWindow->getPickingMode();
 
-	// ·¢ËÍ»æÖÆ¿ªÊ¼ĞÅºÅ
+	// å‘é€ç»˜åˆ¶å¼€å§‹ä¿¡å·
 	emit draw_start();
 
-	// ÇĞ»»µ½Õı¸©ÊÓ£¬²¢½«½»»¥Ä£Ê½ÏŞ¶¨ÎªÆ½ÒÆ£¬½ûÖ¹ÆäËûÊ°È¡
+	// åˆ‡æ¢åˆ°æ­£ä¿¯è§†ï¼Œå¹¶å°†äº¤äº’æ¨¡å¼é™å®šä¸ºå¹³ç§»ï¼Œç¦æ­¢å…¶ä»–æ‹¾å–
 	m_glWindow->setView(CC_TOP_VIEW);
 	m_glWindow->setInteractionMode(ccGLWindowInterface::MODE_PAN_ONLY | ccGLWindowInterface::INTERACT_SEND_ALL_SIGNALS);
 	m_glWindow->setPickingMode(ccGLWindowInterface::NO_PICKING);
@@ -56,13 +56,13 @@ void PointCloudDrawer::startDraw()
 	m_currentPolyIndex = 0;
 	m_polyState = PolyState::WaitingFirstPoint;
 
-	// ½«Ê×Ìõ polyline2D Ìí¼Óµ½³¡¾°
+	// å°†é¦–æ¡ polyline2D æ·»åŠ åˆ°åœºæ™¯
 	m_glWindow->addToOwnDB(m_state.polyline2D.back());
 }
 
 void PointCloudDrawer::resetDraw()
 {
-	// »Ö¸´×î´óµãÊıºÍ¶³½á±êÖ¾¡¢×´Ì¬
+	// æ¢å¤æœ€å¤§ç‚¹æ•°å’Œå†»ç»“æ ‡å¿—ã€çŠ¶æ€
 	isFreezeUI = false;
 	m_polyState = PolyState::WaitingFirstPoint;
 	is_readyExit = false;
@@ -82,10 +82,10 @@ void PointCloudDrawer::getPoints(std::vector<std::vector<CCVector3d>>& polylines
 
 		for (unsigned i = 0; i < count; ++i)
 		{
-			// »ñÈ¡µÚ i ¸ö¶¥µãÔÚ 3D ¿ØÖÆµãÊı×éÖĞµÄË÷Òı
+			// è·å–ç¬¬ i ä¸ªé¡¶ç‚¹åœ¨ 3D æ§åˆ¶ç‚¹æ•°ç»„ä¸­çš„ç´¢å¼•
 			unsigned pointIndex = polyline->getPointGlobalIndex(i);
 
-			// È·±£Ë÷ÒıÔÚ ctrolPoints ·¶Î§ÄÚ
+			// ç¡®ä¿ç´¢å¼•åœ¨ ctrolPoints èŒƒå›´å†…
 			if (pointIndex < m_state.ctrolPoints.size())
 			{
 				polylines.back().push_back(m_state.ctrolPoints[pointIndex]);
@@ -107,16 +107,16 @@ void PointCloudDrawer::onMouseMoved(int x, int y, Qt::MouseButtons button)
 	if (isFreezeUI || m_currentPolyIndex < 0)
 		return;
 
-	// ½« Qt ÆÁÄ»×ø±ê×ª»»ÎªÖĞĞÄ»¯µÄ GL ×ø±ê
+	// å°† Qt å±å¹•åæ ‡è½¬æ¢ä¸ºä¸­å¿ƒåŒ–çš„ GL åæ ‡
 	QPointF pos2D = m_glWindow->toCenteredGLCoordinates(x, y);
 	CCVector3 mouse2D(static_cast<PointCoordinateType>(pos2D.x()),
 		static_cast<PointCoordinateType>(pos2D.y()),
 		0);
 
-	// ÊµÊ±¸üĞÂµ±Ç°ÕÛÏßµÄ×îºóÒ»¸öµã£¨¸ú×ÙÊó±êÎ»ÖÃ£©
+	// å®æ—¶æ›´æ–°å½“å‰æŠ˜çº¿çš„æœ€åä¸€ä¸ªç‚¹ï¼ˆè·Ÿè¸ªé¼ æ ‡ä½ç½®ï¼‰
 	m_state.updateTracking(m_polyState, mouse2D);
 
-	// Èç¹ûÓÒ¼üÍÏ×§£¬ÔòË¢ĞÂËùÓĞÕÛÏßÔÚÆÁÄ»ÉÏµÄÍ¶Ó°
+	// å¦‚æœå³é”®æ‹–æ‹½ï¼Œåˆ™åˆ·æ–°æ‰€æœ‰æŠ˜çº¿åœ¨å±å¹•ä¸Šçš„æŠ•å½±
 	if (button == Qt::RightButton)
 	{
 		updateViewPoints();
@@ -128,7 +128,7 @@ void PointCloudDrawer::onDoubleLeftButtonClicked(int /*x*/, int /*y*/)
 	if (isFreezeUI || m_currentPolyIndex < 0)
 		return;
 
-	// Çé¿ö1£ºÈô´¦ÓÚ¡°µÈ´ıĞÂµã¡±×´Ì¬£¬Ôò½áÊøµ±Ç°ÕÛÏß£¬´´½¨ÏÂÒ»Ìõ¿ÕÕÛÏß
+	// æƒ…å†µ1ï¼šè‹¥å¤„äºâ€œç­‰å¾…æ–°ç‚¹â€çŠ¶æ€ï¼Œåˆ™ç»“æŸå½“å‰æŠ˜çº¿ï¼Œåˆ›å»ºä¸‹ä¸€æ¡ç©ºæŠ˜çº¿
 	if (!is_readyExit)
 	{
 		finishSinglePolyline(true);
@@ -178,7 +178,7 @@ void PointCloudDrawer::onKeyPressEvent(QKeyEvent* event)
 			finishDraw(true);
 		}
 	}
-	// °´ G ¼ü½áÊøµ±Ç°ÕÛÏßµ«²»Ö´ĞĞ»Øµ÷ »ò ÍË³ö»æÖÆ
+	// æŒ‰ G é”®ç»“æŸå½“å‰æŠ˜çº¿ä½†ä¸æ‰§è¡Œå›è°ƒ æˆ– é€€å‡ºç»˜åˆ¶
 	else if (event->key() == Qt::Key_G)
 	{
 		if (!is_readyExit)
@@ -194,19 +194,19 @@ void PointCloudDrawer::onKeyPressEvent(QKeyEvent* event)
 
 void PointCloudDrawer::handlePolylineClick(int x, int y)
 {
-	// ½«Êó±êµã»÷µÄÆÁÄ»×ø±ê×ª»»ÎªÖĞĞÄ»¯ GL ×ø±ê
+	// å°†é¼ æ ‡ç‚¹å‡»çš„å±å¹•åæ ‡è½¬æ¢ä¸ºä¸­å¿ƒåŒ– GL åæ ‡
 	QPointF pos2D = m_glWindow->toCenteredGLCoordinates(x, y);
 	CCVector3 newPoint2D(static_cast<PointCoordinateType>(pos2D.x()),
 		static_cast<PointCoordinateType>(pos2D.y()),
 		0);
 
-	// »ñÈ¡µ±Ç°Ïà»ú²ÎÊı£¬²¢½« viewport Ô­µãÆ½ÒÆµ½ÖĞĞÄ
+	// è·å–å½“å‰ç›¸æœºå‚æ•°ï¼Œå¹¶å°† viewport åŸç‚¹å¹³ç§»åˆ°ä¸­å¿ƒ
 	ccGLCameraParameters camera;
 	m_glWindow->getGLCameraParameters(camera);
 	camera.viewport[0] = -camera.viewport[2] / 2;
 	camera.viewport[1] = -camera.viewport[3] / 2;
 
-	// ·´Í¶Ó°£º´Ó 2D µãµÃµ½¶ÔÓ¦µÄ 3D ×ø±ê
+	// åæŠ•å½±ï¼šä» 2D ç‚¹å¾—åˆ°å¯¹åº”çš„ 3D åæ ‡
 	CCVector3d newPoint3D;
 	camera.unproject(newPoint2D, newPoint3D);
 
@@ -235,7 +235,7 @@ void PointCloudDrawer::handlePolylineClick(int x, int y)
 
 void PointCloudDrawer::updateViewPoints()
 {
-	// »ñÈ¡µ±Ç°Ïà»ú²ÎÊı²¢½« viewport Ô­µãÆ½ÒÆµ½ÖĞĞÄ
+	// è·å–å½“å‰ç›¸æœºå‚æ•°å¹¶å°† viewport åŸç‚¹å¹³ç§»åˆ°ä¸­å¿ƒ
 	ccGLCameraParameters camera;
 	m_glWindow->getGLCameraParameters(camera);
 	camera.viewport[0] = -camera.viewport[2] / 2;
@@ -247,7 +247,7 @@ void PointCloudDrawer::updateViewPoints()
 
 void PointCloudDrawer::finishSinglePolyline(bool isUsed)
 {
-	// ¶³½á UI£¬·ÀÖ¹ÔÚĞÂÕÛÏß´´½¨Ê±³öÏÖ¸ÉÈÅ
+	// å†»ç»“ UIï¼Œé˜²æ­¢åœ¨æ–°æŠ˜çº¿åˆ›å»ºæ—¶å‡ºç°å¹²æ‰°
 	isFreezeUI = true;
 
 	if (isUsed)
@@ -255,7 +255,7 @@ void PointCloudDrawer::finishSinglePolyline(bool isUsed)
 		m_state.pointCloud->resize(m_state.pointCloud->size() - 1);
 		m_state.polyline2D.back()->resize(m_state.polyline2D.back()->size() - 1);
 
-		// ´´½¨ÏÂÒ»Ìõ¿ÕÕÛÏß£¬¹©ÓÃ»§¼ÌĞø»æÖÆ
+		// åˆ›å»ºä¸‹ä¸€æ¡ç©ºæŠ˜çº¿ï¼Œä¾›ç”¨æˆ·ç»§ç»­ç»˜åˆ¶
 		m_state.polyline2D.push_back(new ccPolyline(m_state.pointCloud));
 		m_state.polyline2D.back()->setColor(ccColor::green);
 		m_state.polyline2D.back()->showColors(true);
@@ -280,17 +280,17 @@ void PointCloudDrawer::finishSinglePolyline(bool isUsed)
 
 void PointCloudDrawer::finishDraw(bool doAction)
 {
-	// ¶³½á UI£¬·ÀÖ¹ÔÚ»Ö¸´½»»¥¹ı³ÌÖĞÏìÓ¦ÆäËûÊÂ¼ş
+	// å†»ç»“ UIï¼Œé˜²æ­¢åœ¨æ¢å¤äº¤äº’è¿‡ç¨‹ä¸­å“åº”å…¶ä»–äº‹ä»¶
 	isFreezeUI = true;
 
 	if (doAction && m_callback)
 		m_callback();
 
-	// »Ö¸´´°¿ÚÔ­½»»¥Ä£Ê½ÓëÊ°È¡Ä£Ê½
+	// æ¢å¤çª—å£åŸäº¤äº’æ¨¡å¼ä¸æ‹¾å–æ¨¡å¼
 	m_glWindow->setInteractionMode(interaction_flags_backup);
 	m_glWindow->setPickingMode(picking_mode_backup);
 
-	// ´¥·¢¡°»æÖÆÁ÷³Ì³¹µ×½áÊø¡±ĞÅºÅ
+	// è§¦å‘â€œç»˜åˆ¶æµç¨‹å½»åº•ç»“æŸâ€ä¿¡å·
 	emit draw_finish();
 
 	for (auto poly : m_state.polyline2D)

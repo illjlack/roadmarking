@@ -14,10 +14,10 @@ using namespace roadmarking;
 
 ccCloudPtr RoadMarkingExtract::applyVoxelGridFiltering(ccCloudPtr inputCloud, float voxelSize, ccMainAppInterface* m_app)
 {
-	Timer timer("ÌåËØÂË²¨");
+	Timer timer("ä½“ç´ æ»¤æ³¢");
 	if (!inputCloud)
 	{
-		if (m_app) m_app->dispToConsole("Î´Ñ¡ÔñµãÔÆ");
+		if (m_app) m_app->dispToConsole("æœªé€‰æ‹©ç‚¹äº‘");
 		return nullptr;
 	}
 
@@ -25,41 +25,41 @@ ccCloudPtr RoadMarkingExtract::applyVoxelGridFiltering(ccCloudPtr inputCloud, fl
 	filteredCloud->setName("downsampledCloud");
 
 	if (m_app)
-		timer.elapsed(m_app, "ÌåËØÂË²¨Íê³É");
+		timer.elapsed(m_app, "ä½“ç´ æ»¤æ³¢å®Œæˆ");
 	return filteredCloud;
 }
 
 ccCloudPtr RoadMarkingExtract::applyCSFGroundExtraction(ccCloudPtr inputCloud, ccMainAppInterface* m_app)
 {
-	Timer timer("CSF ÌáÈ¡µØÃæµãÔÆ");
+	Timer timer("CSF åœ°é¢æå–å¤„ç†");
 
 	if (!inputCloud)
 	{
-		if (m_app) m_app->dispToConsole("Î´Ñ¡ÔñµãÔÆ");
+		if (m_app) m_app->dispToConsole("æœªé€‰æ‹©ç‚¹äº‘");
 		return nullptr;
 	}
 
 	ccCloudPtr filteredCloud = CloudProcess::apply_csf_ground_extraction(inputCloud);
 	if (!filteredCloud)
 	{
-		if (m_app) m_app->dispToConsole("CSF ´¦ÀíÊ§°Ü");
+		if (m_app) m_app->dispToConsole("CSF å¤„ç†å¤±è´¥");
 		return nullptr;
 	}
 
 	filteredCloud->setName("groundCloud");
 
 	if (m_app)
-		timer.elapsed(m_app, "CSF ´¦ÀíÍê³É");
+		timer.elapsed(m_app, "CSF å¤„ç†å®Œæˆ");
 	return filteredCloud;
 }
 
 ccCloudPtr RoadMarkingExtract::extractLargestComponent(ccCloudPtr inputCloud, float clusterRadius, ccMainAppInterface* m_app)
 {
-	Timer timer("Å·Ê½¾ÛÀàÌáÈ¡×î´óÁ¬Í¨¿é");
+	Timer timer("æ¬§å¼èšç±»æå–æœ€å¤§è¿é€š");
 
 	if (!inputCloud)
 	{
-		if (m_app) m_app->dispToConsole("Î´Ñ¡ÔñµãÔÆ");
+		if (m_app) m_app->dispToConsole("æœªé€‰æ‹©ç‚¹äº‘");
 		return nullptr;
 	}
 
@@ -67,7 +67,7 @@ ccCloudPtr RoadMarkingExtract::extractLargestComponent(ccCloudPtr inputCloud, fl
 	PCLCloudPtr filteredCloud = CloudProcess::extract_max_cloud_by_euclidean_cluster(pclCloud, clusterRadius);
 	if (!filteredCloud)
 	{
-		if (m_app) m_app->dispToConsole("ÕÒ²»µ½×î´óÁªÍ¨¿é");
+		if (m_app) m_app->dispToConsole("æ‰¾ä¸åˆ°æœ€å¤§è¿é€š");
 		return nullptr;
 	}
 
@@ -75,7 +75,7 @@ ccCloudPtr RoadMarkingExtract::extractLargestComponent(ccCloudPtr inputCloud, fl
 	ccFilteredCloud->setName("LargestRoadComponent");
 
 	if (m_app)
-		timer.elapsed(m_app, "ÕÒµ½×î´óÁ¬Í¨¿é");
+		timer.elapsed(m_app, "æ‰¾åˆ°æœ€å¤§è¿é€š");
 	return ccFilteredCloud;
 }
 
@@ -85,20 +85,20 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 	float angleThreshold, float searchRadius
 	)
 {
-	Timer timer("È«×Ô¶¯ÌáÈ¡");
+	Timer timer("å…¨è‡ªåŠ¨æå–");
 
 	if (!inputCloud)
 	{
-		if (m_app) m_app->dispToConsole("Î´Ñ¡ÔñµãÔÆ");
+		if (m_app) m_app->dispToConsole("æœªé€‰æ‹©ç‚¹äº‘");
 		return;
 	}
 
 	PCLCloudPtr pclCloud = PointCloudIO::convert_to_PCLCloudPtr(inputCloud);
-	if (m_app) timer.restart(m_app, "×ª»»pclµãÔÆ");
+	if (m_app) timer.restart(m_app, "è½¬æ¢pclæ•°æ®");
 
-	// 2.================================ÌåËØÂË²¨
+	// 2.================================ä½“ç´ æ»¤æ³¢
 	PCLCloudPtr voxelCloud = CloudProcess::apply_voxel_grid_filtering(pclCloud, voxelSize);
-	if (m_app) timer.restart(m_app, "ÌåËØÂË²¨³É¹¦");
+	if (m_app) timer.restart(m_app, "ä½“ç´ æ»¤æ³¢æˆåŠŸ");
 
 #ifdef DEBUG
 	{
@@ -113,10 +113,10 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 	ccCloudPtr groundCloud = CloudProcess::apply_csf_ground_extraction(PointCloudIO::convert_to_ccCloudPtr(voxelCloud));
 	if (!groundCloud)
 	{
-		if (m_app) timer.elapsed(m_app, "CSF ´¦ÀíÊ§°Ü");
+		if (m_app) timer.elapsed(m_app, "CSF å¤„ç†å¤±è´¥");
 		return;
 	}
-	if (m_app) timer.restart(m_app, "CSF ´¦ÀíÍê³É£¬ÌáÈ¡³öµØÃæµãÔÆ");
+	if (m_app) timer.restart(m_app, "CSF å¤„ç†å®Œæˆï¼Œæå–åœ°é¢æˆåŠŸ");
 
 #ifdef DEBUG
 	{
@@ -129,14 +129,14 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 	}
 #endif // DEBUG
 
-	// 4.=====================================Å·Ê½¾ÛÀà£¬ÌáÈ¡×î´óÁªÍ¨¿é
+	// 4.=====================================æ¬§å¼èšç±»ï¼Œæå–æœ€å¤§è¿é€š
 	PCLCloudPtr largestClusterCloud = CloudProcess::extract_max_cloud_by_euclidean_cluster(PointCloudIO::convert_to_PCLCloudPtr(groundCloud), clusterRadius);
 	if (!largestClusterCloud)
 	{
-		if (m_app) timer.elapsed(m_app, "ÕÒ²»µ½×î´óÁªÍ¨¿é");
+		if (m_app) timer.elapsed(m_app, "æ‰¾ä¸åˆ°æœ€å¤§è¿é€š");
 		return;
 	}
-	if (m_app) timer.restart(m_app, "Å·Ê½¾ÛÀà£¬ÕÒµ½×î´óÁªÍ¨¿é");
+	if (m_app) timer.restart(m_app, "æ¬§å¼èšç±»ï¼Œæ‰¾åˆ°æœ€å¤§è¿é€š");
 
 #ifdef DEBUG
 	{
@@ -147,9 +147,9 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 	}
 #endif // DEBUG
 
-	// 5.====================================Éú³¤Ëã·¨ÌáÈ¡µÀÂ·µãÔÆ
+	// 5.====================================åŒºåŸŸç”Ÿé•¿ç®—æ³•æå–é“è·¯ç‚¹
 	PCLCloudPtr roadCloud = CloudProcess::extract_road_points(largestClusterCloud, searchRadius, angleThreshold, curvatureThreshold);
-	if (m_app) timer.restart(m_app, "µÀÂ·µãÔÆÌáÈ¡Íê³É");
+	if (m_app) timer.restart(m_app, "é“è·¯ç‚¹æå–å®Œæˆ");
 
 #ifdef DEBUG
 	{
@@ -161,7 +161,7 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 #endif // DEBUG
 
 	ccCloudPtr oRoadCloud = CloudProcess::crop_raw_by_sparse_cloud(inputCloud, roadCloud);
-	if (m_app) timer.restart(m_app, "ÃÜ¼¯µÀÂ·µãÔÆÌáÈ¡Íê³É");
+	if (m_app) timer.restart(m_app, "å¯†é›†åŒ–é“è·¯ç‚¹æå–å®Œæˆ");
 
 #ifdef DEBUG
 	{
@@ -172,7 +172,7 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 #endif // DEBUG
 
 	auto markingClouds = CloudProcess::extract_roadmarking(oRoadCloud, 0.03);
-	if (m_app) timer.restart(m_app, "Â·±êµãÔÆÌáÈ¡³É¹¦");
+	if (m_app) timer.restart(m_app, "è·¯æ ‡æå–æˆåŠŸ");
 
 #ifdef DEBUG
 	{
@@ -201,5 +201,5 @@ void RoadMarkingExtract::automaticExtraction(ccCloudPtr inputCloud,
 	markings->setName("roadmarking");
 	inputCloud->addChild(markings);
 
-	if (m_app) timer.elapsed(m_app, "´¦ÀíÍê³É,Ò»¹²ºÄÊ±");
+	if (m_app) timer.elapsed(m_app, "å¤„ç†å®Œæˆ,ä¸€å…±ç”¨æ—¶");
 }

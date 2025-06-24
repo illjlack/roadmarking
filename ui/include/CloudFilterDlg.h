@@ -16,27 +16,27 @@ class ThresholdHistogramWidget : public QWidget {
 	Q_OBJECT
 
 public:
-	// ¹¹Ôìº¯Êı£¬³õÊ¼»¯ãĞÖµ
+	// æ„é€ å‡½æ•°ï¼Œåˆå§‹åŒ–é˜ˆå€¼
 	explicit ThresholdHistogramWidget(QWidget* parent = nullptr);
 
 	~ThresholdHistogramWidget();
-	// ÉèÖÃµãÔÆÊı¾İ£¬¼ÆËãÇ¿¶È·¶Î§²¢¸üĞÂÖ±·½Í¼
+	// è®¾ç½®ç‚¹äº‘æ•°æ®ï¼Œè®¡ç®—å¼ºåº¦èŒƒå›´å¹¶æ›´æ–°ç›´æ–¹å›¾
 	void setPointCloud(ccPointCloud* pointCloud, bool isfilterIntensity = true);
 
-	// ÉèÖÃÉÏÏÂãĞÖµ£¬ÈôÃ»ÓĞ´«ÈëãĞÖµ£¬Ôò¸ù¾İµãÔÆÊı¾İ×Ô¶¯¼ÆËã
+	// è®¾ç½®ä¸Šä¸‹é˜ˆå€¼ï¼Œè‹¥æ²¡æœ‰ä¼ å…¥é˜ˆå€¼ï¼Œåˆ™æ ¹æ®ç‚¹äº‘æ•°æ®è‡ªåŠ¨è®¡ç®—
 	void setUpperAndLowerThreshold(bool is_has_threshold = false, float lowerThreshold = 0.0, float upperThreshold = 0.0);
 
 protected:
-	// ÖØĞ´»æÖÆÊÂ¼ş£¬¸ºÔğ»æÖÆÖ±·½Í¼
+	// é‡å†™ç»˜åˆ¶äº‹ä»¶ï¼Œè´Ÿè´£ç»˜åˆ¶ç›´æ–¹å›¾
 	void paintEvent(QPaintEvent* event) override;
 
-	// Êó±ê°´ÏÂÊÂ¼ş£¬¿ªÊ¼ÍÏ¶¯ãĞÖµ
+	// é¼ æ ‡æŒ‰ä¸‹äº‹ä»¶ï¼Œå¼€å§‹æ‹–åŠ¨é˜ˆå€¼
 	void mousePressEvent(QMouseEvent* event) override;
 
-	// Êó±êÒÆ¶¯ÊÂ¼ş£¬¸üĞÂãĞÖµÎ»ÖÃ
+	// é¼ æ ‡ç§»åŠ¨äº‹ä»¶ï¼Œæ›´æ–°é˜ˆå€¼ä½ç½®
 	void mouseMoveEvent(QMouseEvent* event) override;
 
-	// Êó±êÊÍ·ÅÊÂ¼ş£¬Í£Ö¹ÍÏ¶¯ãĞÖµ
+	// é¼ æ ‡é‡Šæ”¾äº‹ä»¶ï¼Œåœæ­¢æ‹–åŠ¨é˜ˆå€¼
 	void mouseReleaseEvent(QMouseEvent* event) override;
 
 	void closeEvent(QCloseEvent* event) override;
@@ -45,24 +45,24 @@ signals:
 	void addCloudToDB(ccPointCloud* cloud);
 
 private slots:
-	// ²Ûº¯Êı£º´¦Àíµã»÷È·¶¨°´Å¥µÄ¶¯×÷
+	// æ§½å‡½æ•°ï¼šå¤„ç†ç‚¹å‡»ç¡®å®šæŒ‰é’®çš„åŠ¨ä½œ
 	void onConfirmButtonClicked();
 
 private:
-	QPushButton* confirmButton;       // È·¶¨°´Å¥£¨È·ÈÏãĞÖµÑ¡Ôñ£©
-	ccPointCloud* pointCloud = nullptr; // µãÔÆÊı¾İÖ¸Õë
-	std::vector<int> histogram; // ´æ´¢Ö±·½Í¼Êı¾İ
-	float lowerPos, upperPos; // ÏÂÏŞºÍÉÏÏŞãĞÖµ
-	int lowerPosX = 0, upperPosX = 0; // ãĞÖµÔÚÖ±·½Í¼ÖĞµÄÎ»ÖÃ
-	bool draggingLower = false, draggingUpper = false; // ÊÇ·ñÕıÔÚÍÏ¶¯ãĞÖµ
-	float minScalar = std::numeric_limits<float>::max(), maxScalar = std::numeric_limits<float>::lowest(); // ×îĞ¡ºÍ×î´óÇ¿¶ÈÖµ
+	QPushButton* confirmButton;       // ç¡®å®šæŒ‰é’®ï¼ˆç¡®è®¤é˜ˆå€¼é€‰æ‹©ï¼‰
+	ccPointCloud* pointCloud = nullptr; // ç‚¹äº‘æ•°æ®æŒ‡é’ˆ
+	std::vector<int> histogram; // å­˜å‚¨ç›´æ–¹å›¾æ•°æ®
+	float lowerPos, upperPos; // ä¸‹é™å’Œä¸Šé™é˜ˆå€¼
+	int lowerPosX = 0, upperPosX = 0; // é˜ˆå€¼åœ¨ç›´æ–¹å›¾ä¸­çš„ä½ç½®
+	bool draggingLower = false, draggingUpper = false; // æ˜¯å¦æ­£åœ¨æ‹–åŠ¨é˜ˆå€¼
+	float minScalar = std::numeric_limits<float>::max(), maxScalar = std::numeric_limits<float>::lowest(); // æœ€å°å’Œæœ€å¤§å¼ºåº¦å€¼
 
 	bool isfilterIntensity;
 
-	// »æÖÆÖ±·½Í¼
+	// ç»˜åˆ¶ç›´æ–¹å›¾
 	void drawHistogram(QPainter& painter);
 
-	// ¼ÆËãµãÔÆÖĞµÄ×îĞ¡ºÍ×î´óÇ¿¶ÈÖµ
+	// è®¡ç®—ç‚¹äº‘ä¸­çš„æœ€å°å’Œæœ€å¤§å¼ºåº¦å€¼
 	void computeIntensityRangeAndHistogramData();
 
 	void computeZRangeAndHistogramData();

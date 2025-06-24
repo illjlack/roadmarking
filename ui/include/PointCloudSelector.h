@@ -21,7 +21,7 @@ namespace cc_interact
 	inline constexpr int INF = std::numeric_limits<int>::max();
 
 	// ========================
-	// »æÖÆÄ£Ê½£¨ÆÕÍ¨ÕÛÏß¡¢±ÕºÏÕÛÏß¡¢¾ØĞÎ£©
+	// ç»˜åˆ¶æ¨¡å¼ï¼ˆæ™®é€šæŠ˜çº¿ã€é—­åˆæŠ˜çº¿ã€çŸ©å½¢ï¼‰
 	// ========================
 	enum class DrawMode {
 		PolylineOpen,
@@ -30,30 +30,30 @@ namespace cc_interact
 	};
 
 	// ========================
-	// ¾ØĞÎ»æÖÆ×´Ì¬
+	// çŸ©å½¢ç»˜åˆ¶çŠ¶æ€
 	// ========================
 	enum class RectangleState {
-		WaitingFirstCorner,/*µÚÒ»¸ö´Îµã»÷¼ÓÈëÁ½¸öÏàÍ¬µÄµã,Ò»¸ö¹Ì¶¨,ÁíÒ»¸öÓÃÀ´¸ú×ÙÒÆ¶¯*/ 
-		WaitingSecondCorner, /*¹Ì¶¨ÒÆ¶¯µÄµã,²¢ÔÙ´ÎÌí¼ÓµãÒ»¸öµãÀ´¸ú×ÙÒÆ¶¯*/
-		TrackingThirdCorner /*¼ÆËãÆ½ĞĞÏßÀ´»æÖÆ¾ØĞÎ*/
+		WaitingFirstCorner,/*ç¬¬ä¸€ä¸ªæ¬¡ç‚¹å‡»åŠ å…¥ä¸¤ä¸ªç›¸åŒçš„ç‚¹,ä¸€ä¸ªå›ºå®š,å¦ä¸€ä¸ªç”¨æ¥è·Ÿè¸ªç§»åŠ¨*/ 
+		WaitingSecondCorner, /*å›ºå®šç§»åŠ¨çš„ç‚¹,å¹¶å†æ¬¡æ·»åŠ ç‚¹ä¸€ä¸ªç‚¹æ¥è·Ÿè¸ªç§»åŠ¨*/
+		TrackingThirdCorner /*è®¡ç®—å¹³è¡Œçº¿æ¥ç»˜åˆ¶çŸ©å½¢*/
 	};
 
 	// ========================
-	// ÕÛÏß»æÖÆ×´Ì¬
+	// æŠ˜çº¿ç»˜åˆ¶çŠ¶æ€
 	// ========================
 	enum class PolyState {
-		WaitingFirstPoint, /*µÚÒ»¸ö´Îµã»÷¼ÓÈëÁ½¸öÏàÍ¬µÄµã,Ò»¸ö¹Ì¶¨,ÁíÒ»¸öÓÃÀ´¸ú×ÙÒÆ¶¯*/ 
-		WaitingNewPoint /*¹Ì¶¨ÒÆ¶¯µÄµã,²¢ÔÙ´ÎÌí¼ÓµãÀ´¸ú×ÙÒÆ¶¯*/
+		WaitingFirstPoint, /*ç¬¬ä¸€ä¸ªæ¬¡ç‚¹å‡»åŠ å…¥ä¸¤ä¸ªç›¸åŒçš„ç‚¹,ä¸€ä¸ªå›ºå®š,å¦ä¸€ä¸ªç”¨æ¥è·Ÿè¸ªç§»åŠ¨*/ 
+		WaitingNewPoint /*å›ºå®šç§»åŠ¨çš„ç‚¹,å¹¶å†æ¬¡æ·»åŠ ç‚¹æ¥è·Ÿè¸ªç§»åŠ¨*/
 	};
 
 	// ========================
-	// »æÖÆ×´Ì¬£º¼ÇÂ¼µ±Ç°ÕÛÏß/¾ØĞÎµÄ×ø±ê
+	// ç»˜åˆ¶çŠ¶æ€ï¼šè®°å½•å½“å‰æŠ˜çº¿/çŸ©å½¢çš„åæ ‡
 	// ========================
 	struct DrawingState
 	{
-		std::vector<CCVector3d> ctrolPoints;/*±£´æµÄÕæÊµµÄ¿Õ¼äÎ»ÖÃ£¬ÔÚÑ¡Ôñ¡¢Ëõ·ÅµÄÊ±ºò»Ö¸´»æÖÆÄÚÈİ*/
-		ccPointCloud* pointCloud = nullptr;/*ÕÛÏßÒÀÀµµÄµãÔÆ*/
-		ccPolyline* polyline2D = nullptr;/*»æÖÆÔÚÇ°¾°µÄÕÛÏß*/
+		std::vector<CCVector3d> ctrolPoints;/*ä¿å­˜çš„çœŸå®çš„ç©ºé—´ä½ç½®ï¼Œåœ¨é€‰æ‹©ã€ç¼©æ”¾çš„æ—¶å€™æ¢å¤ç»˜åˆ¶å†…å®¹*/
+		ccPointCloud* pointCloud = nullptr;/*æŠ˜çº¿ä¾èµ–çš„ç‚¹äº‘*/
+		ccPolyline* polyline2D = nullptr;/*ç»˜åˆ¶åœ¨å‰æ™¯çš„æŠ˜çº¿*/
 
 		inline void updateView(PolyState m_polyState, ccGLCameraParameters camera)
 		{
@@ -161,7 +161,7 @@ namespace cc_interact
 	};
 
 	// ========================
-	// Ö÷Àà£ºµãÔÆ¿òÑ¡Æ÷
+	// ä¸»ç±»ï¼šç‚¹äº‘æ¡†é€‰å™¨
 	// ========================
 	class PointCloudSelector : public QObject
 	{
@@ -170,7 +170,7 @@ namespace cc_interact
 		explicit PointCloudSelector(ccGLWindowInterface* glWindow);
 		~PointCloudSelector();
 
-		// Íâ²¿½Ó¿Ú
+		// å¤–éƒ¨æ¥å£
 		void setSelectCloudPtr(ccHObject** select_cloud);
 		void setCallbackfunc(std::function<void()> callback);
 		void setDraw(DrawMode mode, int max_points_num = INF);
@@ -178,7 +178,7 @@ namespace cc_interact
 		void resetDraw();
 		void getPoints(std::vector<CCVector3d>& polyline);
 
-		// ÊÂ¼ş´¦Àí£¨×ª·¢£©
+		// äº‹ä»¶å¤„ç†ï¼ˆè½¬å‘ï¼‰
 		void onLeftButtonClicked(int x, int y);
 		void onMouseMoved(int x, int y, Qt::MouseButtons button);
 		void onDoubleLeftButtonClicked(int x, int y);
@@ -187,32 +187,32 @@ namespace cc_interact
 		void onKeyPressEvent(QKeyEvent* event);
 
 	signals:
-		void draw_start();   // ¿ªÊ¼»æÖÆ
-		void draw_finish();  // »æÖÆÍê³É
-		void update_tree();  // ¸üĞÂÊ÷ÊÓÍ¼
+		void draw_start();   // å¼€å§‹ç»˜åˆ¶
+		void draw_finish();  // ç»˜åˆ¶å®Œæˆ
+		void update_tree();  // æ›´æ–°æ ‘è§†å›¾
 
 	private:
-		// Ä£Ê½·Ö·¢
+		// æ¨¡å¼åˆ†å‘
 		void handlePolylineClick(int x, int y);
 		void handleRectangleClick(int x, int y);
 		void updateViewPoints();
 		void finishDraw(bool doAction);
 
-		// »ù´¡±äÁ¿
+		// åŸºç¡€å˜é‡
 		ccGLWindowInterface* m_glWindow;
 		ccHObject** pp_select_cloud = nullptr;
 		std::function<void()> m_callback;
 
-		bool isFreezeUI = false;/*²»ÔÊĞíµã»÷¡¢ÒÆ¶¯¡¢µÈ´ıÆäËû²Ù×÷Íê³É*/
+		bool isFreezeUI = false;/*ä¸å…è®¸ç‚¹å‡»ã€ç§»åŠ¨ã€ç­‰å¾…å…¶ä»–æ“ä½œå®Œæˆ*/
 		int max_points_num = INF;
 		DrawMode m_drawMode = DrawMode::PolylineOpen;
 
-		// ×´Ì¬±£´æ
+		// çŠ¶æ€ä¿å­˜
 		DrawingState m_state;
 		RectangleState m_rectState = RectangleState::WaitingFirstCorner;
 		PolyState m_polyState = PolyState::WaitingFirstPoint;
 
-		// Ïà»ú½»»¥»Ö¸´±¸·İ
+		// ç›¸æœºäº¤äº’æ¢å¤å¤‡ä»½
 		ccGLWindowInterface::INTERACTION_FLAGS interaction_flags_backup;
 		ccGLWindowInterface::PICKING_MODE picking_mode_backup;
 	};
