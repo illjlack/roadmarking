@@ -83,6 +83,39 @@ bool isCellEmpty(CCCoreLib::DgmOctree* octree, CCCoreLib::DgmOctree::CellCode co
 }
 
 
+/// <summary>
+/// 获取指定cell内所有点云的下标
+/// </summary>
+/// <param name="octree">八叉树指针</param>
+/// <param name="code">cell的莫顿编码</param>
+/// <param name="level">八叉树层级</param>
+/// <param name="pointIndices">输出：cell内所有点云的下标向量</param>
+void getPointIndicesInCell(CCCoreLib::DgmOctree* octree, CCCoreLib::DgmOctree::CellCode code, unsigned char level, std::vector<unsigned>& pointIndices)
+{	
+	// 创建ReferenceCloud对象来存储cell内的点
+	CCCoreLib::ReferenceCloud* subset = new CCCoreLib::ReferenceCloud(octree->associatedCloud());
+	
+	// 调用getPointsInCell方法获取cell内的点
+	bool success = octree->getPointsInCell(code, level, subset, false, true);
+	
+	if (success && subset->size() > 0)
+	{
+		// 预分配空间以提高性能, 追加
+		pointIndices.reserve(pointIndices.size() + subset->size());
+		
+		// 获取所有点的下标
+		for (unsigned i = 0; i < subset->size(); ++i)
+		{
+			pointIndices.push_back(subset->getPointGlobalIndex(i));
+		}
+	}
+	
+	// 清理内存
+	delete subset;
+}
+
+
+
 // ===========================================================================================================================
 // 几何关系判断工具Cell与多边形(复杂面)的xy平面关系
 // ===========================================================================================================================
@@ -317,88 +350,6 @@ void PointCloudDivider::cropWithPolygon(
 	_sf->computeMinAndMax();
 }
 
-void PointCloudDivider::octreeBasedPolygonCrop(
-	ccPointCloud* cloud,
-	ccOctree::Shared octree,
-	const std::vector<CCVector3>& polygon,
-	std::vector<unsigned>& result_indices)
-{
-	// 获取八叉树的根节点信息
-	CCCoreLib::DgmOctree* dgmOctree = octree.get();
-	if (!dgmOctree) return;
-
-	// 从根节点开始递归处理
-	CCCoreLib::DgmOctree::CellCode rootCode = 0;
-	unsigned char rootLevel = 0;
-	
-	// 递归处理八叉树节点
-	processOctreeCellByCode(cloud, dgmOctree, rootCode, rootLevel, polygon, result_indices);
-}
-
-bool PointCloudDivider::isCellFullyInsidePolygon(double minX, double maxX, double minY, double maxY, const std::vector<CCVector3>& polygon)
-{
-	// 检查体素的四个角点是否都在多边形内
-	std::vector<Vec2> corners = {
-		{static_cast<float>(minX), static_cast<float>(minY)},
-		{static_cast<float>(maxX), static_cast<float>(minY)},
-		{static_cast<float>(maxX), static_cast<float>(maxY)},
-		{static_cast<float>(minX), static_cast<float>(maxY)}
-	};
-
-	for (const auto& corner : corners) {
-		if (!pointInPolygon(polygon, corner.x, corner.y)) {
-			return false;
-		}
-	}
-	return true;
-}
-
-bool PointCloudDivider::isCellFullyOutsidePolygon(double minX, double maxX, double minY, double maxY, const std::vector<CCVector3>& polygon)
-{
-	// 检查体素的四个角点是否都在多边形外
-	std::vector<Vec2> corners = {
-		{static_cast<float>(minX), static_cast<float>(minY)},
-		{static_cast<float>(maxX), static_cast<float>(minY)},
-		{static_cast<float>(maxX), static_cast<float>(maxY)},
-		{static_cast<float>(minX), static_cast<float>(maxY)}
-	};
-
-	for (const auto& corner : corners) {
-		if (pointInPolygon(polygon, corner.x, corner.y)) {
-			return false;
-		}
-	}
-	return true;
-}
-
-void PointCloudDivider::addCellPoints(ccPointCloud* cloud, const CCCoreLib::DgmOctree::octreeCell* cell, std::vector<unsigned>& result_indices)
-{
-	// 获取体素内的点索引
-	// 由于CloudCompare的API限制，这里使用简化的实现
-	// 实际应该通过八叉树API获取体素内的点索引
-	
-	// 临时实现：遍历所有点（实际应该只遍历体素内的点）
-	for (unsigned i = 0; i < cloud->size(); ++i) {
-		const CCVector3* pt = cloud->getPoint(i);
-		// 这里应该检查点是否在当前体素内
-		// 由于CloudCompare的API限制，这里简化处理
-		result_indices.push_back(i);
-	}
-}
-
-void PointCloudDivider::processCellPointsIndividually(ccPointCloud* cloud, const CCCoreLib::DgmOctree::octreeCell* cell, const std::vector<CCVector3>& polygon, std::vector<unsigned>& result_indices)
-{
-	// 获取体素内的点索引并逐点检查
-	// 这里需要根据CloudCompare的API获取体素内的点
-	// 临时实现：遍历所有点
-	for (unsigned i = 0; i < cloud->size(); ++i) {
-		const CCVector3* pt = cloud->getPoint(i);
-		if (pointInPolygon(polygon, pt->x, pt->y)) {
-			result_indices.push_back(i);
-		}
-	}
-}
-
 void PointCloudDivider::pointBasedPolygonCrop(
 	ccPointCloud* cloud,
 	const std::vector<CCVector3>& polygon,
@@ -415,7 +366,7 @@ void PointCloudDivider::pointBasedPolygonCrop(
 	}
 
 	const size_t pointCount = cloud->size();
-	
+
 	// 使用OpenMP并行处理
 	omp_set_num_threads(8);
 #pragma omp parallel
@@ -444,6 +395,26 @@ void PointCloudDivider::pointBasedPolygonCrop(
 		}
 	}
 }
+
+
+void PointCloudDivider::octreeBasedPolygonCrop(
+	ccPointCloud* cloud,
+	ccOctree::Shared octree,
+	const std::vector<CCVector3>& polygon,
+	std::vector<unsigned>& result_indices)
+{
+	// 获取八叉树的根节点信息
+	CCCoreLib::DgmOctree* dgmOctree = octree.get();
+	if (!dgmOctree) return;
+
+	// 从根节点开始递归处理
+	CCCoreLib::DgmOctree::CellCode rootCode = 0;
+	unsigned char rootLevel = 0;
+	
+	// 递归处理八叉树节点
+	processOctreeCellByCode(cloud, dgmOctree, rootCode, rootLevel, polygon, result_indices);
+}
+
 
 /// <summary>
 /// 使用莫顿编码递归处理八叉树节点
@@ -506,16 +477,7 @@ void PointCloudDivider::addCellPointsByCode(
 	float xmin, ymin, cellSize;
 	getCellXYBounds(dgmOctree, code, level, xmin, ymin, cellSize);
 	
-	// 遍历点云中的所有点，检查是否在当前cell内
-	for (unsigned i = 0; i < cloud->size(); ++i) {
-		const CCVector3* pt = cloud->getPoint(i);
-		
-		// 检查点是否在当前cell的XY范围内
-		if (pt->x >= xmin && pt->x < xmin + cellSize &&
-			pt->y >= ymin && pt->y < ymin + cellSize) {
-			result_indices.push_back(i);
-		}
-	}
+	getPointIndicesInCell(dgmOctree, code, level, result_indices);
 }
 
 /// <summary>
@@ -529,22 +491,14 @@ void PointCloudDivider::processCellPointsByCode(
 	const std::vector<CCVector3>& polygon,
 	std::vector<unsigned>& result_indices)
 {
-	// 获取cell的边界信息
-	float xmin, ymin, cellSize;
-	getCellXYBounds(dgmOctree, code, level, xmin, ymin, cellSize);
+
+	std::vector<unsigned> filteredIndices;
+	getPointIndicesInCell(dgmOctree, code, level, filteredIndices);
 	
-	// 遍历点云中的所有点，检查是否在当前cell内且在多边形内
-	for (unsigned i = 0; i < cloud->size(); ++i) {
-		const CCVector3* pt = cloud->getPoint(i);
-		
-		// 检查点是否在当前cell的XY范围内
-		if (pt->x >= xmin && pt->x < xmin + cellSize &&
-			pt->y >= ymin && pt->y < ymin + cellSize) {
-			
-			// 使用射线法判断点是否在多边形内
-			if (pointInPolygon(polygon, pt->x, pt->y)) {
-				result_indices.push_back(i);
-			}
+	for (unsigned idx : result_indices) {
+		const CCVector3* pt = cloud->getPoint(idx);
+		if (pointInPolygon(polygon, pt->x, pt->y)) {
+			result_indices.push_back(idx);
 		}
 	}
 }
