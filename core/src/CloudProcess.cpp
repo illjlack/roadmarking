@@ -958,19 +958,10 @@ void getPointsInBox(ccPointCloud* cloud,
 	unsigned n = cloud->size();
 	points.clear();
 
-	if (!cloud->getOctree())
+	ccOctree::Shared octree = PointCloudIO::get_octree(cloud);
+	if (!octree)
 	{
-		ccProgressDialog progressDlg(false);
-		progressDlg.setWindowTitle("构建八叉树");
-		progressDlg.setAutoClose(true);
-		if (!cloud->computeOctree(&progressDlg))
-		{
-			// 构建失败
-			QMessageBox::critical(nullptr,
-				QStringLiteral("错误"),
-				QStringLiteral("八叉树构建失败！"));
-			return;
-		}
+		return;
 	}
 
 	CCCoreLib::DgmOctree::BoxNeighbourhood boxParams;
@@ -984,8 +975,8 @@ void getPointsInBox(ccPointCloud* cloud,
 		boxParams.axes[1].normalize();
 		boxParams.axes[2] = {0,0,1};
 	}
-	boxParams.level = cloud->getOctree()->findBestLevelForAGivenNeighbourhoodSizeExtraction(std::min(L,W));
-	cloud->getOctree()->getPointsInBoxNeighbourhood(boxParams);
+	boxParams.level = octree->findBestLevelForAGivenNeighbourhoodSizeExtraction(std::min(L,W));
+	octree->getPointsInBoxNeighbourhood(boxParams);
 
 	points.clear();
 	for (auto p : boxParams.neighbours)
@@ -2845,22 +2836,11 @@ void CloudProcess::extract_zebra_by_projection(
 void CloudProcess::cluster_points_around_pos(ccPointCloud* select_cloud, unsigned idx,
 	float radius, ccPointCloud& clustered_cloud)
 {
-	if (!select_cloud->getOctree())
+	ccOctree::Shared octree = PointCloudIO::get_octree(select_cloud);
+	if (!octree)
 	{
-		ccProgressDialog progressDlg(false);
-		progressDlg.setWindowTitle("构建八叉树");
-		progressDlg.setAutoClose(true);
-		if (!select_cloud->computeOctree(&progressDlg))
-		{
-			// 构建失败
-			QMessageBox::critical(nullptr,
-				QStringLiteral("错误"),
-				QStringLiteral("八叉树构建失败！"));
-			return;
-		}
+		return;
 	}
-
-	ccOctree::Shared octree = select_cloud->getOctree();
 
 	// 创建一个访问标志和存储连通区域点的索引
 	std::vector<bool> visited(select_cloud->size(), false);
