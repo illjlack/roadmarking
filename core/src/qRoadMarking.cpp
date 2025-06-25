@@ -78,7 +78,6 @@ void qRoadMarking::doAction()
 	for (auto cloud : clouds)
 	{
 		m_app->setSelectedInDB(cloud, false);
-
 	}
 
 	if (dlg.setCloud(clouds))

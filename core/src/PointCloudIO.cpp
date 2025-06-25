@@ -1,6 +1,9 @@
 #include "PointCloudIO.h"
 #include "comm.h"
 #include "CloudProcess.h"
+#include <ccOctree.h>
+#include <ccProgressDialog.h>
+#include <QMessageBox>
 
 using namespace roadmarking;
 
@@ -201,4 +204,32 @@ ccPointCloud* PointCloudIO::get_ground_cloud(ccPointCloud* cloud)
 	cloud->addChild(ground.release());
 	ground->setName(name);
 	return ground.get();
+}
+
+ccOctree::Shared PointCloudIO::get_octree(ccPointCloud* cloud)
+{
+	if (!cloud)
+		return nullptr;
+
+	// 如果点云已经有八叉树，直接返回
+	if (cloud->getOctree())
+	{
+		return cloud->getOctree();
+	}
+
+	// 如果没有八叉树，创建进度对话框并构建八叉树
+	ccProgressDialog progressDlg(false);
+	progressDlg.setWindowTitle("构建八叉树");
+	progressDlg.setAutoClose(true);
+	
+	if (!cloud->computeOctree(&progressDlg))
+	{
+		// 构建失败
+		QMessageBox::critical(nullptr,
+			QStringLiteral("错误"),
+			QStringLiteral("八叉树构建失败！"));
+		return nullptr;
+	}
+
+	return cloud->getOctree();
 }

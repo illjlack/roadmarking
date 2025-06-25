@@ -1,4 +1,4 @@
-#include "qSignExtractDlg.h"
+﻿#include "qSignExtractDlg.h"
 
 #include <QTreeWidget>
 #include <QVBoxLayout>
@@ -413,6 +413,16 @@ bool qSignExtractDlg::setCloud(std::vector<ccHObject*>cloud)
 	if (!cloud.size() || !m_glWindow || !m_app)
 		return false;
 
+	// 为所有点云构建八叉树
+	for (auto& cloud : cloud)
+	{
+		if (cloud && cloud->isA(CC_TYPES::POINT_CLOUD))
+		{
+			ccPointCloud* pointCloud = static_cast<ccPointCloud*>(cloud);
+			PointCloudIO::get_octree(pointCloud);
+		}
+	}
+	
 	m_objectTree->initialize(m_glWindow, m_app, &p_select_cloud, cloud);
 	ccBBox bbox = cloud[0]->getOwnBB();
 	m_glWindow->updateConstellationCenterAndZoom(&bbox);
