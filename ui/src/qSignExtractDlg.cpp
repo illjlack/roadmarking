@@ -23,6 +23,7 @@
 #include "CloudProcess.h"
 #include "RoadMarkingExtract.h"
 #include "PointCloudSelector.h"
+#include "algorithms/PointCloudDivider.h"
 
 using namespace roadmarking;
 using namespace cc_interact;
@@ -476,7 +477,7 @@ void qSignExtractDlg::onBoxSelectExtract()
 			m_objectTree->getAllPointClouds(clouds);
 
 			ccPointCloud* cloud = new ccPointCloud;
-			CloudProcess::crop_cloud_with_polygon(clouds, polyline, cloud);
+			PointCloudDivider::cropWithPolygon(clouds, polyline, cloud);
 
 			cloud->setName("cloud_cropped");
 			m_glWindow->addToOwnDB(cloud);
@@ -648,7 +649,7 @@ void qSignExtractDlg::onZebraExtract()
 			m_objectTree->getAllPointClouds(clouds);
 
 			ccPointCloud* cloud = new ccPointCloud;
-			CloudProcess::crop_cloud_with_polygon(clouds, polyline, cloud);
+			PointCloudDivider::cropWithPolygon(clouds, polyline, cloud);
 
 			ccPointCloud* outCloud = new ccPointCloud;
 			std::vector<CCVector3> centers;
@@ -721,7 +722,7 @@ void qSignExtractDlg::onBoxClip()
 			m_objectTree->getAllPointClouds(clouds);
 
 			ccPointCloud* cloud = new ccPointCloud;
-			CloudProcess::crop_cloud_with_polygon(clouds, polyline, cloud);
+			PointCloudDivider::cropWithPolygon(clouds, polyline, cloud);
 
 			cloud->setName("cloud_cropped");
 			addCloudToDB(cloud);
@@ -757,7 +758,7 @@ void qSignExtractDlg::onMatchTemplateByBox()
 			m_objectTree->getAllPointClouds(clouds);
 
 			ccPointCloud* cloud = new ccPointCloud;
-			CloudProcess::crop_cloud_with_polygon(clouds, polyline, cloud);
+			PointCloudDivider::cropWithPolygon(clouds, polyline, cloud);
 			
 			auto markings = CloudProcess::apply_roadmarking_vectorization(cloud);
 
@@ -788,7 +789,7 @@ void qSignExtractDlg::onRectClip()
 			m_objectTree->getAllPointClouds(clouds);
 
 			ccPointCloud* cloud = new ccPointCloud;
-			CloudProcess::crop_cloud_with_polygon(clouds, polyline, cloud);
+			PointCloudDivider::cropWithPolygon(clouds, polyline, cloud);
 
 			cloud->setName("cloud_cropped");
 			addCloudToDB(cloud);

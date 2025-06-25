@@ -31,9 +31,47 @@
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
-#include <opencv2/opencv.hpp>
 
 using namespace roadmarking;
+
+/// <summary>
+/// 使用射线法判断点是否在多边形内
+/// 算法原理：从点向右发射一条射线，统计与多边形边界的交点数
+/// 如果交点数为奇数，则点在多边形内；如果为偶数，则点在多边形外
+/// </summary>
+/// <param name="polygon">多边形顶点集合</param>
+/// <param name="point">待判断的点</param>
+/// <returns>true表示点在多边形内，false表示在多边形外</returns>
+inline bool pointInPolygonRaycast(const std::vector<CCVector3d>& polygon, const CCVector3d& point)
+{
+	if (polygon.size() < 3)
+		return false;
+
+	int crossings = 0;
+	const size_t n = polygon.size();
+
+	for (size_t i = 0; i < n; i++)
+	{
+		const CCVector3d& p1 = polygon[i];
+		const CCVector3d& p2 = polygon[(i + 1) % n];
+
+		// 检查射线是否与边相交
+		// 射线条件：p1.y <= point.y < p2.y 或 p2.y <= point.y < p1.y
+		if (((p1.y <= point.y) && (p2.y > point.y)) ||
+			((p1.y > point.y) && (p2.y <= point.y)))
+		{
+			// 计算交点的x坐标
+			double xinters = (point.y - p1.y) * (p2.x - p1.x) / (p2.y - p1.y) + p1.x;
+			
+			// 如果交点在射线上（point.x <= xinters），则计数加1
+			if (point.x <= xinters)
+				crossings++;
+		}
+	}
+
+	// 交点数为奇数表示在多边形内
+	return (crossings % 2) == 1;
+}
 
 PCLOctreePtr CloudProcess::build_octree(PCLCloudPtr pclCloud, float targetVoxelSize)
 {
@@ -536,100 +574,6 @@ PCLCloudPtr CloudProcess::extract_outline(const PCLCloudPtr& inputCloud, float a
 	return hullCloud;
 }
 
-
-void CloudProcess::crop_cloud_with_polygon(ccPointCloud* cloud, const std::vector<CCVector3d>& polygon_points, ccPointCloud* cloud_cropped)
-{
-	std::vector<ccPointCloud*> clouds;
-	clouds.push_back(cloud);
-	crop_cloud_with_polygon(clouds, polygon_points, cloud_cropped);
-}
-
-
-void CloudProcess::crop_cloud_with_polygon(
-	const std::vector<ccPointCloud*>& clouds,
-	const std::vector<CCVector3d>& polygon_points,
-	ccPointCloud* cloud_cropped
-)
-{
-	if (clouds.empty() || !cloud_cropped || polygon_points.size() < 3)
-		return;
-
-	// ==================== 1. 构建 polygon + AABB ====================
-	std::vector<cv::Point2f> polygon_cv;
-	double minX = DBL_MAX, maxX = -DBL_MAX;
-	double minY = DBL_MAX, maxY = -DBL_MAX;
-
-	for (const auto& pt : polygon_points)
-	{
-		polygon_cv.emplace_back(static_cast<float>(pt.x), static_cast<float>(pt.y));
-		minX = std::min(minX, pt.x);
-		maxX = std::max(maxX, pt.x);
-		minY = std::min(minY, pt.y);
-		maxY = std::max(maxY, pt.y);
-	}
-
-	// ==================== 2. 准备输出 scalar field ====================
-	cloud_cropped->addScalarField("intensity");
-	auto _sf = cloud_cropped->getScalarField(cloud_cropped->getScalarFieldIndexByName("intensity"));
-
-	// ==================== 3. 并行裁剪所有点云 ====================
-	for (auto cloud : clouds)
-	{
-		int sfIdx = PointCloudIO::get_intensity_idx(cloud);
-		if (sfIdx < 0) continue;
-
-		auto sf = cloud->getScalarField(sfIdx);
-		if (!sf) continue;
-
-		const size_t pointCount = cloud->size();
-		std::vector<CCVector3> local_points_all;
-		std::vector<ScalarType> local_scalars_all;
-
-		// ========== 3.1 对大规模点云内部进行并行裁剪 ==========
-		omp_set_num_threads(8);
-#pragma omp parallel
-		{
-			std::vector<CCVector3> local_points;
-			std::vector<ScalarType> local_scalars;
-#pragma omp for schedule(static)
-			for (int i = 0; i < static_cast<int>(pointCount); ++i)
-			{
-				const CCVector3* pt = cloud->getPoint(i);
-				float x = pt->x;
-				float y = pt->y;
-
-				// AABB 快速排除
-				if (x < minX || x > maxX || y < minY || y > maxY)
-					continue;
-
-				// 射线法精细判断
-				if (cv::pointPolygonTest(polygon_cv, cv::Point2f(x, y), false) > 0)
-				{
-					local_points.push_back(*pt);
-					local_scalars.push_back(sf->getValue(i));
-				}
-			}
-
-			// ========== 3.2 合并当前线程结果 ==========
-#pragma omp critical
-			{
-				local_points_all.insert(local_points_all.end(), local_points.begin(), local_points.end());
-				local_scalars_all.insert(local_scalars_all.end(), local_scalars.begin(), local_scalars.end());
-			}
-		}
-
-		// ========== 3.3 将合并结果写入输出点云 ==========
-		for (size_t j = 0; j < local_points_all.size(); ++j)
-		{
-			cloud_cropped->addPoint(local_points_all[j]);
-			_sf->addElement(local_scalars_all[j]);
-		}
-	}
-
-	// ==================== 4. 完善输出字段 & 可视化设置 ====================
-	_sf->computeMinAndMax();
-	CloudProcess::apply_default_intensity_and_visible(cloud_cropped);
-}
 
 //#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 //#include <CGAL/convex_hull_2.h>
