@@ -45,6 +45,7 @@ public:
 signals:
     void modeChanged(SelectionMode mode);
     void selectionConfirmed(ccPointCloud* mergedCloud);
+    void updateBin();
 
 private:
     // 核心对象

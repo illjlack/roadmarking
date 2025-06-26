@@ -201,14 +201,6 @@ IncrementalAdjuster::~IncrementalAdjuster()
     // 清理密度数组
     clearDensityArray();
     
-    // 清理所有bin点云
-    for (auto& pair : binClouds) {
-        if (pair.second) {
-            delete pair.second;
-        }
-    }
-    binClouds.clear();
-    
     // 清理bin容器
     if (binContainer) {
         delete binContainer;
@@ -238,6 +230,18 @@ void IncrementalAdjuster::setSelectionMode(SelectionMode mode)
         currentMode = mode;
         emit modeChanged(mode);
     }
+
+	if (mode == SelectionMode::NONE)
+	{
+		glWindow->removeFromOwnDB(binContainer);
+		binContainer->removeAllChildren();
+		binClouds.clear();
+	}
+	else
+	{
+		glWindow->addToOwnDB(binContainer);
+	}
+	emit updateBin();
 }
 
 // ==================== 事件处理 ====================
@@ -328,7 +332,7 @@ void IncrementalAdjuster::createBins()
     
     case SelectionMode::INTENSITY:
     {
-        int intensityIdx = currentCloud->getScalarFieldIndexByName("intensity");
+        int intensityIdx = PointCloudIO::get_intensity_idx(currentCloud);
         if (intensityIdx >= 0) {
             auto* intensityField = currentCloud->getScalarField(intensityIdx);
             if (intensityField) {
@@ -361,7 +365,12 @@ void IncrementalAdjuster::createBins()
     
     // 计算bin大小
     binSize = (binMaxValue - binMinValue) / numBins;
-    
+
+	int intensityIdx = PointCloudIO::get_intensity_idx(currentCloud);
+	CCCoreLib::ScalarField* intensityField = nullptr;
+	if (intensityIdx >= 0) {
+		intensityField = currentCloud->getScalarField(intensityIdx);
+	}
     // 创建bins
     for (int i = 0; i < numBins; ++i) {
         ccPointCloud* binCloud = new ccPointCloud();
@@ -370,7 +379,12 @@ void IncrementalAdjuster::createBins()
         // 设置bin的显示属性
         binCloud->setPointSize(currentCloud->getPointSize());
         binCloud->setVisible(false); // 初始时隐藏
-        
+		if (intensityField)
+		{
+			binCloud->addScalarField("intensity");
+			binCloud->setCurrentInScalarField(PointCloudIO::get_intensity_idx(binCloud));
+			binCloud->showSF(true);
+		}
         // 添加到容器
         binContainer->addChild(binCloud);
         binClouds[i] = binCloud;
@@ -390,6 +404,11 @@ void IncrementalAdjuster::createBins()
             if (point) {
                 it->second->addPoint(*point);
             }
+			if (intensityField)
+			{
+				ScalarType intensityValue = intensityField->getValue(i);
+				it->second->addPointScalarValue(intensityValue);
+			}
         }
     }
     
@@ -427,7 +446,9 @@ void IncrementalAdjuster::updateBinVisibility()
     if (binClouds.empty()) {
         return;
     }
-    
+
+	currentCloud->setVisible(false);
+
     // 隐藏所有bins
     for (auto& pair : binClouds) {
         if (pair.second) {
@@ -450,24 +471,24 @@ void IncrementalAdjuster::updateBinVisibility()
     if (glWindow) {
         glWindow->redraw(true, false);
     }
+    
+    // 发出更新目录的信号
+    emit updateBin();
 }
 
 // ==================== 调整方法 ====================
 
 void IncrementalAdjuster::adjustBinUp()
 {
-    if (currentBinId < static_cast<int>(binClouds.size()) - 1) {
-        currentBinId++;
-        updateBinVisibility();
-    }
+	binRange++;
+	updateBinVisibility();
 }
 
 void IncrementalAdjuster::adjustBinDown()
 {
-    if (currentBinId > 0) {
-        currentBinId--;
-        updateBinVisibility();
-    }
+	binRange--;
+	if (binRange <= 0)binRange = 1;
+	updateBinVisibility();
 }
 
 void IncrementalAdjuster::confirmSelection()
@@ -505,6 +526,22 @@ ccPointCloud* IncrementalAdjuster::mergeSelectedBins()
                 const CCVector3* point = pair.second->getPoint(i);
                 mergedCloud->addPoint(*point);
             }
+			if (pair.second->hasScalarFields()) {
+				for (int sfIdx = 0; sfIdx < pair.second->getNumberOfScalarFields(); ++sfIdx) {
+					CCCoreLib::ScalarField* sourceSF = pair.second->getScalarField(sfIdx);
+					if (sourceSF) {
+						int newSFIdx = mergedCloud->addScalarField(sourceSF->getName());
+						if (newSFIdx >= 0) {
+							CCCoreLib::ScalarField* newSF = mergedCloud->getScalarField(newSFIdx);
+							// 复制标量值
+							for (unsigned i = 0; i < pair.second->size(); ++i) {
+								ScalarType scalarValue = sourceSF->getValue(i);
+								newSF->addElement(scalarValue);
+							}
+						}
+					}
+				}
+			}
         }
     }
     
@@ -653,7 +690,7 @@ void IncrementalAdjuster::calculateDensityArray()
     ccLog::Print("[IncrementalAdjuster] 开始计算密度数组...");
     
     // 计算密度数组
-    densityArray = getPointDensityAtLevel(currentCloud, 10);
+    densityArray = getPointDensityAtLevel(currentCloud, 15);
     densityCalculated = true;
     
     ccLog::Print(QString("[IncrementalAdjuster] 密度数组计算完成，共 %1 个点").arg(densityArray.size()));

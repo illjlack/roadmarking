@@ -388,6 +388,11 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 			}
 		}
 	});
+	
+	connect(m_incrementalAdjuster, &IncrementalAdjuster::updateBin, this, [this]() {
+		// 更新对象树显示
+		m_objectTree->refresh();
+	});
 
 }
 

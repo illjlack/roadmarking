@@ -12,7 +12,6 @@
 #include "ccPointCloud.h"
 #include "ccGenericGLDisplay.h"
 
-
 /// <summary>
 /// CloudObjectTreeWidget 类用于管理点云对象目录树
 /// </summary>
