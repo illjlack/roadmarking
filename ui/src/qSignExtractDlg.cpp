@@ -24,6 +24,7 @@
 #include "RoadMarkingExtract.h"
 #include "PointCloudSelector.h"
 #include "algorithms/PointCloudDivider.h"
+#include "IncrementalAdjuster.h"
 
 using namespace roadmarking;
 using namespace cc_interact;
@@ -53,6 +54,9 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	m_pointCloudDrawer = new PointCloudDrawer(m_glWindow);
 	m_pointCloudDrawer->setSelectCloudPtr(&p_select_cloud);
 
+	// ==================================== 增量调整器
+	m_incrementalAdjuster = new IncrementalAdjuster(this);
+	m_incrementalAdjuster->setGLWindow(m_glWindow);
 
 	// ==================================== 阈值筛选
 	histogramWidget = new ThresholdHistogramWidget(this);
@@ -246,24 +250,6 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		leftLayout_button->addWidget(shapeExtractGroup);
 	}
 
-	//// ==================================== 功能按钮组：按强度提取
-	//{
-	//	QGroupBox* intensityExtractGroup = new QGroupBox("按强度提取", this);
-	//	QVBoxLayout* intensityExtractLayout = new QVBoxLayout(intensityExtractGroup);
-	//	QButtonGroup* intensityExtractButtonGroup = new QButtonGroup(this);
-	//	allGroups.push_back(intensityExtractButtonGroup);
-	//	intensityExtractButtonGroup->setExclusive(true);
-
-	//	// 按强度提取相关按钮
-	//	addGroupedButton("边线提取（按强度）", [this]() { onPointGrowExtractByIntensity(); }, intensityExtractGroup, intensityExtractLayout, intensityExtractButtonGroup);
-	//	addGroupedButton("斑马线提取（按强度）", [this]() { onZebraExtract(); }, intensityExtractGroup, intensityExtractLayout, intensityExtractButtonGroup);
-	//	addGroupedButton("箭头等提取（按强度）", [this]() { onMatchTemplate(); }, intensityExtractGroup, intensityExtractLayout, intensityExtractButtonGroup);
-
-	//	intensityExtractGroup->setLayout(intensityExtractLayout);
-	//	intensityExtractGroup->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed); // 改为固定高度，扩展宽度
-	//	leftLayout_button->addWidget(intensityExtractGroup);
-	//}
-
 	// ==================================== 功能按钮组：匹配类（新增）
 	{
 		QGroupBox* matchGroup = new QGroupBox("点云匹配", this);
@@ -364,12 +350,12 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	// ==================================== 一些信号
 
 	connect(m_pointCloudSelector, &PointCloudSelector::update_tree, m_objectTree, [=]() { m_objectTree->refresh(); });
-	connect(m_pointCloudSelector, &PointCloudSelector::draw_start, [&]() {m_selectionMode = DRAW_SELECTION; });
-	connect(m_pointCloudSelector, &PointCloudSelector::draw_finish, [&](){m_selectionMode = ENTITY_SELECTION;});
+	connect(m_pointCloudSelector, &PointCloudSelector::draw_start, [&]() {m_selectionMode = DialogSelectionMode::DRAW_SELECTION; });
+	connect(m_pointCloudSelector, &PointCloudSelector::draw_finish, [&](){m_selectionMode = DialogSelectionMode::ENTITY_SELECTION;});
 
 	connect(m_pointCloudDrawer, &PointCloudDrawer::update_tree, m_objectTree, [=]() { m_objectTree->refresh(); });
-	connect(m_pointCloudDrawer, &PointCloudDrawer::draw_start, [&]() {m_selectionMode = DRAW_MODEL; });
-	connect(m_pointCloudDrawer, &PointCloudDrawer::draw_finish, [&]() {m_selectionMode = ENTITY_SELECTION; });
+	connect(m_pointCloudDrawer, &PointCloudDrawer::draw_start, [&]() {m_selectionMode = DialogSelectionMode::DRAW_MODEL; });
+	connect(m_pointCloudDrawer, &PointCloudDrawer::draw_finish, [&]() {m_selectionMode = DialogSelectionMode::ENTITY_SELECTION; });
 
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::entitySelectionChanged, this, &qSignExtractDlg::onEntitySelectionChanged);
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::itemPicked, this, &qSignExtractDlg::onItemPicked);
@@ -381,6 +367,27 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::mouseWheelRotated, this, &qSignExtractDlg::onMouseWheelRotated);
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::leftButtonDoubleClicked, this, &qSignExtractDlg::onLeftButtonDoubleClicked);
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::rightButtonDoubleClicked, this, &qSignExtractDlg::onRightButtonDoubleClicked);
+
+	// ==================================== 增量调整器信号连接
+	connect(m_incrementalAdjuster, &IncrementalAdjuster::selectionConfirmed, this, [this](ccPointCloud* mergedCloud) {
+		if (mergedCloud) {
+			addCloudToDB(mergedCloud);
+		}
+		m_selectionMode = DialogSelectionMode::ENTITY_SELECTION;
+		m_objectTree->refresh();
+	});
+	
+	connect(m_incrementalAdjuster, &IncrementalAdjuster::modeChanged, this, [this](SelectionMode mode) {
+		if (mode == SelectionMode::NONE) {
+			m_selectionMode = DialogSelectionMode::ENTITY_SELECTION;
+			// 清理拾取回调
+			m_pick_callback = nullptr;
+			// 恢复正常的拾取模式
+			if (m_glWindow) {
+				m_glWindow->setPickingMode(ccGLWindowInterface::ENTITY_PICKING);
+			}
+		}
+	});
 
 }
 
@@ -406,6 +413,11 @@ qSignExtractDlg::~qSignExtractDlg()
 	if (m_pointCloudDrawer)
 	{
 		delete m_pointCloudDrawer;
+	}
+
+	if (m_incrementalAdjuster)
+	{
+		delete m_incrementalAdjuster;
 	}
 }
 
@@ -1024,25 +1036,26 @@ void qSignExtractDlg::onItemPickedFast(ccHObject* entity, int subEntityID, int x
 
 void qSignExtractDlg::onLeftButtonClicked(int x, int y)
 {
-	if (m_selectionMode == DRAW_SELECTION)
+	if (m_selectionMode == DialogSelectionMode::DRAW_SELECTION)
 	{
 		m_pointCloudSelector->onLeftButtonClicked(x, y);
 	}
-	else if (m_selectionMode == DRAW_MODEL)
+	else if (m_selectionMode == DialogSelectionMode::DRAW_MODEL)
 	{
 		// 绘制模式下，左键点击也要通知 Drawer
 		m_pointCloudDrawer->onLeftButtonClicked(x, y);
 	}
+	// 增量调整模式下不需要处理左键点击，直接等待onItemPicked回调
 	m_glWindow->redraw();
 }
 
 void qSignExtractDlg::onLeftButtonDoubleClicked(int x, int y)
 {
-	if (m_selectionMode == DRAW_SELECTION)
+	if (m_selectionMode == DialogSelectionMode::DRAW_SELECTION)
 	{
 		m_pointCloudSelector->onDoubleLeftButtonClicked(x, y);
 	}
-	else if (m_selectionMode == DRAW_MODEL)
+	else if (m_selectionMode == DialogSelectionMode::DRAW_MODEL)
 	{
 		// 绘制模式下，左键双击结束当前折线或切换状态
 		m_pointCloudDrawer->onDoubleLeftButtonClicked(x, y);
@@ -1052,11 +1065,11 @@ void qSignExtractDlg::onLeftButtonDoubleClicked(int x, int y)
 
 void qSignExtractDlg::onRightButtonDoubleClicked(int x, int y)
 {
-	if (m_selectionMode == DRAW_SELECTION)
+	if (m_selectionMode == DialogSelectionMode::DRAW_SELECTION)
 	{
 		m_pointCloudSelector->onDoubleRightButtonClicked(x, y);
 	}
-	else if (m_selectionMode == DRAW_MODEL)
+	else if (m_selectionMode == DialogSelectionMode::DRAW_MODEL)
 	{
 		// 绘制模式下，右键双击也可结束或退出绘制
 		m_pointCloudDrawer->onDoubleRightButtonClicked(x, y);
@@ -1066,11 +1079,11 @@ void qSignExtractDlg::onRightButtonDoubleClicked(int x, int y)
 
 void qSignExtractDlg::onMouseMoved(int x, int y, Qt::MouseButtons button)
 {
-	if (m_selectionMode == DRAW_SELECTION)
+	if (m_selectionMode == DialogSelectionMode::DRAW_SELECTION)
 	{
 		m_pointCloudSelector->onMouseMoved(x, y, button);
 	}
-	else if (m_selectionMode == DRAW_MODEL)
+	else if (m_selectionMode == DialogSelectionMode::DRAW_MODEL)
 	{
 		// 绘制模式下，鼠标移动用于更新折线跟踪
 		m_pointCloudDrawer->onMouseMoved(x, y, button);
@@ -1080,11 +1093,11 @@ void qSignExtractDlg::onMouseMoved(int x, int y, Qt::MouseButtons button)
 
 void qSignExtractDlg::onMouseWheelRotated(int delta)
 {
-	if (m_selectionMode == DRAW_SELECTION)
+	if (m_selectionMode == DialogSelectionMode::DRAW_SELECTION)
 	{
 		m_pointCloudSelector->onMouseWheelRotated(delta);
 	}
-	else if (m_selectionMode == DRAW_MODEL)
+	else if (m_selectionMode == DialogSelectionMode::DRAW_MODEL)
 	{
 		// 如果需要，绘制模式下滚轮缩放时也可以更新折线的投影
 		m_pointCloudDrawer->onMouseWheelRotated(delta);
@@ -1094,11 +1107,75 @@ void qSignExtractDlg::onMouseWheelRotated(int delta)
 
 void qSignExtractDlg::keyPressEvent(QKeyEvent* event)
 {
-	if (m_selectionMode == DRAW_SELECTION)
+	// 检查是否处于增量调整模式
+	if (m_selectionMode == DialogSelectionMode::INCREMENTAL_ADJUST) {
+		if (m_incrementalAdjuster->handleKeyEvent(event)) {
+			return;
+		}
+	}
+	
+	// 检查Ctrl组合键（进入增量调整模式）
+	if (event->modifiers() & Qt::ControlModifier) {
+		if (p_select_cloud && dynamic_cast<ccPointCloud*>(p_select_cloud)) {
+			switch (event->key()) {
+			case Qt::Key_I:
+				m_selectionMode = DialogSelectionMode::INCREMENTAL_ADJUST;
+				m_incrementalAdjuster->setCurrentPointCloud(static_cast<ccPointCloud*>(p_select_cloud));
+				m_incrementalAdjuster->setSelectionMode(SelectionMode::INTENSITY);
+				// 设置拾取回调
+				m_pick_callback = [this](ccHObject* entity, unsigned itemIdx) {
+					if (entity == p_select_cloud && dynamic_cast<ccPointCloud*>(entity)) {
+						ccPointCloud* cloud = static_cast<ccPointCloud*>(entity);
+						if (itemIdx < cloud->size()) {
+							const CCVector3* point = cloud->getPoint(itemIdx);
+							m_incrementalAdjuster->handlePointPicked(itemIdx, *point);
+						}
+					}
+				};
+				m_glWindow->setPickingMode(ccGLWindowInterface::POINT_PICKING);
+				return;
+			case Qt::Key_Z:
+				m_selectionMode = DialogSelectionMode::INCREMENTAL_ADJUST;
+				m_incrementalAdjuster->setCurrentPointCloud(static_cast<ccPointCloud*>(p_select_cloud));
+				m_incrementalAdjuster->setSelectionMode(SelectionMode::ELEVATION);
+				// 设置拾取回调
+				m_pick_callback = [this](ccHObject* entity, unsigned itemIdx) {
+					if (entity == p_select_cloud && dynamic_cast<ccPointCloud*>(entity)) {
+						ccPointCloud* cloud = static_cast<ccPointCloud*>(entity);
+						if (itemIdx < cloud->size()) {
+							const CCVector3* point = cloud->getPoint(itemIdx);
+							m_incrementalAdjuster->handlePointPicked(itemIdx, *point);
+						}
+					}
+				};
+				m_glWindow->setPickingMode(ccGLWindowInterface::POINT_PICKING);
+				return;
+			case Qt::Key_D:
+				m_selectionMode = DialogSelectionMode::INCREMENTAL_ADJUST;
+				m_incrementalAdjuster->setCurrentPointCloud(static_cast<ccPointCloud*>(p_select_cloud));
+				m_incrementalAdjuster->setSelectionMode(SelectionMode::DENSITY);
+				// 设置拾取回调
+				m_pick_callback = [this](ccHObject* entity, unsigned itemIdx) {
+					if (entity == p_select_cloud && dynamic_cast<ccPointCloud*>(entity)) {
+						ccPointCloud* cloud = static_cast<ccPointCloud*>(entity);
+						if (itemIdx < cloud->size()) {
+							const CCVector3* point = cloud->getPoint(itemIdx);
+							m_incrementalAdjuster->handlePointPicked(itemIdx, *point);
+						}
+					}
+				};
+				m_glWindow->setPickingMode(ccGLWindowInterface::POINT_PICKING);
+				return;
+			}
+		}
+	}
+	
+	// 其他模式的处理
+	if (m_selectionMode == DialogSelectionMode::DRAW_SELECTION)
 	{
 		m_pointCloudSelector->onKeyPressEvent(event);
 	}
-	else if (m_selectionMode == DRAW_MODEL)
+	else if (m_selectionMode == DialogSelectionMode::DRAW_MODEL)
 	{
 		// 绘制模式下，按键（如 F/G）用于结束折线或退出绘制
 		m_pointCloudDrawer->onKeyPressEvent(event);

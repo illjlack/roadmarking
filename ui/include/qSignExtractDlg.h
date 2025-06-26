@@ -32,14 +32,16 @@
 #include "PointCloudSelector.h"
 #include "PointCloudDrawing.h"
 #include "CloudObjectTreeWidget.h"
+#include "IncrementalAdjuster.h"
 
 // 选择模式枚举
-enum SelectionMode
+enum class DialogSelectionMode
 {
 	ENTITY_SELECTION,  // 实体选择状态
 	POINT_SELECTION,   // 点选择模式
 	DRAW_SELECTION,    // 多边形框选模式
-	DRAW_MODEL	       // 模板绘制
+	DRAW_MODEL,	       // 模板绘制
+	INCREMENTAL_ADJUST // 增量调整模式
 };
 
 /// <summary>
@@ -99,10 +101,11 @@ private:
 	ccGLWindowInterface* m_glWindow = nullptr;  // OpenGL 窗口接口
 
 	CloudObjectTreeWidget* m_objectTree = nullptr; // 对象树
-	SelectionMode m_selectionMode = ENTITY_SELECTION; // 选择模式
+	DialogSelectionMode m_selectionMode = DialogSelectionMode::ENTITY_SELECTION; // 选择模式
 
 	cc_interact::PointCloudSelector* m_pointCloudSelector; // 前景折线编辑器
 	cc_drawing::PointCloudDrawer* m_pointCloudDrawer;
+	IncrementalAdjuster* m_incrementalAdjuster; // 增量调整器
 
 	std::function<void(ccHObject*, unsigned)> m_pick_callback; // 选点任务的回调函数
 };
