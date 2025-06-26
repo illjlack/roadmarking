@@ -1120,49 +1120,28 @@ void qSignExtractDlg::keyPressEvent(QKeyEvent* event)
 			switch (event->key()) {
 			case Qt::Key_I:
 				m_selectionMode = DialogSelectionMode::INCREMENTAL_ADJUST;
-				m_incrementalAdjuster->setCurrentPointCloud(static_cast<ccPointCloud*>(p_select_cloud));
 				m_incrementalAdjuster->setSelectionMode(SelectionMode::INTENSITY);
 				// 设置拾取回调
 				m_pick_callback = [this](ccHObject* entity, unsigned itemIdx) {
-					if (entity == p_select_cloud && dynamic_cast<ccPointCloud*>(entity)) {
-						ccPointCloud* cloud = static_cast<ccPointCloud*>(entity);
-						if (itemIdx < cloud->size()) {
-							const CCVector3* point = cloud->getPoint(itemIdx);
-							m_incrementalAdjuster->handlePointPicked(itemIdx, *point);
-						}
-					}
+					m_incrementalAdjuster->handlePointPicked(entity, itemIdx);
 				};
 				m_glWindow->setPickingMode(ccGLWindowInterface::POINT_PICKING);
 				return;
 			case Qt::Key_Z:
 				m_selectionMode = DialogSelectionMode::INCREMENTAL_ADJUST;
-				m_incrementalAdjuster->setCurrentPointCloud(static_cast<ccPointCloud*>(p_select_cloud));
 				m_incrementalAdjuster->setSelectionMode(SelectionMode::ELEVATION);
 				// 设置拾取回调
 				m_pick_callback = [this](ccHObject* entity, unsigned itemIdx) {
-					if (entity == p_select_cloud && dynamic_cast<ccPointCloud*>(entity)) {
-						ccPointCloud* cloud = static_cast<ccPointCloud*>(entity);
-						if (itemIdx < cloud->size()) {
-							const CCVector3* point = cloud->getPoint(itemIdx);
-							m_incrementalAdjuster->handlePointPicked(itemIdx, *point);
-						}
-					}
+					m_incrementalAdjuster->handlePointPicked(entity, itemIdx);
 				};
 				m_glWindow->setPickingMode(ccGLWindowInterface::POINT_PICKING);
 				return;
 			case Qt::Key_D:
 				m_selectionMode = DialogSelectionMode::INCREMENTAL_ADJUST;
-				m_incrementalAdjuster->setCurrentPointCloud(static_cast<ccPointCloud*>(p_select_cloud));
 				m_incrementalAdjuster->setSelectionMode(SelectionMode::DENSITY);
 				// 设置拾取回调
 				m_pick_callback = [this](ccHObject* entity, unsigned itemIdx) {
-					if (entity == p_select_cloud && dynamic_cast<ccPointCloud*>(entity)) {
-						ccPointCloud* cloud = static_cast<ccPointCloud*>(entity);
-						if (itemIdx < cloud->size()) {
-							const CCVector3* point = cloud->getPoint(itemIdx);
-							m_incrementalAdjuster->handlePointPicked(itemIdx, *point);
-						}
-					}
+					m_incrementalAdjuster->handlePointPicked(entity, itemIdx);
 				};
 				m_glWindow->setPickingMode(ccGLWindowInterface::POINT_PICKING);
 				return;

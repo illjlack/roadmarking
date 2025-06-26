@@ -250,26 +250,6 @@ namespace roadmarking
 		static void extract_zebra_by_struct(ccPointCloud* inputCloud, ccGLWindowInterface* m_glWindow);
 
 		/// <summary>
-		/// 使用密度投影法，根据密度阈值提取斑马线的中心线段
-		/// </summary>
-		/// <param name="inputCloud">输入点云</param>
-		/// <param name="binWidth">投影bin宽度（米），用于将点云分成等距的bin</param>
-		/// <param name="densityThreshold">每个bin的最小点数阈值，超过该值认为是斑马线</param>
-		/// <param name="minStripeLength">斑马线最小有效长度（未使用，待扩展）</param>
-		/// <param name="m_glWindow">图形窗口，用于显示结果</param>
-		/// <param name="outputCloud">输出点云，用于显示识别到的斑马线的点</param>
-		/// <param name="centers">每个斑马线段的中心点集合</param>
-		static void extract_zebra_by_projection(
-			ccPointCloud* inputCloud,
-			float binWidth,
-			int densityThreshold,
-			float minStripeLength,
-			ccGLWindowInterface* m_glWindow,
-			ccPointCloud* outputCloud,
-			std::vector<CCVector3>& centers
-		);
-
-		/// <summary>
 		/// 在指定位置周围聚类点云
 		/// </summary>
 		/// <param name="select_cloud">选择的点云</param>
