@@ -181,14 +181,21 @@ bool pointInPolygon(const std::vector<CCVector3>& polygon, float px, float py)
 {
 	bool inside = false;
 	size_t n = polygon.size();
+
+	// j指向上条边终点
 	for (size_t i = 0, j = n - 1; i < n; j = i++)
 	{
 		float xi = polygon[i].x, yi = polygon[i].y;
 		float xj = polygon[j].x, yj = polygon[j].y;
-		bool intersect = ((yi > py) != (yj > py)) &&
-			(px < (xj - xi)* (py - yi) / (yj - yi + 1e-12f) + xi);
-		if (intersect)
-			inside = !inside;
+
+		// Check if the point is exactly on the edge
+		if (((yi == py && xi == px) || (yj == py && xj == px)) ||
+			((yi > py) != (yj > py)))  // Point is between the y values of the edge
+		{
+			// Calculate the x-coordinate of the intersection of the ray with the edge
+			if (px < (xj - xi) * (py - yi) / (yj - yi + 1e-6f) + xi)
+				inside = !inside;
+		}
 	}
 	return inside;
 }
@@ -323,6 +330,8 @@ void PointCloudDivider::cropWithPolygon(
 		ccOctree::Shared octree = PointCloudIO::get_octree(cloud);
 		bool useOctree = (octree != nullptr);
 
+		// 不知道哪里有问题
+		useOctree = false;
 		if (useOctree) {
 			// ========== 3.2 使用八叉树体素级优化 ==========
 			std::vector<unsigned> indices;
