@@ -166,7 +166,6 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 			});
 	}
 
-
 	std::vector<QButtonGroup*> allGroups;
 	// ==================================== 功能按钮组工具函数
 	auto addGroupedButton = [&](const QString& text,
@@ -369,15 +368,27 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 	connect(m_glWindow->signalEmitter(), &ccGLWindowSignalEmitter::rightButtonDoubleClicked, this, &qSignExtractDlg::onRightButtonDoubleClicked);
 
 	// ==================================== 增量调整器信号连接
-	connect(m_incrementalAdjuster, &IncrementalAdjuster::selectionConfirmed, this, [this](ccPointCloud* mergedCloud) {
+	connect(m_incrementalAdjuster, &IncrementalAdjuster::selectionConfirmed, this, [this, allGroups](ccPointCloud* mergedCloud) {
 		if (mergedCloud) {
 			addCloudToDB(mergedCloud);
 		}
 		m_selectionMode = DialogSelectionMode::ENTITY_SELECTION;
 		m_objectTree->refresh();
+		
+		// 重新启用所有UI组件
+		// 启用所有按钮组
+		for (auto* group : allGroups)
+		{
+			for (auto* btn : group->buttons())
+				btn->setEnabled(true);
+		}
+		// 启用对象树
+		if (m_objectTree) {
+			m_objectTree->setEnabled(true);
+		}
 	});
 	
-	connect(m_incrementalAdjuster, &IncrementalAdjuster::modeChanged, this, [this](SelectionMode mode) {
+	connect(m_incrementalAdjuster, &IncrementalAdjuster::modeChanged, this, [this, allGroups](SelectionMode mode) {
 		if (mode == SelectionMode::NONE) {
 			m_selectionMode = DialogSelectionMode::ENTITY_SELECTION;
 			// 清理拾取回调
@@ -385,6 +396,34 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 			// 恢复正常的拾取模式
 			if (m_glWindow) {
 				m_glWindow->setPickingMode(ccGLWindowInterface::ENTITY_PICKING);
+			}
+			
+			// 重新启用所有UI组件
+			// 启用所有按钮组
+			for (auto* group : allGroups)
+			{
+				for (auto* btn : group->buttons())
+					btn->setEnabled(true);
+			}
+			// 启用对象树
+			if (m_objectTree) {
+				m_objectTree->setEnabled(true);
+			}
+		}
+		else
+		{
+			m_selectionMode = DialogSelectionMode::INCREMENTAL_ADJUST;
+			
+			// 冻结所有UI组件
+			// 禁用所有按钮组
+			for (auto* group : allGroups)
+			{
+				for (auto* btn : group->buttons())
+					btn->setEnabled(false);
+			}
+			// 禁用对象树
+			if (m_objectTree) {
+				m_objectTree->setEnabled(false);
 			}
 		}
 	});
@@ -1124,7 +1163,6 @@ void qSignExtractDlg::keyPressEvent(QKeyEvent* event)
 		if (p_select_cloud && dynamic_cast<ccPointCloud*>(p_select_cloud)) {
 			switch (event->key()) {
 			case Qt::Key_I:
-				m_selectionMode = DialogSelectionMode::INCREMENTAL_ADJUST;
 				m_incrementalAdjuster->setSelectionMode(SelectionMode::INTENSITY);
 				// 设置拾取回调
 				m_pick_callback = [this](ccHObject* entity, unsigned itemIdx) {
@@ -1133,7 +1171,6 @@ void qSignExtractDlg::keyPressEvent(QKeyEvent* event)
 				m_glWindow->setPickingMode(ccGLWindowInterface::POINT_PICKING);
 				return;
 			case Qt::Key_Z:
-				m_selectionMode = DialogSelectionMode::INCREMENTAL_ADJUST;
 				m_incrementalAdjuster->setSelectionMode(SelectionMode::ELEVATION);
 				// 设置拾取回调
 				m_pick_callback = [this](ccHObject* entity, unsigned itemIdx) {
@@ -1142,7 +1179,6 @@ void qSignExtractDlg::keyPressEvent(QKeyEvent* event)
 				m_glWindow->setPickingMode(ccGLWindowInterface::POINT_PICKING);
 				return;
 			case Qt::Key_D:
-				m_selectionMode = DialogSelectionMode::INCREMENTAL_ADJUST;
 				m_incrementalAdjuster->setSelectionMode(SelectionMode::DENSITY);
 				// 设置拾取回调
 				m_pick_callback = [this](ccHObject* entity, unsigned itemIdx) {

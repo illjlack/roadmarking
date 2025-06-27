@@ -10,6 +10,7 @@
 #include <cmath>
 #include <limits>
 #include "PointCloudIO.h"
+#include "CloudProcess.h"
 
 using namespace roadmarking;
 
@@ -241,6 +242,9 @@ void IncrementalAdjuster::setSelectionMode(SelectionMode mode)
 	{
 		glWindow->addToOwnDB(binContainer);
 	}
+
+	binRange = 5;
+
 	emit updateBin();
 }
 
@@ -317,7 +321,7 @@ void IncrementalAdjuster::createBins()
     }
     
     // 根据模式确定bin的数量和阈值
-    int numBins = 200;
+    int numBins = 100;
     binMinValue = 0.0f;
     binMaxValue = 1.0f;
     
@@ -382,8 +386,8 @@ void IncrementalAdjuster::createBins()
 		if (intensityField)
 		{
 			binCloud->addScalarField("intensity");
-			binCloud->setCurrentInScalarField(PointCloudIO::get_intensity_idx(binCloud));
-			binCloud->showSF(true);
+			binCloud->setCurrentInScalarField(0);
+			// 使用PointCloudIO的标准方法来设置标量字段显示
 		}
         // 添加到容器
         binContainer->addChild(binCloud);
@@ -411,6 +415,11 @@ void IncrementalAdjuster::createBins()
 			}
         }
     }
+
+	for (auto& it : binClouds)
+	{
+		PointCloudIO::apply_intensity(it.second);
+	}
     
     // 根据当前点击的点设置初始的currentBinId
     // 这里需要获取点击点的值并计算对应的bin
@@ -464,6 +473,10 @@ void IncrementalAdjuster::updateBinVisibility()
         auto it = binClouds.find(i);
         if (it != binClouds.end() && it->second) {
             it->second->setVisible(true);
+            // 确保标量字段显示
+            if (it->second->hasScalarFields()) {
+                PointCloudIO::apply_intensity(it->second);
+            }
         }
     }
     
@@ -487,7 +500,7 @@ void IncrementalAdjuster::adjustBinUp()
 void IncrementalAdjuster::adjustBinDown()
 {
 	binRange--;
-	if (binRange <= 0)binRange = 1;
+	if (binRange < 0)binRange = 0;
 	updateBinVisibility();
 }
 
@@ -517,7 +530,9 @@ ccPointCloud* IncrementalAdjuster::mergeSelectedBins()
     // 创建合并的点云
     ccPointCloud* mergedCloud = new ccPointCloud();
     mergedCloud->setName("增量选择结果");
-    
+    mergedCloud->addScalarField("intensity");
+    mergedCloud->setCurrentInScalarField(0);
+	int newSFIdx = 0;
     // 收集所有可见bins中的点
     for (auto& pair : binClouds) {
         if (pair.second && pair.second->isVisible()) {
@@ -526,18 +541,17 @@ ccPointCloud* IncrementalAdjuster::mergeSelectedBins()
                 const CCVector3* point = pair.second->getPoint(i);
                 mergedCloud->addPoint(*point);
             }
-			if (pair.second->hasScalarFields()) {
-				for (int sfIdx = 0; sfIdx < pair.second->getNumberOfScalarFields(); ++sfIdx) {
-					CCCoreLib::ScalarField* sourceSF = pair.second->getScalarField(sfIdx);
-					if (sourceSF) {
-						int newSFIdx = mergedCloud->addScalarField(sourceSF->getName());
-						if (newSFIdx >= 0) {
-							CCCoreLib::ScalarField* newSF = mergedCloud->getScalarField(newSFIdx);
-							// 复制标量值
-							for (unsigned i = 0; i < pair.second->size(); ++i) {
-								ScalarType scalarValue = sourceSF->getValue(i);
-								newSF->addElement(scalarValue);
-							}
+			// 只复制强度字段
+			int intensityIdx = PointCloudIO::get_intensity_idx(pair.second);
+			if (intensityIdx >= 0) {
+				CCCoreLib::ScalarField* sourceSF = pair.second->getScalarField(intensityIdx);
+				if (sourceSF) {
+					if (newSFIdx >= 0) {
+						CCCoreLib::ScalarField* newSF = mergedCloud->getScalarField(newSFIdx);
+						// 复制标量值
+						for (unsigned i = 0; i < pair.second->size(); ++i) {
+							ScalarType scalarValue = sourceSF->getValue(i);
+							newSF->addElement(scalarValue);
 						}
 					}
 				}
@@ -548,6 +562,12 @@ ccPointCloud* IncrementalAdjuster::mergeSelectedBins()
     if (mergedCloud->size() == 0) {
         delete mergedCloud;
         return nullptr;
+    }
+    
+    // 设置标量字段显示
+    if (mergedCloud->hasScalarFields()) {
+        // 使用PointCloudIO的标准方法来设置标量字段显示
+        PointCloudIO::apply_intensity(mergedCloud);
     }
     
     return mergedCloud;

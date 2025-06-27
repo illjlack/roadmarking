@@ -35,6 +35,10 @@ namespace roadmarking
 		static int get_intensity_idx(ccCloudPtr cloud);
 		static int get_intensity_idx(ccPointCloud* cloud);
 
+		// 应用强度标量字段显示设置
+		static void apply_intensity(ccCloudPtr cloud);
+		static void apply_intensity(ccPointCloud* cloud);
+
 		static ccPointCloud* get_ground_cloud(ccPointCloud* cloud);
 		static ccOctree::Shared get_octree(ccPointCloud* cloud);
 		

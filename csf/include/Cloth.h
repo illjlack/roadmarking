@@ -43,7 +43,7 @@
 //* addding a terrain class
 
 //using discrete steps (drop and pull) to approximate the physical process
-//Finding the max height value in nearest N points aroud every particles, as the lowest position where the particles can get.ÔÚÃ¿¸ö²»ÁÏµãÖÜÎ§ÕÒ×îÁÚ½üµÄN¸öµã£¬ÒÔ¸ß³Ì×î´óÖµ×÷ÎªËùÄÜµ½´ïµÄ×îµÍµã¡£
+//Finding the max height value in nearest N points aroud every particles, as the lowest position where the particles can get.ï¿½ï¿½Ã¿ï¿½ï¿½ï¿½ï¿½ï¿½Ïµï¿½ï¿½ï¿½Î§ï¿½ï¿½ï¿½ï¿½ï¿½Ú½ï¿½ï¿½ï¿½Nï¿½ï¿½ï¿½ã£¬ï¿½Ô¸ß³ï¿½ï¿½ï¿½ï¿½Öµï¿½ï¿½Îªï¿½ï¿½ï¿½Üµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Íµã¡£
 
 //local
 #include "Vec3.h"

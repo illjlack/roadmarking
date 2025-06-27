@@ -1,9 +1,18 @@
 #include "CloudObjectTreeWidget.h"
-// ============================================================================ CloudObjectTreeWidget
+#include "PointCloudIO.h"
+#include <QTreeWidgetItem>
 #include <QMenu>
+#include <QContextMenuEvent>
 #include <QAction>
-#include <QHeaderView>
-#include "CloudProcess.h" // MetaRoadmarking声明
+#include <ccPointCloud.h>
+#include <ccHObject.h>
+#include <ccGLWindowInterface.h>
+#include <ccMainAppInterface.h>
+#include <ccScalarField.h>
+#include <QString>
+#include <QDebug>
+#include "CloudProcess.h"
+// ============================================================================ CloudObjectTreeWidget
 
 using namespace roadmarking;
 
@@ -100,32 +109,8 @@ void CloudObjectTreeWidget::initialize(ccGLWindowInterface* win, ccMainAppInterf
 
 void CloudObjectTreeWidget::addCloud(ccPointCloud* cloud, ccHObject* parent)
 {
-	// 查找名为“intensity”的标量字段
-	int sfIdx = -1;
-	const int sfCount = cloud->getNumberOfScalarFields();
-	for (int i = 0; i < sfCount; ++i)
-	{
-		if (QString::fromStdString(cloud->getScalarField(i)->getName()).contains("intensity", Qt::CaseInsensitive))
-		{
-			sfIdx = i;
-			break;
-		}
-	}
-
-	// 如果找到了强度标量字段
-	if (sfIdx >= 0)
-	{
-		// 设置该标量字段作为颜色显示
-		cloud->setCurrentDisplayedScalarField(sfIdx);
-		cloud->showSF(true);  // 显示标量字段
-		cloud->showColors(true);  // 启用颜色显示
-	}
-	else
-	{
-		// 如果没有强度标量字段，保持默认行为
-		cloud->showSF(false);
-		//cloud->showColors(false);
-	}
+	// 使用PointCloudIO的标准方法来设置强度标量字段显示
+	PointCloudIO::apply_intensity(cloud);
 
 	cloud->setEnabled(true);
 	cloud->setVisible(true);

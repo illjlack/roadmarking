@@ -191,7 +191,33 @@ int PointCloudIO::get_intensity_idx(ccPointCloud* cloud)
 	return sfIdx;
 }
 
+void PointCloudIO::apply_intensity(ccCloudPtr cloud)
+{
+	apply_intensity(cloud.get());
+}
 
+void PointCloudIO::apply_intensity(ccPointCloud* cloud)
+{
+	if (!cloud)
+		return;
+
+	int sfIdx = get_intensity_idx(cloud);
+
+	// 如果找到了强度标量字段
+	if (sfIdx >= 0)
+	{
+		// 设置该标量字段作为颜色显示
+		cloud->setCurrentDisplayedScalarField(sfIdx);
+		cloud->getScalarField(sfIdx)->computeMinAndMax();
+		cloud->showSF(true);  // 显示标量字段
+	}
+	else
+	{
+		// 如果没有强度标量字段，保持默认行为
+		cloud->showSF(false);
+	}
+	cloud->setVisible(true);
+}
 
 ccPointCloud* PointCloudIO::get_ground_cloud(ccPointCloud* cloud)
 {
