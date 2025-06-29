@@ -259,3 +259,176 @@ ccOctree::Shared PointCloudIO::get_octree(ccPointCloud* cloud)
 
 	return cloud->getOctree();
 }
+
+void PointCloudIO::save_height_as_scalar(ccPointCloud* cloud)
+{
+	if (!cloud)
+		return;
+
+	// 创建高度标量字段
+	ccScalarField* heightSF = new ccScalarField("Height");
+	cloud->addScalarField(heightSF);
+
+	// 获取点云中的点数量
+	size_t numPoints = cloud->size();
+
+	// 为每个点计算高度（Z坐标）并添加到标量字段
+	for (size_t i = 0; i < numPoints; ++i)
+	{
+		const CCVector3* point = cloud->getPoint(i);
+		heightSF->addElement(static_cast<float>(point->z));
+	}
+
+	// 计算标量字段的最小值和最大值
+	heightSF->computeMinAndMax();
+
+	// 设置为当前显示的标量字段
+	cloud->setCurrentDisplayedScalarField(cloud->getNumberOfScalarFields() - 1);
+	cloud->showSF(true);
+	cloud->setVisible(true);
+}
+
+void PointCloudIO::save_height_as_scalar(ccCloudPtr cloud)
+{
+	save_height_as_scalar(cloud.get());
+}
+
+void PointCloudIO::apply_height_as_scalar(ccPointCloud* cloud)
+{
+	if (!cloud)
+		return;
+
+	int sfIdx = get_height_idx(cloud);
+
+	// 如果找到了高度标量字段
+	if (sfIdx >= 0)
+	{
+		// 设置该标量字段作为颜色显示
+		cloud->setCurrentDisplayedScalarField(sfIdx);
+		cloud->getScalarField(sfIdx)->computeMinAndMax();
+		cloud->showSF(true);  // 显示标量字段
+	}
+	else
+	{
+		// 如果没有高度标量字段，尝试创建并应用
+		save_height_as_scalar(cloud);
+	}
+	cloud->setVisible(true);
+}
+
+void PointCloudIO::apply_height_as_scalar(ccCloudPtr cloud)
+{
+	apply_height_as_scalar(cloud.get());
+}
+
+int PointCloudIO::get_height_idx(ccPointCloud* cloud)
+{
+	if (!cloud)
+		return -1;
+
+	int sfIdx = -1;
+	const int sfCount = cloud->getNumberOfScalarFields();
+	for (int i = 0; i < sfCount; ++i)
+	{
+		if (QString::fromStdString(cloud->getScalarField(i)->getName()).contains("height", Qt::CaseInsensitive))
+		{
+			sfIdx = i;
+			break;
+		}
+	}
+	return sfIdx;
+}
+
+int PointCloudIO::get_height_idx(ccCloudPtr cloud)
+{
+	return get_height_idx(cloud.get());
+}
+
+// ==================== 密度相关方法 ====================
+
+void PointCloudIO::save_density_as_scalar(ccPointCloud* cloud, const std::vector<unsigned>& densityArray)
+{
+	if (!cloud || densityArray.empty())
+		return;
+
+	// 检查密度数组大小是否与点云点数匹配
+	if (densityArray.size() != cloud->size())
+	{
+		// 如果大小不匹配，输出警告并返回
+		return;
+	}
+
+	// 创建密度标量字段
+	ccScalarField* densitySF = new ccScalarField("Density");
+	cloud->addScalarField(densitySF);
+
+	// 将密度值添加到标量字段
+	for (unsigned density : densityArray)
+	{
+		densitySF->addElement(static_cast<float>(density));
+	}
+
+	// 计算标量字段的最小值和最大值
+	densitySF->computeMinAndMax();
+
+	// 设置为当前显示的标量字段
+	cloud->setCurrentDisplayedScalarField(cloud->getNumberOfScalarFields() - 1);
+	cloud->showSF(true);
+	cloud->setVisible(true);
+}
+
+void PointCloudIO::save_density_as_scalar(ccCloudPtr cloud, const std::vector<unsigned>& densityArray)
+{
+	save_density_as_scalar(cloud.get(), densityArray);
+}
+
+void PointCloudIO::apply_density_as_scalar(ccPointCloud* cloud)
+{
+	if (!cloud)
+		return;
+
+	int sfIdx = get_density_idx(cloud);
+
+	// 如果找到了密度标量字段
+	if (sfIdx >= 0)
+	{
+		// 设置该标量字段作为颜色显示
+		cloud->setCurrentDisplayedScalarField(sfIdx);
+		cloud->getScalarField(sfIdx)->computeMinAndMax();
+		cloud->showSF(true);  // 显示标量字段
+	}
+	else
+	{
+		// 如果没有密度标量字段，隐藏标量字段显示
+		cloud->showSF(false);
+	}
+	cloud->setVisible(true);
+}
+
+void PointCloudIO::apply_density_as_scalar(ccCloudPtr cloud)
+{
+	apply_density_as_scalar(cloud.get());
+}
+
+int PointCloudIO::get_density_idx(ccPointCloud* cloud)
+{
+	if (!cloud)
+		return -1;
+
+	int sfIdx = -1;
+	const int sfCount = cloud->getNumberOfScalarFields();
+	for (int i = 0; i < sfCount; ++i)
+	{
+		if (QString::fromStdString(cloud->getScalarField(i)->getName()).contains("density", Qt::CaseInsensitive))
+		{
+			sfIdx = i;
+			break;
+		}
+	}
+	return sfIdx;
+}
+
+int PointCloudIO::get_density_idx(ccCloudPtr cloud)
+{
+	return get_density_idx(cloud.get());
+}

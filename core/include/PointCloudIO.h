@@ -42,5 +42,28 @@ namespace roadmarking
 		static ccPointCloud* get_ground_cloud(ccPointCloud* cloud);
 		static ccOctree::Shared get_octree(ccPointCloud* cloud);
 		
+		// 将点的高度保存为标量字段
+		static void save_height_as_scalar(ccPointCloud* cloud);
+		static void save_height_as_scalar(ccCloudPtr cloud);
+		
+		// 应用高度标量字段显示设置
+		static void apply_height_as_scalar(ccPointCloud* cloud);
+		static void apply_height_as_scalar(ccCloudPtr cloud);
+		
+		// 获取高度标量字段索引
+		static int get_height_idx(ccPointCloud* cloud);
+		static int get_height_idx(ccCloudPtr cloud);
+		
+		// 将密度数组保存为标量字段
+		static void save_density_as_scalar(ccPointCloud* cloud, const std::vector<unsigned>& densityArray);
+		static void save_density_as_scalar(ccCloudPtr cloud, const std::vector<unsigned>& densityArray);
+		
+		// 应用密度标量字段显示设置
+		static void apply_density_as_scalar(ccPointCloud* cloud);
+		static void apply_density_as_scalar(ccCloudPtr cloud);
+		
+		// 获取密度标量字段索引
+		static int get_density_idx(ccPointCloud* cloud);
+		static int get_density_idx(ccCloudPtr cloud);
 	};
 }

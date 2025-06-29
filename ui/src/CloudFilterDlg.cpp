@@ -28,12 +28,22 @@ ThresholdHistogramWidget::ThresholdHistogramWidget(QWidget* parent)
 
 ThresholdHistogramWidget::~ThresholdHistogramWidget()
 {
-	if (pointCloud)pointCloud->setUpperAndLowerThreshold(false);
+	if (pointCloud) {
+		pointCloud->resetVisibilityArray();
+		pointCloud->getDisplay()->redraw(false, true);
+	}
 }
 
 void ThresholdHistogramWidget::setPointCloud(ccPointCloud* pointCloud, bool isfilterIntensity)
 {
 	this->pointCloud = pointCloud;
+	
+	// 保存原始显示状态
+	if (pointCloud) {
+		originalDisplayedSFIndex = pointCloud->getCurrentDisplayedScalarFieldIndex();
+		originalShowSF = pointCloud->sfShown();
+	}
+	
 	if (isfilterIntensity)
 	{
 		computeIntensityRangeAndHistogramData();
@@ -43,6 +53,9 @@ void ThresholdHistogramWidget::setPointCloud(ccPointCloud* pointCloud, bool isfi
 	{
 		computeZRangeAndHistogramData();
 		this->isfilterIntensity = isfilterIntensity;
+		
+		// 过滤高程时，设置高程为显示标量
+		PointCloudIO::apply_height_as_scalar(pointCloud);
 	}
 	update();                // 更新显示
 }
@@ -61,8 +74,13 @@ void ThresholdHistogramWidget::setUpperAndLowerThreshold(bool is_has_threshold, 
 	}
 	if (pointCloud)
 	{
-		if(isfilterIntensity)pointCloud->setUpperAndLowerThreshold(is_has_threshold, getValue(lowerPos), getValue(upperPos), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::max());
-		else pointCloud->setUpperAndLowerThreshold(is_has_threshold, std::numeric_limits<float>::lowest(), std::numeric_limits<float>::max(), getValue(lowerPos), getValue(upperPos));
+		if(isfilterIntensity) {
+			// 强度过滤：隐藏不在阈值范围内的点
+			pointCloud->hidePointsByScalarValue(getValue(lowerPos), getValue(upperPos));
+		} else {
+			// 高程过滤：隐藏不在阈值范围内的点
+			pointCloud->hidePointsByScalarValue(getValue(lowerPos), getValue(upperPos));
+		}
 		pointCloud->getDisplay()->redraw(false, true);
 		QApplication::processEvents();
 	}
@@ -234,10 +252,10 @@ void ThresholdHistogramWidget::computeZRangeAndHistogramData()
 
 void ThresholdHistogramWidget::onConfirmButtonClicked()
 {
-	// 点击“确定”按钮处理：
-	// 先禁用点云的阈值过滤模式，然后生成新的点云
+	// 点击"确定"按钮处理：
+	// 先恢复点云的显示状态，然后生成新的点云
 	if (pointCloud) {
-		pointCloud->setUpperAndLowerThreshold(false);
+		pointCloud->resetVisibilityArray();
 	}
 
 	ccPointCloud* cloud = new ccPointCloud;
@@ -256,6 +274,13 @@ void ThresholdHistogramWidget::onConfirmButtonClicked()
 			getValue(upperPos),
 			cloud);
 		cloud->setName("filtedCloud_by_Z");
+		
+		// 恢复原始显示状态
+		if (originalDisplayedSFIndex >= 0) {
+			pointCloud->setCurrentDisplayedScalarField(originalDisplayedSFIndex);
+		}
+		pointCloud->showSF(originalShowSF);
+		pointCloud->getDisplay()->redraw(false, true);
 	}
 	emit addCloudToDB(cloud);
 	this->hide();
@@ -264,7 +289,21 @@ void ThresholdHistogramWidget::onConfirmButtonClicked()
 
 void ThresholdHistogramWidget::closeEvent(QCloseEvent* event)
 {
-	setUpperAndLowerThreshold(false);
+	// 恢复点云显示状态
+	if (pointCloud) {
+		pointCloud->resetVisibilityArray();
+	}
+	
+	// 恢复原始显示状态
+	if (pointCloud && !isfilterIntensity) {
+		// 只有在过滤高程时才需要恢复，因为强度过滤不会改变显示状态
+		if (originalDisplayedSFIndex >= 0) {
+			pointCloud->setCurrentDisplayedScalarField(originalDisplayedSFIndex);
+		}
+		pointCloud->showSF(originalShowSF);
+		pointCloud->getDisplay()->redraw(false, true);
+	}
+	
 	hide();
 	event->accept();
 }

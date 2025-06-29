@@ -4,8 +4,6 @@
 #include <QObject>
 #include <QKeyEvent>
 #include <vector>
-#include <map>
-#include <memory>
 
 #include <ccPointCloud.h>
 #include <ccHObject.h>
@@ -35,7 +33,6 @@ public:
     // ==================== 基础设置 ====================
     void setCurrentPointCloud(ccPointCloud* cloud);
     void setGLWindow(ccGLWindowInterface* window);
-    inline void setSearchRadius(float radius) { searchRadius = radius; }
     void setSelectionMode(SelectionMode mode);
 
     // ==================== 事件处理 ====================
@@ -44,51 +41,46 @@ public:
 
 signals:
     void modeChanged(SelectionMode mode);
-    void selectionConfirmed(ccPointCloud* mergedCloud);
-    void updateBin();
+    void selectionConfirmed(ccPointCloud* selectedCloud);
+    void updateRange();
 
 private:
     // 核心对象
     ccPointCloud* currentCloud;
     ccGLWindowInterface* glWindow;
     SelectionMode currentMode;
-    
-    // 显示控制
-    ccHObject* binContainer;
 
-    // 分层管理
-	std::map<int, ccPointCloud*> binClouds;
-	int currentBinId;
-	int binRange;// 例如正负5，显示上下5个bin
-    float binMinValue;
-    float binMaxValue;
-    float binSize;
-    void createBins(); // 分割，根据不同模式，确定每个bin的上下阈值
-    void updateBinVisibility(); // binRange改变时，改变点云可见性
-    int getBinIdFromValue(float value); // 根据值映射到对应的binId
+    // 阈值范围控制
+    float currentValue;
+    float rangeSize;
+    float minValue;
+    float maxValue;
     
+    // 密度计算
+    std::vector<unsigned> densityArray;
+    bool densityCalculated;
 
-	// 调整
-	void adjustBinUp();
-	void adjustBinDown();
-	void confirmSelection();
-	void cancelSelection();
-	ccPointCloud* mergeSelectedBins(); // 结束后，合并可见的bin，
-    
-    // 邻域搜索
-	float searchRadius;
-    void calculateAverageAndBinId(const CCVector3& clickedPoint);
+    // ==================== 核心方法 ====================
+    void initializeRange(); // 初始化阈值范围
+    void updatePointVisibility(); // 根据阈值范围更新点云可见性
     float getValueAtPoint(unsigned pointIndex);
+    
+    // ==================== 调整方法 ====================
+    void adjustValueUp(); // 增加当前值
+    void adjustValueDown(); // 减少当前值
+    void adjustRangeUp(); // 增加范围大小
+    void adjustRangeDown(); // 减少范围大小
+    void confirmSelection(); // 确认选择
+    void cancelSelection(); // 取消选择
+    ccPointCloud* createSelectedCloud(); // 创建选中的点云
+    
+    // ==================== 密度计算 ====================
+    void calculateDensityArray();
+    void clearDensityArray();
 
-	// 密度计算
-	std::vector<unsigned> densityArray;
-	bool densityCalculated;
-	void calculateDensityArray();
-	void clearDensityArray();
-
-	// 键盘处理
-	bool handleArrowUp();
-	bool handleArrowDown();
-	bool handleEnter();
-	bool handleEscape();
+    // ==================== 键盘处理 ====================
+    bool handleArrowUp();
+    bool handleArrowDown();
+    bool handleEnter();
+    bool handleEscape();
 }; 

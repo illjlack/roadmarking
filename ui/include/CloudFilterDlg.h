@@ -59,6 +59,10 @@ private:
 
 	bool isfilterIntensity;
 
+	// 保存原始显示状态
+	int originalDisplayedSFIndex = -1;
+	bool originalShowSF = false;
+
 	// 绘制直方图
 	void drawHistogram(QPainter& painter);
 

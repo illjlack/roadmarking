@@ -14,8 +14,6 @@
 
 using namespace roadmarking;
 
-// 之前准备一个个的查询密度，但是其实某一个八叉树的层就表示每个点的密度
-
 // 获取点云中每个点在指定层级单元格中的密度信息
 std::vector<unsigned> getPointDensityAtLevel(ccPointCloud* cloud, unsigned char level)
 {
@@ -69,114 +67,6 @@ std::vector<unsigned> getPointDensityAtLevel(ccPointCloud* cloud, unsigned char 
     return densityArray;
 }
 
-
-
-//// 获取点在八叉树中的单元格位置
-//Tuple3i getPointCellPosition(ccOctree* octree, const CCVector3& point)
-//{
-//    Tuple3i cellPos(0, 0, 0);
-//    
-//    if (!octree) {
-//        return cellPos;
-//    }
-//    
-//    // 调用八叉树的getTheCellPosWhichIncludesThePoint方法
-//    octree->getTheCellPosWhichIncludesThePoint(&point, cellPos);
-//    
-//    return cellPos;
-//}
-//
-//// 根据单元格位置获取莫顿码
-//CCCoreLib::DgmOctree::CellCode getCellCodeFromPosition(ccOctree* octree, const Tuple3i& cellPos, unsigned char level)
-//{
-//    if (!octree) {
-//        return 0;
-//    }
-//    
-//    // 莫顿码编码：将3D坐标交错排列成1D编码
-//    CCCoreLib::DgmOctree::CellCode cellCode = 0;
-//    
-//    for (int i = 0; i < level; ++i) {
-//        // 从最低位开始，逐位提取x、y、z的对应位
-//        int xBit = (cellPos.x >> i) & 1;
-//        int yBit = (cellPos.y >> i) & 1;
-//        int zBit = (cellPos.z >> i) & 1;
-//        
-//        // 将位交错排列：z位最高，y位中间，x位最低
-//        cellCode |= (static_cast<CCCoreLib::DgmOctree::CellCode>(zBit) << (3 * i + 2));
-//        cellCode |= (static_cast<CCCoreLib::DgmOctree::CellCode>(yBit) << (3 * i + 1));
-//        cellCode |= (static_cast<CCCoreLib::DgmOctree::CellCode>(xBit) << (3 * i));
-//    }
-//    
-//    return cellCode;
-//}
-//
-//// 组合函数：直接从点获取单元格编码
-//CCCoreLib::DgmOctree::CellCode getPointCellCodeFromPosition(ccOctree* octree, const CCVector3& point, unsigned char level)
-//{
-//    if (!octree) {
-//        return 0;
-//    }
-//    
-//    // 先获取点在八叉树中的单元格位置
-//    Tuple3i cellPos = getPointCellPosition(octree, point);
-//    
-//    // 然后根据位置获取莫顿码
-//    return getCellCodeFromPosition(octree, cellPos, level);
-//}
-//
-//
-//
-//// 八叉树的辅助函数，查询点所在的code，使用动态level
-//CCCoreLib::DgmOctree::CellCode getPointCellCode(ccOctree* octree, const CCVector3& point, float targetCellSize)
-//{
-//    if (!octree) {
-//        return 0;
-//    }
-//    
-//    // 根据目标大小获取合适的level
-//    unsigned char level = 10; // 1024分之一应该差不多够小了
-//    
-//    // 获取位偏移量
-//    unsigned char bitShift = CCCoreLib::DgmOctree::GET_BIT_SHIFT(level);
-//    
-//    // 使用八叉树获取点所在的单元格代码
-//    CCCoreLib::DgmOctree::CellCode cellCode = octree->getCellCode(point, level);
-//    
-//    return cellCode;
-//}
-//
-//
-//
-//// 八叉树的辅助函数，查询一块中点的数量，用来代替密度
-//unsigned getCellPointCount(ccOctree* octree, const CCCoreLib::DgmOctree::CellCode& code, unsigned char level)
-//{
-//    if (!octree) {
-//        return 0;
-//    }
-//    
-//    // 获取位偏移量
-//    unsigned char bitShift = CCCoreLib::DgmOctree::GET_BIT_SHIFT(level);
-//    
-//    // 右移位偏移量得到当前层级的代码
-//    CCCoreLib::DgmOctree::CellCode currentCode = code >> bitShift;
-//    
-//    // 获取当前代码对应的单元格索引
-//    unsigned currentCellIndex = octree->getCellIndex(currentCode, bitShift);
-//    
-//    // 计算下一个代码（当前代码+1）
-//    CCCoreLib::DgmOctree::CellCode nextCode = currentCode + 1;
-//    
-//    // 获取下一个代码对应的单元格索引
-//    unsigned nextCellIndex = octree->getCellIndex(nextCode, bitShift);
-//    
-//    // 返回两个索引之间的差值，即该单元格中点的数量
-//    return nextCellIndex - currentCellIndex;
-//}
-//
-
-
-
 // ==================== 构造函数和析构函数 ====================
 
 IncrementalAdjuster::IncrementalAdjuster(QObject* parent)
@@ -184,28 +74,19 @@ IncrementalAdjuster::IncrementalAdjuster(QObject* parent)
     , currentCloud(nullptr)
     , glWindow(nullptr)
     , currentMode(SelectionMode::NONE)
-    , binContainer(nullptr)
-    , currentBinId(0)
-    , binRange(5)
+    , currentValue(0.0f)
+    , rangeSize(1.0f)
+    , minValue(0.0f)
+    , maxValue(1.0f)
     , searchRadius(1.0f)
     , densityCalculated(false)
-    , binMinValue(0.0f)
-    , binMaxValue(1.0f)
-    , binSize(0.1f)
 {
-    // 创建bin容器
-    binContainer = new ccHObject("增量调整器");
 }
 
 IncrementalAdjuster::~IncrementalAdjuster()
 {
     // 清理密度数组
     clearDensityArray();
-    
-    // 清理bin容器
-    if (binContainer) {
-        delete binContainer;
-    }
 }
 
 // ==================== 基础设置 ====================
@@ -232,20 +113,10 @@ void IncrementalAdjuster::setSelectionMode(SelectionMode mode)
         emit modeChanged(mode);
     }
 
-	if (mode == SelectionMode::NONE)
-	{
-		glWindow->removeFromOwnDB(binContainer);
-		binContainer->removeAllChildren();
-		binClouds.clear();
-	}
-	else
-	{
-		glWindow->addToOwnDB(binContainer);
-	}
+    // 设置初始范围大小
+    rangeSize = 5.0f;
 
-	binRange = 5;
-
-	emit updateBin();
+    emit updateRange();
 }
 
 // ==================== 事件处理 ====================
@@ -261,6 +132,12 @@ bool IncrementalAdjuster::handleKeyEvent(QKeyEvent* event)
         return handleArrowUp();
     case Qt::Key_Down:
         return handleArrowDown();
+    case Qt::Key_PageUp:
+        adjustRangeUp();
+        return true;
+    case Qt::Key_PageDown:
+        adjustRangeDown();
+        return true;
     case Qt::Key_Return:
     case Qt::Key_Enter:
         return handleEnter();
@@ -291,46 +168,45 @@ void IncrementalAdjuster::handlePointPicked(ccHObject* select_cloud, unsigned id
     
     // 如果当前点云与传入的点云不同，则更新当前点云
     if (currentCloud != cloud) {
-		setCurrentPointCloud(cloud);
+        setCurrentPointCloud(cloud);
         // 如果当前模式是密度模式，需要重新计算密度数组
         if (currentMode == SelectionMode::DENSITY) {
             clearDensityArray();
-			calculateDensityArray();
+            calculateDensityArray();
         }
     }
     
-    // 获取点击的点坐标
-    const CCVector3* point = cloud->getPoint(idx);
-    if (!point) {
-        return;
-    }
+    // 初始化阈值范围
+    initializeRange();
     
-    // 创建bins并分割点云
-    createBins();
+    // 设置当前值为选中点的值
+    currentValue = getValueAtPoint(idx);
     
-    // 计算邻域平均值并更新bin选择
-	calculateAverageAndBinId(*point);
+    // 更新点云可见性
+    updatePointVisibility();
 }
 
-// ==================== 分层管理 ====================
+// ==================== 核心方法 ====================
 
-void IncrementalAdjuster::createBins()
+void IncrementalAdjuster::initializeRange()
 {
     if (!currentCloud) {
         return;
     }
     
-    // 根据模式确定bin的数量和阈值
-    int numBins = 100;
-    binMinValue = 0.0f;
-    binMaxValue = 1.0f;
+    // 根据模式确定阈值范围
+    minValue = 0.0f;
+    maxValue = 1.0f;
     
     switch (currentMode) {
     case SelectionMode::ELEVATION:
     {
         const ccBBox& bbox = currentCloud->getOwnBB();
-        binMinValue = static_cast<float>(bbox.minCorner().z);
-        binMaxValue = static_cast<float>(bbox.maxCorner().z);
+        minValue = static_cast<float>(bbox.minCorner().z);
+        maxValue = static_cast<float>(bbox.maxCorner().z);
+        
+        // 设置高程为显示标量
+        PointCloudIO::apply_height_as_scalar(currentCloud);
     }
     break;
     
@@ -340,25 +216,37 @@ void IncrementalAdjuster::createBins()
         if (intensityIdx >= 0) {
             auto* intensityField = currentCloud->getScalarField(intensityIdx);
             if (intensityField) {
-                binMinValue = static_cast<float>(intensityField->getMin());
-                binMaxValue = static_cast<float>(intensityField->getMax());
+                minValue = static_cast<float>(intensityField->getMin());
+                maxValue = static_cast<float>(intensityField->getMax());
             }
         }
+        
+        // 设置强度为显示标量
+        PointCloudIO::apply_intensity(currentCloud);
     }
     break;
     
     case SelectionMode::DENSITY:
     {
+        // 计算密度数组
+        if (!densityCalculated) {
+            calculateDensityArray();
+        }
+        
         // 使用密度数组的最大最小值
         if (!densityArray.empty()) {
             auto minMax = std::minmax_element(densityArray.begin(), densityArray.end());
-            binMinValue = static_cast<float>(*minMax.first);
-            binMaxValue = static_cast<float>(*minMax.second);
+            minValue = static_cast<float>(*minMax.first);
+            maxValue = static_cast<float>(*minMax.second);
+            
+            // 将密度保存为标量字段
+            PointCloudIO::save_density_as_scalar(currentCloud, densityArray);
+            PointCloudIO::apply_density_as_scalar(currentCloud);
         }
         else {
             // 如果密度数组为空，使用默认值
-            binMinValue = 0.0f;
-            binMaxValue = 100.0f;
+            minValue = 0.0f;
+            maxValue = 100.0f;
         }
     }
     break;
@@ -367,258 +255,35 @@ void IncrementalAdjuster::createBins()
         return;
     }
     
-    // 计算bin大小
-    binSize = (binMaxValue - binMinValue) / numBins;
+    // 计算范围大小（初始为总范围的10%）
+    rangeSize = (maxValue - minValue) * 0.1f;
 
-	int intensityIdx = PointCloudIO::get_intensity_idx(currentCloud);
-	CCCoreLib::ScalarField* intensityField = nullptr;
-	if (intensityIdx >= 0) {
-		intensityField = currentCloud->getScalarField(intensityIdx);
-	}
-    // 创建bins
-    for (int i = 0; i < numBins; ++i) {
-        ccPointCloud* binCloud = new ccPointCloud();
-        binCloud->setName(QString("Bin_%1").arg(i));
-        
-        // 设置bin的显示属性
-        binCloud->setPointSize(currentCloud->getPointSize());
-        binCloud->setVisible(false); // 初始时隐藏
-		if (intensityField)
-		{
-			binCloud->addScalarField("intensity");
-			binCloud->setCurrentInScalarField(0);
-			// 使用PointCloudIO的标准方法来设置标量字段显示
-		}
-        // 添加到容器
-        binContainer->addChild(binCloud);
-        binClouds[i] = binCloud;
-    }
-    
-    // 根据每个点的数据值，将点分配到对应的bins中
-    for (unsigned i = 0; i < currentCloud->size(); ++i) {
-        float value = getValueAtPoint(i);
-        
-        // 计算该点应该属于哪个bin
-        int binIndex = getBinIdFromValue(value);
-        
-        // 将点添加到对应的bin中
-        auto it = binClouds.find(binIndex);
-        if (it != binClouds.end() && it->second) {
-            const CCVector3* point = currentCloud->getPoint(i);
-            if (point) {
-                it->second->addPoint(*point);
-            }
-			if (intensityField)
-			{
-				ScalarType intensityValue = intensityField->getValue(i);
-				it->second->addPointScalarValue(intensityValue);
-			}
-        }
-    }
-
-	for (auto& it : binClouds)
-	{
-		PointCloudIO::apply_intensity(it.second);
-	}
-    
-    // 根据当前点击的点设置初始的currentBinId
-    // 这里需要获取点击点的值并计算对应的bin
-    if (currentCloud && currentCloud->size() > 0) {
-        // 假设我们有一个全局变量存储点击的点索引
-        // 如果没有，可以在这里添加逻辑来获取点击点的值
-        // 暂时使用第一个点作为示例
-        float clickedValue = getValueAtPoint(0);
-        currentBinId = getBinIdFromValue(clickedValue);
-        
-        // 更新bin可见性
-        updateBinVisibility();
-    }
+    // 确保点云可见
+    currentCloud->setVisible(true);
 }
 
-int IncrementalAdjuster::getBinIdFromValue(float value)
+void IncrementalAdjuster::updatePointVisibility()
 {
-    if (binSize <= 0.0f) {
-        return 0;
-    }
-    
-    // 计算bin索引
-    int binIndex = static_cast<int>((value - binMinValue) / binSize);
-    
-    // 确保索引在有效范围内
-    binIndex = std::max(0, std::min(binIndex, static_cast<int>(binClouds.size()) - 1));
-    
-    return binIndex;
-}
-
-void IncrementalAdjuster::updateBinVisibility()
-{
-    if (binClouds.empty()) {
+    if (!currentCloud) {
         return;
     }
 
-	currentCloud->setVisible(false);
+    // 计算当前范围
+    float startValue = currentValue - rangeSize * 0.5f;
+    float endValue = currentValue + rangeSize * 0.5f;
+    if (startValue < minValue) startValue = minValue;
+    if (endValue > maxValue) endValue = maxValue;
 
-    // 隐藏所有bins
-    for (auto& pair : binClouds) {
-        if (pair.second) {
-            pair.second->setVisible(false);
-        }
-    }
-    
-    // 显示当前bin及其周围的bins
-    int startBin = std::max(0, currentBinId - binRange);
-    int endBin = std::min(static_cast<int>(binClouds.size()) - 1, currentBinId + binRange);
-    
-    for (int i = startBin; i <= endBin; ++i) {
-        auto it = binClouds.find(i);
-        if (it != binClouds.end() && it->second) {
-            it->second->setVisible(true);
-            // 确保标量字段显示
-            if (it->second->hasScalarFields()) {
-                PointCloudIO::apply_intensity(it->second);
-            }
-        }
-    }
-    
+    // 隐藏不在当前范围内的点
+    currentCloud->hidePointsByScalarValue(startValue, endValue);
+    currentCloud->setVisible(true);
+
     // 重绘窗口
     if (glWindow) {
         glWindow->redraw(true, false);
     }
-    
-    // 发出更新目录的信号
-    emit updateBin();
-}
 
-// ==================== 调整方法 ====================
-
-void IncrementalAdjuster::adjustBinUp()
-{
-	binRange++;
-	updateBinVisibility();
-}
-
-void IncrementalAdjuster::adjustBinDown()
-{
-	binRange--;
-	if (binRange < 0)binRange = 0;
-	updateBinVisibility();
-}
-
-void IncrementalAdjuster::confirmSelection()
-{
-    ccPointCloud* mergedCloud = mergeSelectedBins();
-    if (mergedCloud) {
-        emit selectionConfirmed(mergedCloud);
-    }
-    
-    // 重置模式
-    setSelectionMode(SelectionMode::NONE);
-}
-
-void IncrementalAdjuster::cancelSelection()
-{
-    // 重置模式
-    setSelectionMode(SelectionMode::NONE);
-}
-
-ccPointCloud* IncrementalAdjuster::mergeSelectedBins()
-{
-    if (binClouds.empty()) {
-        return nullptr;
-    }
-    
-    // 创建合并的点云
-    ccPointCloud* mergedCloud = new ccPointCloud();
-    mergedCloud->setName("增量选择结果");
-    mergedCloud->addScalarField("intensity");
-    mergedCloud->setCurrentInScalarField(0);
-	int newSFIdx = 0;
-    // 收集所有可见bins中的点
-    for (auto& pair : binClouds) {
-        if (pair.second && pair.second->isVisible()) {
-            // 将当前bin中的点添加到合并点云中
-            for (unsigned i = 0; i < pair.second->size(); ++i) {
-                const CCVector3* point = pair.second->getPoint(i);
-                mergedCloud->addPoint(*point);
-            }
-			// 只复制强度字段
-			int intensityIdx = PointCloudIO::get_intensity_idx(pair.second);
-			if (intensityIdx >= 0) {
-				CCCoreLib::ScalarField* sourceSF = pair.second->getScalarField(intensityIdx);
-				if (sourceSF) {
-					if (newSFIdx >= 0) {
-						CCCoreLib::ScalarField* newSF = mergedCloud->getScalarField(newSFIdx);
-						// 复制标量值
-						for (unsigned i = 0; i < pair.second->size(); ++i) {
-							ScalarType scalarValue = sourceSF->getValue(i);
-							newSF->addElement(scalarValue);
-						}
-					}
-				}
-			}
-        }
-    }
-    
-    if (mergedCloud->size() == 0) {
-        delete mergedCloud;
-        return nullptr;
-    }
-    
-    // 设置标量字段显示
-    if (mergedCloud->hasScalarFields()) {
-        // 使用PointCloudIO的标准方法来设置标量字段显示
-        PointCloudIO::apply_intensity(mergedCloud);
-    }
-    
-    return mergedCloud;
-}
-
-// ==================== 邻域搜索 ====================
-
-void IncrementalAdjuster::calculateAverageAndBinId(const CCVector3& clickedPoint)
-{
-    if (!currentCloud || !currentCloud->getOctree()) {
-        return;
-    }
-    
-    // 使用八叉树进行邻域搜索
-    ccOctree::Shared octree = currentCloud->getOctree();
-    
-    // 获取合适的层级
-    int level = octree->findBestLevelForAGivenNeighbourhoodSizeExtraction(searchRadius);
-    
-    // 搜索邻域内的点
-    CCCoreLib::DgmOctree::NeighboursSet neighbours;
-    bool success = octree->getPointsInSphericalNeighbourhood(clickedPoint, searchRadius, neighbours, level);
-    
-    if (!success || neighbours.empty()) {
-        ccLog::Warning("[IncrementalAdjuster] 邻域搜索失败或未找到邻域点");
-        return;
-    }
-    
-    // 计算邻域内点的平均值
-    float totalValue = 0.0f;
-    unsigned validCount = 0;
-    
-    for (const auto& neighbour : neighbours) {
-        unsigned idx = neighbour.pointIndex;
-        if (idx < currentCloud->size()) {
-            totalValue += getValueAtPoint(idx);
-            validCount++;
-        }
-    }
-    
-    if (validCount > 0) {
-        float averageValue = totalValue / validCount;
-        ccLog::Print(QString("[IncrementalAdjuster] 邻域平均值: %1 (基于 %2 个点)").arg(averageValue).arg(validCount));
-        
-        // 根据平均值选择对应的bin
-        int targetBinId = getBinIdFromValue(averageValue);
-        if (targetBinId != currentBinId) {
-            currentBinId = targetBinId;
-            updateBinVisibility();
-        }
-    }
+    emit updateRange();
 }
 
 float IncrementalAdjuster::getValueAtPoint(unsigned pointIndex)
@@ -660,42 +325,142 @@ float IncrementalAdjuster::getValueAtPoint(unsigned pointIndex)
     }
 }
 
-// ==================== 键盘处理 ====================
+// ==================== 调整方法 ====================
 
-bool IncrementalAdjuster::handleArrowUp()
+void IncrementalAdjuster::adjustValueUp()
 {
-    if (currentMode != SelectionMode::NONE) {
-        adjustBinUp();
-        return true;
+    if (currentMode == SelectionMode::NONE) {
+        return;
     }
-    return false;
+    
+    // 增加当前值
+    float step = (maxValue - minValue) * 0.01f; // 1%的步长
+    currentValue += step;
+    if (currentValue > maxValue) {
+        currentValue = maxValue;
+    }
+    
+    updatePointVisibility();
 }
 
-bool IncrementalAdjuster::handleArrowDown()
+void IncrementalAdjuster::adjustValueDown()
 {
-    if (currentMode != SelectionMode::NONE) {
-        adjustBinDown();
-        return true;
+    if (currentMode == SelectionMode::NONE) {
+        return;
     }
-    return false;
+    
+    // 减少当前值
+    float step = (maxValue - minValue) * 0.01f; // 1%的步长
+    currentValue -= step;
+    if (currentValue < minValue) {
+        currentValue = minValue;
+    }
+    
+    updatePointVisibility();
 }
 
-bool IncrementalAdjuster::handleEnter()
+void IncrementalAdjuster::adjustRangeUp()
 {
-    if (currentMode != SelectionMode::NONE) {
-        confirmSelection();
-        return true;
+    if (currentMode == SelectionMode::NONE) {
+        return;
     }
-    return false;
+    
+    // 增加范围大小
+    rangeSize += (maxValue - minValue) * 0.01f;
+    updatePointVisibility();
 }
 
-bool IncrementalAdjuster::handleEscape()
+void IncrementalAdjuster::adjustRangeDown()
 {
-    if (currentMode != SelectionMode::NONE) {
-        cancelSelection();
-        return true;
+    if (currentMode == SelectionMode::NONE) {
+        return;
     }
-    return false;
+    
+    // 减少范围大小
+    float step = (maxValue - minValue) * 0.01f;
+    rangeSize -= step;
+    if (rangeSize < step) {
+        rangeSize = step; // 最小范围
+    }
+    
+    updatePointVisibility();
+}
+
+void IncrementalAdjuster::confirmSelection()
+{
+    ccPointCloud* selectedCloud = createSelectedCloud();
+    if (selectedCloud) {
+        emit selectionConfirmed(selectedCloud);
+    }
+    
+    // 重置模式
+    setSelectionMode(SelectionMode::NONE);
+}
+
+void IncrementalAdjuster::cancelSelection()
+{
+    // 重置模式
+    setSelectionMode(SelectionMode::NONE);
+}
+
+ccPointCloud* IncrementalAdjuster::createSelectedCloud()
+{
+    if (!currentCloud) {
+        return nullptr;
+    }
+    
+    // 创建选中的点云
+    ccPointCloud* selectedCloud = new ccPointCloud();
+    selectedCloud->setName("增量选择结果");
+    
+    // 计算当前范围
+    float startValue = currentValue - rangeSize * 0.5f;
+    float endValue = currentValue + rangeSize * 0.5f;
+    if (startValue < minValue) startValue = minValue;
+    if (endValue > maxValue) endValue = maxValue;
+    
+    // 收集范围内的点
+    for (unsigned i = 0; i < currentCloud->size(); ++i) {
+        float value = getValueAtPoint(i);
+        if (value >= startValue && value <= endValue) {
+            const CCVector3* point = currentCloud->getPoint(i);
+            selectedCloud->addPoint(*point);
+        }
+    }
+    
+    if (selectedCloud->size() == 0) {
+        delete selectedCloud;
+        return nullptr;
+    }
+    
+    // 复制标量字段
+    if (currentCloud->hasScalarFields()) {
+        int intensityIdx = PointCloudIO::get_intensity_idx(currentCloud);
+        if (intensityIdx >= 0) {
+            selectedCloud->addScalarField("intensity");
+            selectedCloud->setCurrentInScalarField(0);
+            
+            CCCoreLib::ScalarField* sourceSF = currentCloud->getScalarField(intensityIdx);
+            CCCoreLib::ScalarField* targetSF = selectedCloud->getScalarField(0);
+            
+            if (sourceSF && targetSF) {
+                unsigned targetIndex = 0;
+                for (unsigned i = 0; i < currentCloud->size(); ++i) {
+                    float value = getValueAtPoint(i);
+                    if (value >= startValue && value <= endValue) {
+                        ScalarType scalarValue = sourceSF->getValue(i);
+                        targetSF->addElement(scalarValue);
+                        targetIndex++;
+                    }
+                }
+            }
+            
+            // 设置标量字段显示
+            PointCloudIO::apply_intensity(selectedCloud);
+        }
+    }
+    
+    return selectedCloud;
 }
 
 // ==================== 密度计算 ====================
@@ -721,4 +486,42 @@ void IncrementalAdjuster::clearDensityArray()
     densityArray.clear();
     densityCalculated = false;
     ccLog::Print("[IncrementalAdjuster] 密度数组已清理");
+}
+
+// ==================== 键盘处理 ====================
+
+bool IncrementalAdjuster::handleArrowUp()
+{
+    if (currentMode != SelectionMode::NONE) {
+        adjustValueUp();
+        return true;
+    }
+    return false;
+}
+
+bool IncrementalAdjuster::handleArrowDown()
+{
+    if (currentMode != SelectionMode::NONE) {
+        adjustValueDown();
+        return true;
+    }
+    return false;
+}
+
+bool IncrementalAdjuster::handleEnter()
+{
+    if (currentMode != SelectionMode::NONE) {
+        confirmSelection();
+        return true;
+    }
+    return false;
+}
+
+bool IncrementalAdjuster::handleEscape()
+{
+    if (currentMode != SelectionMode::NONE) {
+        cancelSelection();
+        return true;
+    }
+    return false;
 }
