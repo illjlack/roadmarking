@@ -59,6 +59,10 @@ private:
     // 密度计算
     std::vector<unsigned> densityArray;
     bool densityCalculated;
+    
+    // 保存原始状态
+    int originalScalarFieldIndex;
+    bool originalSFVisible;
 
     // ==================== 核心方法 ====================
     void initializeRange(); // 初始化阈值范围

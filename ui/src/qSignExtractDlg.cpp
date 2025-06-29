@@ -6,6 +6,7 @@
 #include <QMenu>
 #include <QAction>
 #include <QHeaderView>
+#include <QKeyEvent>
 #include <ccMainAppInterface.h>
 #include <ccGLWindowInterface.h>
 #include <ccPointCloud.h>
@@ -339,7 +340,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		{
 			m_glWindow->setPerspectiveState(false, true);
 			m_glWindow->displayOverlayEntities(true, true);
-			m_glWindow->setInteractionMode(ccGLWindowInterface::MODE_TRANSFORM_CAMERA);
+			m_glWindow->setInteractionMode(ccGLWindowInterface::MODE_TRANSFORM_CAMERA | ccGLWindowInterface::INTERACT_SIG_LB_DOUBLE_CLICKED | ccGLWindowInterface::INTERACT_SIG_RB_DOUBLE_CLICKED);
 			m_glWindow->setPickingMode(ccGLWindowInterface::ENTITY_PICKING);
 		}
 	}
@@ -428,7 +429,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		}
 	});
 	
-	connect(m_incrementalAdjuster, &IncrementalAdjuster::updateBin, this, [this]() {
+	connect(m_incrementalAdjuster, &IncrementalAdjuster::updateRange, this, [this]() {
 		// 更新对象树显示
 		m_objectTree->refresh();
 	});
@@ -1061,11 +1062,13 @@ void qSignExtractDlg::onItemPicked(ccHObject* entity, unsigned itemIdx, int x, i
 	// ui是阻塞的，应该不用额外冻结
 	if (m_pick_callback)
 	{
-		// 恢复普通的交互,实体选择
-		m_glWindow->setPickingMode(ccGLWindowInterface::ENTITY_PICKING);
-
-		// 执行
+		// 执行回调
 		m_pick_callback(entity, itemIdx);
+
+		// 只有在非增量调整模式下才恢复普通的交互
+		if (m_selectionMode != DialogSelectionMode::INCREMENTAL_ADJUST) {
+			m_glWindow->setPickingMode(ccGLWindowInterface::ENTITY_PICKING);
+		}
 
 		// 清空回调函数的指针,防止再调用
 		m_pick_callback = nullptr;

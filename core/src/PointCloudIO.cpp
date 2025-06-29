@@ -264,6 +264,8 @@ void PointCloudIO::save_height_as_scalar(ccPointCloud* cloud)
 {
 	if (!cloud)
 		return;
+	
+	if(get_height_idx(cloud)>=0)return;
 
 	// 创建高度标量字段
 	ccScalarField* heightSF = new ccScalarField("Height");
@@ -310,7 +312,7 @@ void PointCloudIO::apply_height_as_scalar(ccPointCloud* cloud)
 	}
 	else
 	{
-		// 如果没有高度标量字段，尝试创建并应用
+		// 如果没有高度标量字段，创建并应用
 		save_height_as_scalar(cloud);
 	}
 	cloud->setVisible(true);
@@ -330,7 +332,10 @@ int PointCloudIO::get_height_idx(ccPointCloud* cloud)
 	const int sfCount = cloud->getNumberOfScalarFields();
 	for (int i = 0; i < sfCount; ++i)
 	{
-		if (QString::fromStdString(cloud->getScalarField(i)->getName()).contains("height", Qt::CaseInsensitive))
+		QString sfName = QString::fromStdString(cloud->getScalarField(i)->getName());
+		if (sfName.contains("height", Qt::CaseInsensitive) || 
+			sfName.contains("elevation", Qt::CaseInsensitive) ||
+			sfName.contains("高程", Qt::CaseInsensitive))
 		{
 			sfIdx = i;
 			break;

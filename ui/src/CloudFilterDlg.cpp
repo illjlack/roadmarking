@@ -6,6 +6,8 @@
 
 #include "CloudProcess.h"
 #include <QApplication>
+#include <ccPointCloud.h>
+#include <CCCoreLib.h>
 using namespace roadmarking;
 
 ThresholdHistogramWidget::ThresholdHistogramWidget(QWidget* parent)
@@ -259,21 +261,27 @@ void ThresholdHistogramWidget::onConfirmButtonClicked()
 	}
 
 	ccPointCloud* cloud = new ccPointCloud;
+	bool success = false;
+	
 	if (isfilterIntensity)
 	{
+		// 强度过滤
 		CloudProcess::filter_cloud_by_intensity(pointCloud,
 			getValue(lowerPos),
 			getValue(upperPos),
 			cloud);
 		cloud->setName("filtedCloud_by_intensity");
+		success = (cloud->size() > 0);
 	}
 	else
 	{
+		// 高程过滤
 		CloudProcess::filter_cloud_by_z(pointCloud,
 			getValue(lowerPos),
 			getValue(upperPos),
 			cloud);
 		cloud->setName("filtedCloud_by_Z");
+		success = (cloud->size() > 0);
 		
 		// 恢复原始显示状态
 		if (originalDisplayedSFIndex >= 0) {
@@ -282,7 +290,15 @@ void ThresholdHistogramWidget::onConfirmButtonClicked()
 		pointCloud->showSF(originalShowSF);
 		pointCloud->getDisplay()->redraw(false, true);
 	}
-	emit addCloudToDB(cloud);
+	
+	// 检查过滤结果
+	if (success) {
+		emit addCloudToDB(cloud);
+	} else {
+		// 如果没有点被保留，删除创建的点云并显示警告
+		delete cloud;
+	}
+	
 	this->hide();
 }
 

@@ -78,8 +78,9 @@ IncrementalAdjuster::IncrementalAdjuster(QObject* parent)
     , rangeSize(1.0f)
     , minValue(0.0f)
     , maxValue(1.0f)
-    , searchRadius(1.0f)
     , densityCalculated(false)
+    , originalScalarFieldIndex(-1)
+    , originalSFVisible(false)
 {
 }
 
@@ -107,6 +108,39 @@ void IncrementalAdjuster::setSelectionMode(SelectionMode mode)
         // 如果从密度模式切换到其他模式，清理密度数组
         if (currentMode == SelectionMode::DENSITY && mode != SelectionMode::DENSITY) {
             clearDensityArray();
+        }
+        
+        // 如果切换到NONE模式，恢复点云的完整显示
+        if (mode == SelectionMode::NONE && currentCloud) {
+            // 恢复所有点的可见性
+            currentCloud->setVisible(true);
+            // 使用hidePointsByScalarValue显示所有点（传入一个包含所有值的范围）
+            currentCloud->hidePointsByScalarValue(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::max());
+            
+            // 恢复原始标量字段状态
+            if (originalScalarFieldIndex >= 0) {
+                currentCloud->setCurrentDisplayedScalarField(originalScalarFieldIndex);
+                currentCloud->showSF(originalSFVisible);
+            } else {
+                // 如果没有保存的原始状态，尝试恢复强度标量字段显示（如果存在）
+                int intensityIdx = PointCloudIO::get_intensity_idx(currentCloud);
+                if (intensityIdx >= 0) {
+                    currentCloud->setCurrentDisplayedScalarField(intensityIdx);
+                    currentCloud->showSF(true);
+                } else {
+                    // 如果没有强度字段，隐藏标量字段显示
+                    currentCloud->showSF(false);
+                }
+            }
+            
+            // 重置原始状态
+            originalScalarFieldIndex = -1;
+            originalSFVisible = false;
+            
+            // 重绘窗口
+            if (glWindow) {
+                glWindow->redraw(true, false);
+            }
         }
         
         currentMode = mode;
@@ -176,6 +210,12 @@ void IncrementalAdjuster::handlePointPicked(ccHObject* select_cloud, unsigned id
         }
     }
     
+    // 保存原始状态（在第一次进入增量调整模式时）
+    if (originalScalarFieldIndex == -1) {
+        originalScalarFieldIndex = currentCloud->getCurrentDisplayedScalarFieldIndex();
+        originalSFVisible = currentCloud->sfShown();
+    }
+    
     // 初始化阈值范围
     initializeRange();
     
@@ -201,12 +241,36 @@ void IncrementalAdjuster::initializeRange()
     switch (currentMode) {
     case SelectionMode::ELEVATION:
     {
-        const ccBBox& bbox = currentCloud->getOwnBB();
-        minValue = static_cast<float>(bbox.minCorner().z);
-        maxValue = static_cast<float>(bbox.maxCorner().z);
+        // 计算点云的实际高程范围
+        float minZ = std::numeric_limits<float>::max();
+        float maxZ = std::numeric_limits<float>::lowest();
         
-        // 设置高程为显示标量
+        for (unsigned i = 0; i < currentCloud->size(); ++i) {
+            const CCVector3* point = currentCloud->getPoint(i);
+            float z = static_cast<float>(point->z);
+            if (z < minZ) minZ = z;
+            if (z > maxZ) maxZ = z;
+        }
+        
+        minValue = minZ;
+        maxValue = maxZ;
+        
+        // 确保高程标量字段存在并正确设置
         PointCloudIO::apply_height_as_scalar(currentCloud);
+        
+        // 验证高程标量字段是否正确设置
+        int heightIdx = PointCloudIO::get_height_idx(currentCloud);
+        if (heightIdx >= 0) {
+            auto* heightField = currentCloud->getScalarField(heightIdx);
+            if (heightField) {
+                // 使用标量字段的实际范围
+                minValue = static_cast<float>(heightField->getMin());
+                maxValue = static_cast<float>(heightField->getMax());
+            }
+        }
+        
+        // 确保高程标量字段可见
+        currentCloud->showSF(true);
     }
     break;
     
@@ -295,6 +359,16 @@ float IncrementalAdjuster::getValueAtPoint(unsigned pointIndex)
     switch (currentMode) {
     case SelectionMode::ELEVATION:
         {
+            // 优先从高程标量字段获取值
+            int heightIdx = PointCloudIO::get_height_idx(currentCloud);
+            if (heightIdx >= 0) {
+                auto heightField = currentCloud->getScalarField(heightIdx);
+                if (heightField) {
+                    return static_cast<float>(heightField->getValue(pointIndex));
+                }
+            }
+            
+            // 如果没有高程标量字段，直接从点坐标获取Z值
             const CCVector3* point = currentCloud->getPoint(pointIndex);
             return static_cast<float>(point->z);
         }
@@ -435,6 +509,7 @@ ccPointCloud* IncrementalAdjuster::createSelectedCloud()
     
     // 复制标量字段
     if (currentCloud->hasScalarFields()) {
+        // 复制强度标量字段
         int intensityIdx = PointCloudIO::get_intensity_idx(currentCloud);
         if (intensityIdx >= 0) {
             selectedCloud->addScalarField("intensity");
