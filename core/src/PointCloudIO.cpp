@@ -269,7 +269,7 @@ void PointCloudIO::save_height_as_scalar(ccPointCloud* cloud)
 
 	// 创建高度标量字段
 	ccScalarField* heightSF = new ccScalarField("Height");
-	cloud->addScalarField(heightSF);
+	cloud->addScalarField(heightSF); // 这里会resize
 
 	// 获取点云中的点数量
 	size_t numPoints = cloud->size();
@@ -278,7 +278,7 @@ void PointCloudIO::save_height_as_scalar(ccPointCloud* cloud)
 	for (size_t i = 0; i < numPoints; ++i)
 	{
 		const CCVector3* point = cloud->getPoint(i);
-		heightSF->addElement(static_cast<float>(point->z));
+		heightSF->setValue(i, static_cast<float>(point->z));
 	}
 
 	// 计算标量字段的最小值和最大值
@@ -368,9 +368,9 @@ void PointCloudIO::save_density_as_scalar(ccPointCloud* cloud, const std::vector
 	cloud->addScalarField(densitySF);
 
 	// 将密度值添加到标量字段
-	for (unsigned density : densityArray)
+	for (size_t i = 0; i < densityArray.size(); ++i)
 	{
-		densitySF->addElement(static_cast<float>(density));
+		densitySF->setValue(i, static_cast<float>(densityArray[i]));
 	}
 
 	// 计算标量字段的最小值和最大值

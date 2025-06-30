@@ -340,7 +340,7 @@ qSignExtractDlg::qSignExtractDlg(ccMainAppInterface* app)
 		{
 			m_glWindow->setPerspectiveState(false, true);
 			m_glWindow->displayOverlayEntities(true, true);
-			m_glWindow->setInteractionMode(ccGLWindowInterface::MODE_TRANSFORM_CAMERA | ccGLWindowInterface::INTERACT_SIG_LB_DOUBLE_CLICKED | ccGLWindowInterface::INTERACT_SIG_RB_DOUBLE_CLICKED);
+			m_glWindow->setInteractionMode(ccGLWindowInterface::MODE_TRANSFORM_CAMERA);
 			m_glWindow->setPickingMode(ccGLWindowInterface::ENTITY_PICKING);
 		}
 	}

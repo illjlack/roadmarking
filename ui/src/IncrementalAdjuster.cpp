@@ -268,7 +268,8 @@ void IncrementalAdjuster::initializeRange()
                 maxValue = static_cast<float>(heightField->getMax());
             }
         }
-        
+
+		PointCloudIO::apply_height_as_scalar(currentCloud);
         // 确保高程标量字段可见
         currentCloud->showSF(true);
     }
@@ -485,7 +486,25 @@ ccPointCloud* IncrementalAdjuster::createSelectedCloud()
     
     // 创建选中的点云
     ccPointCloud* selectedCloud = new ccPointCloud();
-    selectedCloud->setName("增量选择结果");
+    
+    // 根据模式生成有意义的名称
+    QString cloudName;
+    switch (currentMode) {
+    case SelectionMode::ELEVATION:
+        cloudName = QString("高程选择_%1±%2").arg(currentValue, 0, 'f', 2).arg(rangeSize * 0.5f, 0, 'f', 2);
+        break;
+    case SelectionMode::INTENSITY:
+        cloudName = QString("强度选择_%1±%2").arg(currentValue, 0, 'f', 2).arg(rangeSize * 0.5f, 0, 'f', 2);
+        break;
+    case SelectionMode::DENSITY:
+        cloudName = QString("密度选择_%1±%2").arg(currentValue, 0, 'f', 0).arg(rangeSize * 0.5f, 0, 'f', 0);
+        break;
+    default:
+        cloudName = "选择结果";
+        break;
+    }
+    
+    selectedCloud->setName(cloudName);
     
     // 计算当前范围
     float startValue = currentValue - rangeSize * 0.5f;
@@ -550,7 +569,7 @@ void IncrementalAdjuster::calculateDensityArray()
     ccLog::Print("[IncrementalAdjuster] 开始计算密度数组...");
     
     // 计算密度数组
-    densityArray = getPointDensityAtLevel(currentCloud, 15);
+    densityArray = getPointDensityAtLevel(currentCloud, 11);
     densityCalculated = true;
     
     ccLog::Print(QString("[IncrementalAdjuster] 密度数组计算完成，共 %1 个点").arg(densityArray.size()));
