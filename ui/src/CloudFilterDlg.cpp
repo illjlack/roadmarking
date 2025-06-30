@@ -257,7 +257,7 @@ void ThresholdHistogramWidget::onConfirmButtonClicked()
 	// 点击"确定"按钮处理：
 	// 先恢复点云的显示状态，然后生成新的点云
 	if (pointCloud) {
-		pointCloud->resetVisibilityArray();
+		pointCloud->unallocateVisibilityArray();
 	}
 
 	ccPointCloud* cloud = new ccPointCloud;

@@ -372,7 +372,6 @@ void PointCloudIO::save_density_as_scalar(ccPointCloud* cloud, const std::vector
 	{
 		densitySF->setValue(i, static_cast<float>(densityArray[i]));
 	}
-
 	// 计算标量字段的最小值和最大值
 	densitySF->computeMinAndMax();
 

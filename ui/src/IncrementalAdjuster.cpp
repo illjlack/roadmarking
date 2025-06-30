@@ -114,8 +114,7 @@ void IncrementalAdjuster::setSelectionMode(SelectionMode mode)
         if (mode == SelectionMode::NONE && currentCloud) {
             // 恢复所有点的可见性
             currentCloud->setVisible(true);
-            // 使用hidePointsByScalarValue显示所有点（传入一个包含所有值的范围）
-            currentCloud->hidePointsByScalarValue(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::max());
+            currentCloud->unallocateVisibilityArray();
             
             // 恢复原始标量字段状态
             if (originalScalarFieldIndex >= 0) {
